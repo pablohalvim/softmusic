@@ -1,0 +1,101 @@
+/**
+ * SoftMusic — Deploy IA (python-ai + worker Celery)
+ * Requer NVIDIA Container Toolkit na VPS de deploy.
+ */
+pipeline {
+  agent any
+
+  options {
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  environment {
+    REGISTRY        = 'docker.io'
+    IMAGE_IA        = 'softmusic-python-ai'
+    DEPLOY_USER     = 'deploy'
+    DEPLOY_HOST     = credentials('softmusic-deploy-host')
+    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
+    DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build IA image') {
+      steps {
+        sh '''
+          docker build -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:$BUILD_NUMBER" \
+            -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:latest" \
+            -f infra/docker/Dockerfile.python-ai .
+        '''
+      }
+    }
+
+    stage('Push IA image') {
+      steps {
+        sh '''
+          echo "$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
+          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:$BUILD_NUMBER"
+          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:latest"
+          docker logout "$REGISTRY" || true
+        '''
+      }
+    }
+
+    stage('Enviar .env') {
+      steps {
+        withCredentials([file(credentialsId: 'softmusic-production-env', variable: 'ENV_FILE')]) {
+          sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+            sh '''
+              scp -o StrictHostKeyChecking=no -P "$DEPLOY_SSH_PORT" "$ENV_FILE" \
+                "$DEPLOY_USER@$DEPLOY_HOST:/opt/softmusic/.env.production"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Deploy remoto IA') {
+      steps {
+        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+          sh '''
+            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" << EOS
+              set -e
+              cd /opt/softmusic/repo
+              git fetch --all && git reset --hard origin/main
+              export SOFTMUSIC_PYTHON_AI_IMAGE="$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:$BUILD_NUMBER"
+              grep -q '^SOFTMUSIC_PYTHON_AI_IMAGE=' /opt/softmusic/.env.production && \\
+                sed -i "s|^SOFTMUSIC_PYTHON_AI_IMAGE=.*|SOFTMUSIC_PYTHON_AI_IMAGE=\$SOFTMUSIC_PYTHON_AI_IMAGE|" /opt/softmusic/.env.production || \\
+                echo "SOFTMUSIC_PYTHON_AI_IMAGE=\$SOFTMUSIC_PYTHON_AI_IMAGE" >> /opt/softmusic/.env.production
+              echo "\$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
+              chmod +x infra/docker/scripts/deploy-ia.sh
+              ENV_FILE=/opt/softmusic/.env.production ./infra/docker/scripts/deploy-ia.sh
+              docker logout "$REGISTRY" || true
+EOS
+          '''
+        }
+      }
+    }
+
+    stage('Smoke GPU') {
+      steps {
+        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+          sh '''
+            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+              "curl -sf http://127.0.0.1:8000/health && echo ' Python-AI OK' || echo 'AVISO: health check falhou'"
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    success { echo 'IA SoftMusic deployada.' }
+    failure { echo 'Falha no deploy da IA. Verifique GPU e logs do worker.' }
+  }
+}

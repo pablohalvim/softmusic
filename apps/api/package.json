@@ -1,0 +1,35 @@
+{
+  "name": "@softmusic/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "react-router build",
+    "dev": "react-router dev --port 8080",
+    "start": "react-router-serve ./build/server/index.js",
+    "typecheck": "react-router typegen && tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@react-router/node": "8.0.0",
+    "@react-router/serve": "8.0.0",
+    "@softmusic/shared": "workspace:*",
+    "@softmusic/types": "workspace:*",
+    "ioredis": "^5.6.1",
+    "isbot": "^5.1.36",
+    "prom-client": "^15.1.3",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router": "8.0.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@react-router/dev": "8.0.0",
+    "@softmusic/config": "workspace:*",
+    "@types/node": "^22",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.3",
+    "vitest": "^3.2.4"
+  }
+}

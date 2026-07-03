@@ -1,0 +1,32 @@
+# Environment
+infra/docker/.env
+infra/docker/.env.production
+apps/python-ai/.env
+
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Build
+dist/
+build/
+.next/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models cache
+/models/
+
+# Uploads
+uploads/
+apps/python-ai/uploads/
+apps/python-ai/sample.wav

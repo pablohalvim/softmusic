@@ -1,0 +1,84 @@
+/**
+ * SoftMusic — Deploy INFRA LEGACY (MySQL 5.7)
+ *
+ * Use em servidores antigos que NÃO suportam MySQL 8.4.
+ * Sobe Redis, RabbitMQ e observabilidade igual ao job padrão.
+ */
+pipeline {
+  agent any
+
+  options {
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  environment {
+    DEPLOY_USER     = 'deploy'
+    DEPLOY_HOST     = credentials('softmusic-deploy-host')
+    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
+    REMOTE_DIR      = '/opt/softmusic'
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Enviar .env de produção') {
+      steps {
+        withCredentials([file(credentialsId: 'softmusic-production-env', variable: 'ENV_FILE')]) {
+          sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+            sh '''
+              ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+                "mkdir -p '"$REMOTE_DIR"'"
+              scp -o StrictHostKeyChecking=no -P "$DEPLOY_SSH_PORT" "$ENV_FILE" \
+                "$DEPLOY_USER@$DEPLOY_HOST:$REMOTE_DIR/.env.production"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Sincronizar repositório') {
+      steps {
+        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+          sh '''
+            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+              "cd /opt/softmusic/repo && git fetch --all && git reset --hard origin/main"
+          '''
+        }
+      }
+    }
+
+    stage('Deploy infra (MySQL 5.7 LEGACY)') {
+      steps {
+        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+          sh '''
+            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+              "cd /opt/softmusic/repo && chmod +x infra/docker/scripts/deploy-infra.sh && \
+               ENV_FILE=/opt/softmusic/.env.production LEGACY_MYSQL=1 WITH_OBSERVABILITY=1 \
+               ./infra/docker/scripts/deploy-infra.sh"
+          '''
+        }
+      }
+    }
+
+    stage('Smoke') {
+      steps {
+        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+          sh '''
+            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+              "docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo MySQL 5.7 OK"
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    success { echo 'Infra SoftMusic LEGACY (MySQL 5.7) deployada com sucesso.' }
+    failure { echo 'Falha no deploy LEGACY. Confirme compatibilidade da imagem mysql:5.7 no host.' }
+  }
+}

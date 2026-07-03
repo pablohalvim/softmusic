@@ -1,0 +1,99 @@
+/**
+ * SoftMusic — Deploy Web (app + LP + admin-web)
+ */
+pipeline {
+  agent any
+
+  options {
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+  }
+
+  environment {
+    REGISTRY        = 'docker.io'
+    IMAGE_WEB       = 'softmusic-web'
+    IMAGE_LP        = 'softmusic-lp'
+    DEPLOY_USER     = 'deploy'
+    DEPLOY_HOST     = credentials('softmusic-deploy-host')
+    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
+    DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build Web images') {
+      steps {
+        sh '''
+          docker build -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:$BUILD_NUMBER" \
+            -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:latest" \
+            -f infra/docker/Dockerfile.web .
+          docker build -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:$BUILD_NUMBER" \
+            -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:latest" \
+            -f infra/docker/Dockerfile.lp .
+        '''
+      }
+    }
+
+    stage('Push Web images') {
+      steps {
+        sh '''
+          echo "$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
+          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:$BUILD_NUMBER"
+          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:latest"
+          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:$BUILD_NUMBER"
+          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:latest"
+          docker logout "$REGISTRY" || true
+        '''
+      }
+    }
+
+    stage('Enviar .env') {
+      steps {
+        withCredentials([file(credentialsId: 'softmusic-production-env', variable: 'ENV_FILE')]) {
+          sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+            sh '''
+              scp -o StrictHostKeyChecking=no -P "$DEPLOY_SSH_PORT" "$ENV_FILE" \
+                "$DEPLOY_USER@$DEPLOY_HOST:/opt/softmusic/.env.production"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Deploy remoto Web') {
+      steps {
+        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+          sh '''
+            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" << EOS
+              set -e
+              cd /opt/softmusic/repo
+              git fetch --all && git reset --hard origin/main
+              export SOFTMUSIC_WEB_IMAGE="$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:$BUILD_NUMBER"
+              export SOFTMUSIC_LP_IMAGE="$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:$BUILD_NUMBER"
+              for kv in SOFTMUSIC_WEB_IMAGE SOFTMUSIC_LP_IMAGE; do
+                eval val=\\\$$kv
+                grep -q "^\$kv=" /opt/softmusic/.env.production && \\
+                  sed -i "s|^\$kv=.*|\$kv=\$val|" /opt/softmusic/.env.production || \\
+                  echo "\$kv=\$val" >> /opt/softmusic/.env.production
+              done
+              echo "\$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
+              chmod +x infra/docker/scripts/deploy-web.sh
+              ENV_FILE=/opt/softmusic/.env.production DEPLOY_LP=1 ./infra/docker/scripts/deploy-web.sh
+              docker logout "$REGISTRY" || true
+EOS
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    success { echo 'Frontends SoftMusic deployados.' }
+    failure { echo 'Falha no deploy Web/LP.' }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "softmusic",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Music Intelligence Platform",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "dev:api": "pnpm --filter @softmusic/api dev",
+    "dev:web": "pnpm --filter @softmusic/web dev",
+    "dev:admin": "pnpm --filter @softmusic/admin-web dev",
+    "dev:infra": "docker compose -f infra/docker/docker-compose.yml --profile infra up -d"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22"
+  }
+}

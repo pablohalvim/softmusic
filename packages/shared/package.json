@@ -1,0 +1,46 @@
+{
+  "name": "@softmusic/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./chords": {
+      "types": "./dist/chords.d.ts",
+      "import": "./dist/chords.js"
+    },
+    "./harmony": {
+      "types": "./dist/harmony.d.ts",
+      "import": "./dist/harmony.js"
+    },
+    "./cifra-layout": {
+      "types": "./dist/cifra-layout.d.ts",
+      "import": "./dist/cifra-layout.js"
+    },
+    "./cifra-scroll": {
+      "types": "./dist/cifra-scroll.d.ts",
+      "import": "./dist/cifra-scroll.js"
+    },
+    "./datetime": {
+      "types": "./dist/datetime.d.ts",
+      "import": "./dist/datetime.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@softmusic/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@softmusic/config": "workspace:*",
+    "@types/node": "^22",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

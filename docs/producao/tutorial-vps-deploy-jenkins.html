@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tutorial: VPS Deploy + Jenkins — SoftMusic SaaS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --sidebar: #0f172a;
+      --sidebar-text: #94a3b8;
+      --sidebar-active: #f8fafc;
+      --text: #1e293b;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #7c3aed;
+      --accent-soft: #ede9fe;
+      --warn: #b45309;
+      --warn-bg: #fffbeb;
+      --danger: #b91c1c;
+      --danger-bg: #fef2f2;
+      --info-bg: #eff6ff;
+      --info: #1d4ed8;
+      --code-bg: #1e293b;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 24px rgba(15, 23, 42, 0.06);
+      --sidebar-w: 280px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.65;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: var(--sidebar-w);
+      background: var(--sidebar);
+      color: var(--sidebar-text);
+      overflow-y: auto;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-header {
+      padding: 1.5rem 1.25rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .sidebar-header .logo {
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+    .sidebar-header .logo span { color: #a78bfa; }
+    .sidebar-header p {
+      margin: 0.5rem 0 0;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+    .nav { padding: 0.75rem 0 2rem; flex: 1; }
+    .nav-group { margin-bottom: 0.25rem; }
+    .nav-group-title {
+      padding: 0.5rem 1.25rem 0.25rem;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #475569;
+    }
+    .nav a {
+      display: block;
+      padding: 0.4rem 1.25rem 0.4rem 1.5rem;
+      color: var(--sidebar-text);
+      text-decoration: none;
+      font-size: 0.875rem;
+      border-left: 3px solid transparent;
+      transition: color 0.15s, background 0.15s;
+    }
+    .nav a:hover { color: #e2e8f0; background: rgba(255,255,255,0.04); }
+    .nav a.active {
+      color: var(--sidebar-active);
+      border-left-color: #a78bfa;
+      background: rgba(167, 139, 250, 0.12);
+    }
+    .nav a.sub { padding-left: 2rem; font-size: 0.8125rem; }
+
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      max-width: 920px;
+      padding: 2rem 2.5rem 4rem;
+    }
+
+    .menu-toggle {
+      display: none;
+      position: fixed;
+      bottom: 1.25rem;
+      right: 1.25rem;
+      z-index: 200;
+      width: 52px; height: 52px;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 1.4rem;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #4c1d95 100%);
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 2.5rem 2rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+    }
+    .hero h1 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(1.5rem, 4vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+    }
+    .hero .lead {
+      margin: 0;
+      font-size: 1.05rem;
+      opacity: 0.92;
+      max-width: 42em;
+    }
+    .badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.25rem; }
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    section { margin-bottom: 3rem; scroll-margin-top: 1.5rem; }
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--accent);
+      color: #0f172a;
+    }
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 1.75rem 0 0.75rem;
+      color: #0f172a;
+    }
+    h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+    p { margin: 0 0 1rem; }
+    ul, ol { margin: 0 0 1rem; padding-left: 1.35rem; }
+    li { margin-bottom: 0.35rem; }
+    a { color: var(--accent); }
+    code:not(pre code) {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.88em;
+      background: #e2e8f0;
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: #0f172a;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+    .conventions { border-left: 4px solid var(--accent); }
+    .conventions ul { margin-bottom: 0; }
+
+    .callout {
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin: 1rem 0 1.25rem;
+      font-size: 0.95rem;
+    }
+    .callout strong { display: block; margin-bottom: 0.25rem; }
+    .callout-info { background: var(--info-bg); border: 1px solid #bfdbfe; color: #1e3a5f; }
+    .callout-warn { background: var(--warn-bg); border: 1px solid #fde68a; color: #78350f; }
+    .callout-danger { background: var(--danger-bg); border: 1px solid #fecaca; color: #7f1d1d; }
+    .callout-tip { background: var(--accent-soft); border: 1px solid #c4b5fd; color: #4c1d95; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      gap: 0.5rem 0.75rem;
+      align-items: center;
+      margin: 1.5rem 0;
+      font-size: 0.85rem;
+    }
+    @media (max-width: 700px) {
+      .flow {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+      .flow-arrow { transform: rotate(90deg); justify-self: center; }
+    }
+    .flow-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      box-shadow: var(--shadow);
+    }
+    .flow-box h4 { margin: 0 0 0.5rem; font-size: 0.9rem; color: var(--accent); }
+    .flow-box ul { margin: 0; padding-left: 1.1rem; font-size: 0.8rem; color: var(--muted); }
+    .flow-registry {
+      text-align: center;
+      padding: 0.75rem;
+      background: #fef3c7;
+      border: 1px dashed #d97706;
+      border-radius: var(--radius);
+      font-weight: 600;
+      font-size: 0.8rem;
+      color: #92400e;
+    }
+    .flow-arrow { color: var(--muted); font-size: 1.25rem; text-align: center; }
+
+    .code-wrap {
+      position: relative;
+      margin: 1rem 0 1.25rem;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .code-wrap .lang-label {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 0.4rem 1rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+      background: rgba(0,0,0,0.25);
+      z-index: 1;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 0.35rem;
+      right: 0.5rem;
+      z-index: 2;
+      padding: 0.35rem 0.65rem;
+      font-size: 0.7rem;
+      font-family: inherit;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.1);
+      color: #e2e8f0;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.2); }
+    .copy-btn.copied { background: var(--accent); border-color: var(--accent); }
+    pre {
+      margin: 0;
+      padding: 2.25rem 1.25rem 1.25rem;
+      overflow-x: auto;
+      background: var(--code-bg);
+      color: #e2e8f0;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.8125rem;
+      line-height: 1.55;
+    }
+    pre.text { color: #cbd5e1; }
+    pre.groovy .kw { color: #c084fc; }
+    pre.groovy .str { color: #86efac; }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin: 1rem 0 1.5rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      background: var(--surface);
+    }
+    th, td {
+      padding: 0.65rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8fafc; }
+    td code { font-size: 0.8em; }
+
+    .steps { counter-reset: step; list-style: none; padding: 0; margin: 0 0 1rem; }
+    .steps > li {
+      counter-increment: step;
+      position: relative;
+      padding: 0 0 1rem 2.75rem;
+      margin-bottom: 0.5rem;
+    }
+    .steps > li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0; top: 0.1rem;
+      width: 1.75rem; height: 1.75rem;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.85rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .checklist { list-style: none; padding: 0; }
+    .checklist li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.65rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .checklist li:last-child { border-bottom: none; }
+    .checklist input[type="checkbox"] {
+      width: 1.15rem; height: 1.15rem;
+      margin-top: 0.2rem;
+      accent-color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .cred-grid {
+      display: grid;
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+    @media (min-width: 600px) {
+      .cred-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+    }
+    .cred-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+      border-top: 3px solid var(--accent);
+    }
+    .cred-card .id { font-family: "JetBrains Mono", monospace; font-size: 0.8rem; font-weight: 600; color: var(--accent); }
+    .cred-card .kind { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+
+    .order-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin: 1rem 0;
+    }
+    .order-step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      box-shadow: var(--shadow);
+    }
+    .order-arrow { color: var(--muted); font-size: 1.1rem; }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+      }
+      .sidebar.open { transform: translateX(0); }
+      .main { margin-left: 0; padding: 1.25rem 1rem 5rem; }
+      .menu-toggle { display: flex; align-items: center; justify-content: center; }
+      .overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 99;
+      }
+      .overlay.show { display: block; }
+    }
+
+    @media print {
+      .sidebar, .menu-toggle, .copy-btn { display: none !important; }
+      .main { margin: 0; max-width: none; }
+      .hero { background: #0f172a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay" id="overlay" aria-hidden="true"></div>
+
+  <aside class="sidebar" id="sidebar" aria-label="Navegação">
+    <div class="sidebar-header">
+      <div class="logo">SoftMusic <span>Deploy</span></div>
+      <p>VPS + Jenkins + Docker — guia de produção SaaS</p>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="nav-group">
+        <div class="nav-group-title">Início</div>
+        <a href="#intro">Introdução</a>
+        <a href="#dominios">Domínios</a>
+        <a href="#fluxo">Visão geral</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Parte 1 — VPS</div>
+        <a href="#parte-1" class="sub">Preparar Ubuntu</a>
+        <a href="#p1-1" class="sub">1.1 Sistema</a>
+        <a href="#p1-2" class="sub">1.2 SSH</a>
+        <a href="#p1-3" class="sub">1.3 Firewall (80/443)</a>
+        <a href="#p1-4" class="sub">1.4 Docker</a>
+        <a href="#p1-5" class="sub">1.5 Usuário deploy</a>
+        <a href="#p1-6" class="sub">1.6 Clone do repo</a>
+        <a href="#p1-7" class="sub">1.7 GPU (opcional)</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Parte 2 — Jenkins</div>
+        <a href="#parte-2" class="sub">Instalar Jenkins</a>
+        <a href="#p2-1" class="sub">2.1 Chave SSH</a>
+        <a href="#p2-2" class="sub">2.2 authorized_keys</a>
+        <a href="#p2-3" class="sub">2.3 Testar SSH</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Partes 3–7</div>
+        <a href="#parte-3">Credenciais Jenkins</a>
+        <a href="#parte-4">Jenkinsfiles</a>
+        <a href="#mysql-guia">MySQL 8.4 vs 5.7</a>
+        <a href="#parte-5">Ordem do deploy</a>
+        <a href="#parte-6">Smoke tests</a>
+        <a href="#parte-7">Troubleshooting</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Anexos</div>
+        <a href="#anexo-a">Checklist</a>
+        <a href="#anexo-b">Referências</a>
+      </div>
+    </nav>
+  </aside>
+
+  <button type="button" class="menu-toggle" id="menuToggle" aria-label="Abrir menu">☰</button>
+
+  <main class="main">
+    <header class="hero" id="intro">
+      <h1>Tutorial: Deploy SoftMusic SaaS em VPS</h1>
+      <p class="lead">
+        Implante o <strong>SoftMusic</strong> em produção com <strong>Jenkins</strong> (build/push de imagens),
+        <strong>SSH</strong> (deploy remoto) e <strong>Docker Compose</strong> na VPS.
+        Segredos ficam nas <strong>Credentials</strong> do Jenkins — nunca no <code>Jenkinsfile</code>.
+      </p>
+      <div class="badges">
+        <span class="badge">Jenkins + SSH</span>
+        <span class="badge">Docker Hub</span>
+        <span class="badge">5 pipelines</span>
+        <span class="badge">Ubuntu 22.04 / 24.04</span>
+        <span class="badge">SaaS multi-domínio</span>
+      </div>
+    </header>
+
+    <div class="card conventions">
+      <strong>Convenções deste guia</strong>
+      <ul>
+        <li><strong>VPS de produção</strong> — uma máquina Ubuntu com Docker, NGINX (80/443), MySQL, Redis, RabbitMQ, API, IA e frontends.</li>
+        <li><strong>VPS-Jenkins</strong> — pode ser a mesma VPS ou outra máquina; usuário <code>jenkins</code> faz SSH como <code>deploy</code>.</li>
+        <li><strong><code>deploy</code></strong> — usuário Linux na VPS de produção; membro do grupo <code>docker</code>.</li>
+        <li><strong><code>/opt/softmusic/repo</code></strong> — clone Git do monorepo SoftMusic.</li>
+        <li><strong><code>/opt/softmusic/.env.production</code></strong> — arquivo de ambiente enviado pelo Jenkins a cada deploy.</li>
+        <li><strong>Sem segredos no código</strong> — pipelines usam apenas <code>credentials('...')</code>.</li>
+      </ul>
+    </div>
+
+    <section id="dominios">
+      <h2>Domínios de produção</h2>
+      <p>O SoftMusic SaaS expõe três portais públicos. Configure DNS (A/AAAA ou CNAME via Cloudflare) apontando para o IP da VPS.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Domínio</th><th>App</th><th>Público</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>softmusic.com.br</code></td>
+              <td><code>apps/lp</code></td>
+              <td>Landing page, planos, botão Login</td>
+            </tr>
+            <tr>
+              <td><code>app.softmusic.com.br</code></td>
+              <td><code>apps/web</code> + API em <code>/api</code></td>
+              <td>Cadastro, bandas, biblioteca, cifras, faturas (owner)</td>
+            </tr>
+            <tr>
+              <td><code>admin.softmusic.com.br</code></td>
+              <td><code>apps/admin-web</code></td>
+              <td>Equipe SoftMusic (credenciais internas)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout callout-tip">
+        <strong>Variáveis no .env de produção</strong>
+        Defina <code>WEB_ORIGIN</code>, <code>API_BASE_URL</code>, <code>LP_ORIGIN</code> e <code>ADMIN_ORIGIN</code> com esses domínios HTTPS.
+        Modelo completo em <code>infra/docker/.env.production.example</code>.
+      </div>
+      <p>Detalhes de produto, planos e billing: <code>docs/arquitetura/saas-bandas-licencas.md</code>.</p>
+    </section>
+
+    <section id="fluxo">
+      <h2>Visão geral do fluxo</h2>
+      <div class="flow">
+        <div class="flow-box">
+          <h4>Jenkins</h4>
+          <ul>
+            <li>git checkout</li>
+            <li>docker build</li>
+            <li>docker push</li>
+            <li>scp .env</li>
+            <li>ssh deploy@VPS</li>
+          </ul>
+        </div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-registry">Docker Hub</div>
+        <span class="flow-arrow">→</span>
+        <div class="flow-box">
+          <h4>VPS produção</h4>
+          <ul>
+            <li>usuário <code>deploy</code></li>
+            <li>docker pull</li>
+            <li>compose up -d</li>
+            <li>NGINX 80/443</li>
+          </ul>
+        </div>
+      </div>
+      <ul>
+        <li>Jobs de <strong>infra</strong> não fazem build de app — sobem MySQL, Redis, RabbitMQ e observabilidade.</li>
+        <li>Jobs <strong>ia</strong>, <strong>api</strong> e <strong>web</strong> constroem imagens, fazem push e atualizam tags no <code>.env.production</code> remoto.</li>
+        <li>IP, porta SSH, registry e <code>.env</code> vêm das <strong>5 credenciais</strong> Jenkins (seção 3).</li>
+      </ul>
+    </section>
+
+    <!-- PARTE 1 -->
+    <section id="parte-1">
+      <h2>Parte 1 — Preparar a VPS de produção</h2>
+      <div class="callout callout-info">
+        Execute como <strong>root</strong> ou com <code>sudo</code>. Recomendado: <strong>Ubuntu 22.04 ou 24.04 LTS</strong>.
+        Mínimo sugerido: 8 vCPU, 32 GB RAM, 200 GB SSD; GPU NVIDIA se rodar IA na mesma máquina.
+      </div>
+
+      <h3 id="p1-1">1.1 Atualizar o sistema</h3>
+      <div class="code-wrap">
+        <span class="lang-label">bash</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>apt update && apt upgrade -y
+apt install -y ca-certificates curl gnupg lsb-release ufw fail2ban git unattended-upgrades
+
+dpkg-reconfigure -plow unattended-upgrades
+timedatectl set-timezone America/Sao_Paulo
+hostnamectl set-hostname softmusic-prod-01</code></pre>
+      </div>
+
+      <h3 id="p1-2">1.2 Hardening básico de SSH</h3>
+      <p>Edite <code>/etc/ssh/sshd_config</code>:</p>
+      <div class="code-wrap">
+        <span class="lang-label">sshd_config</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre class="text"><code>PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+ChallengeResponseAuthentication no</code></pre>
+      </div>
+      <div class="callout callout-warn">
+        <strong>Atenção</strong>
+        Só desligue <code>PasswordAuthentication</code> depois de validar login com chave (passo 2.3).
+      </div>
+      <div class="code-wrap">
+        <span class="lang-label">bash</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>systemctl restart ssh</code></pre>
+      </div>
+
+      <h3 id="p1-3">1.3 Firewall (UFW) — portas 80 e 443</h3>
+      <p>O NGINX na VPS expõe HTTP/HTTPS para os três domínios. MySQL, Redis e RabbitMQ ficam apenas na rede Docker interna.</p>
+      <div class="code-wrap">
+        <span class="lang-label">bash — VPS produção</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>ufw default deny incoming
+ufw default allow outgoing
+ufw allow OpenSSH
+ufw allow 22/tcp
+ufw allow 2230/tcp              # SSH customizado (se usar)
+ufw allow 80/tcp comment 'HTTP — redirect / ACME'
+ufw allow 443/tcp comment 'HTTPS — LP, app, admin'
+
+ufw enable
+ufw status verbose</code></pre>
+      </div>
+      <div class="callout callout-tip">
+        <strong>Não exponha</strong> portas 3306, 6379 ou 5672 na internet. O <code>docker-compose.prod.yml</code> já evita bind público desses serviços.
+      </div>
+
+      <h3 id="p1-4">1.4 Instalar Docker Engine + Compose</h3>
+      <div class="code-wrap">
+        <span class="lang-label">bash</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  > /etc/apt/sources.list.d/docker.list
+
+apt update
+apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+docker --version
+docker compose version</code></pre>
+      </div>
+
+      <h3 id="p1-5">1.5 Criar o usuário <code>deploy</code></h3>
+      <div class="code-wrap">
+        <span class="lang-label">bash</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>adduser --disabled-password --gecos "" deploy
+usermod -aG docker deploy
+
+mkdir -p /opt/softmusic
+chown deploy:deploy /opt/softmusic
+
+mkdir -p /home/deploy/.ssh
+chmod 700 /home/deploy/.ssh
+touch /home/deploy/.ssh/authorized_keys
+chmod 600 /home/deploy/.ssh/authorized_keys
+chown -R deploy:deploy /home/deploy/.ssh</code></pre>
+      </div>
+
+      <h3 id="p1-6">1.6 Clonar o repositório em <code>/opt/softmusic/repo</code></h3>
+      <p>Faça o clone <strong>antes</strong> do primeiro deploy Jenkins — os pipelines fazem <code>git fetch</code> e <code>reset --hard origin/main</code>, mas exigem o diretório <code>.git</code> existente.</p>
+      <div class="code-wrap">
+        <span class="lang-label">bash — como deploy</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>sudo -iu deploy
+cd /opt/softmusic
+git clone https://github.com/SEU_ORG/softmusic.git repo
+cd repo && git checkout main
+ls -la infra/jenkins/</code></pre>
+      </div>
+      <div class="callout callout-warn">
+        <strong>Deploy key ou PAT</strong>
+        Se o repositório for privado, configure chave de deploy do usuário <code>deploy</code> ou use HTTPS com token no <code>git clone</code>.
+      </div>
+
+      <h3 id="p1-7">1.7 (Opcional) GPU NVIDIA para IA</h3>
+      <p>Necessário para o job <code>softmusic-ia</code> (python-ai + worker Celery com Demucs).</p>
+      <div class="code-wrap">
+        <span class="lang-label">bash</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>apt install -y ubuntu-drivers-common
+ubuntu-drivers autoinstall
+reboot
+# Após reboot:
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+  | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+apt update
+apt install -y nvidia-container-toolkit
+nvidia-ctk runtime configure --runtime=docker
+systemctl restart docker
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi</code></pre>
+      </div>
+    </section>
+
+    <!-- PARTE 2 -->
+    <section id="parte-2">
+      <h2>Parte 2 — Jenkins e chave SSH</h2>
+      <div class="callout callout-info">
+        Jenkins instalado via <code>apt</code>, usuário <code>jenkins</code>, home em <code>/var/lib/jenkins</code>.
+        Para <code>docker build</code> e <code>push</code>, o usuário <code>jenkins</code> precisa estar no grupo <code>docker</code>.
+      </div>
+
+      <h3 id="p2-0">2.0 Instalar o Jenkins</h3>
+      <div class="code-wrap">
+        <span class="lang-label">bash — VPS-Jenkins</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>apt update
+apt install -y ca-certificates curl gnupg fontconfig openjdk-17-jre
+
+curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key \
+  | tee /usr/share/keyrings/jenkins-keyring.asc > /dev/null
+echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
+      https://pkg.jenkins.io/debian-stable binary/" \
+  > /etc/apt/sources.list.d/jenkins.list
+
+apt update
+apt install -y jenkins
+systemctl enable --now jenkins
+cat /var/lib/jenkins/secrets/initialAdminPassword</code></pre>
+      </div>
+      <p>UI na porta <strong>8080</strong>. Instale plugins: <strong>Pipeline</strong>, <strong>SSH Agent</strong>, <strong>Credentials Binding</strong>.</p>
+      <div class="code-wrap">
+        <span class="lang-label">bash</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>usermod -aG docker jenkins
+systemctl restart jenkins</code></pre>
+      </div>
+
+      <h3 id="p2-1">2.1 Gerar chave ed25519 para deploy</h3>
+      <div class="code-wrap">
+        <span class="lang-label">bash — VPS-Jenkins</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>sudo -iu jenkins
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+ssh-keygen -t ed25519 -C "jenkins@softmusic-ci" -f ~/.ssh/id_ed25519_deploy -N ""
+ls -la ~/.ssh/id_ed25519_deploy*</code></pre>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Arquivo</th><th>Uso</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>id_ed25519_deploy</code></td>
+              <td>Chave <strong>privada</strong> → credential <code>softmusic-ssh-deploy-vps</code></td>
+            </tr>
+            <tr>
+              <td><code>id_ed25519_deploy.pub</code></td>
+              <td>Chave <strong>pública</strong> → <code>/home/deploy/.ssh/authorized_keys</code> na VPS</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="p2-2">2.2 Copiar chave pública para a VPS</h3>
+      <ol class="steps">
+        <li>Na VPS-Jenkins: <code>sudo cat /var/lib/jenkins/.ssh/id_ed25519_deploy.pub</code></li>
+        <li>Na VPS de produção: cole em <code>/home/deploy/.ssh/authorized_keys</code></li>
+        <li>Ajuste permissões:
+          <div class="code-wrap" style="margin-top:0.5rem">
+            <button type="button" class="copy-btn" data-copy>Copiar</button>
+            <pre><code>chown deploy:deploy /home/deploy/.ssh/authorized_keys
+chmod 600 /home/deploy/.ssh/authorized_keys</code></pre>
+          </div>
+        </li>
+      </ol>
+
+      <h3 id="p2-3">2.3 Testar SSH sem senha</h3>
+      <div class="code-wrap">
+        <span class="lang-label">bash</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>sudo -iu jenkins
+ssh -i ~/.ssh/id_ed25519_deploy -p 22 -o StrictHostKeyChecking=accept-new \
+    deploy@SEU_IP_VPS 'docker version && id && ls /opt/softmusic/repo/.git'</code></pre>
+      </div>
+      <p>Esperado: versão do Docker, <code>deploy</code> no grupo <code>docker</code> e diretório <code>.git</code> presente.</p>
+    </section>
+
+    <!-- PARTE 3 -->
+    <section id="parte-3">
+      <h2>Parte 3 — Credenciais no Jenkins</h2>
+      <p><strong>Manage Jenkins → Credentials → System → Global credentials → + Add Credentials</strong></p>
+      <p>Documentação detalhada: <code>infra/jenkins/credentials.md</code></p>
+      <div class="callout callout-danger">
+        <strong>Regra de ouro</strong>
+        Nunca coloque senhas, tokens ou IPs no <code>Jenkinsfile</code>. Use apenas <code>credentials('id-exato')</code>.
+      </div>
+
+      <h3>As 5 credenciais obrigatórias</h3>
+      <p>IDs devem bater <strong>letra por letra</strong> ou o pipeline falha com <code>CredentialsNotFoundException</code>.</p>
+
+      <div class="cred-grid">
+        <div class="cred-card">
+          <div class="id">softmusic-docker-registry-creds</div>
+          <div class="kind">Username with password</div>
+          <p style="margin:0.5rem 0 0;font-size:0.85rem">Docker Hub — build/push das imagens (api, ia, web, lp)</p>
+        </div>
+        <div class="cred-card">
+          <div class="id">softmusic-ssh-deploy-vps</div>
+          <div class="kind">SSH Username with private key</div>
+          <p style="margin:0.5rem 0 0;font-size:0.85rem">Username: <code>deploy</code> — todos os pipelines</p>
+        </div>
+        <div class="cred-card">
+          <div class="id">softmusic-deploy-host</div>
+          <div class="kind">Secret text</div>
+          <p style="margin:0.5rem 0 0;font-size:0.85rem">IP ou DNS da VPS (sem <code>http://</code>)</p>
+        </div>
+        <div class="cred-card">
+          <div class="id">softmusic-deploy-host-port</div>
+          <div class="kind">Secret text</div>
+          <p style="margin:0.5rem 0 0;font-size:0.85rem">Porta SSH (ex.: <code>22</code> ou <code>2230</code>)</p>
+        </div>
+        <div class="cred-card">
+          <div class="id">softmusic-production-env</div>
+          <div class="kind">Secret file</div>
+          <p style="margin:0.5rem 0 0;font-size:0.85rem">Arquivo <code>.env</code> completo de produção</p>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>#</th><th>ID</th><th>Kind</th><th>Uso</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><code>softmusic-docker-registry-creds</code></td><td>Username with password</td><td>Login Docker Hub nos jobs api, ia, web</td></tr>
+            <tr><td>2</td><td><code>softmusic-ssh-deploy-vps</code></td><td>SSH private key</td><td>SSH/SCP para usuário <code>deploy</code></td></tr>
+            <tr><td>3</td><td><code>softmusic-deploy-host</code></td><td>Secret text</td><td>Host da VPS</td></tr>
+            <tr><td>4</td><td><code>softmusic-deploy-host-port</code></td><td>Secret text</td><td>Porta SSH</td></tr>
+            <tr><td>5</td><td><code>softmusic-production-env</code></td><td>Secret file</td><td>Copiado para <code>/opt/softmusic/.env.production</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>3.1 Arquivo <code>softmusic-production-env</code></h3>
+      <p>Baseie-se em <code>infra/docker/.env.production.example</code>. Inclua obrigatoriamente:</p>
+      <ul>
+        <li>MySQL, Redis, RabbitMQ</li>
+        <li>JWT e URLs dos domínios (<code>WEB_ORIGIN</code>, <code>LP_ORIGIN</code>, <code>ADMIN_ORIGIN</code>)</li>
+        <li>Asaas (<code>ASAAS_API_KEY</code>, <code>ASAAS_WEBHOOK_TOKEN</code>)</li>
+        <li>Tags de imagem (<code>SOFTMUSIC_*_IMAGE</code>) — pipelines de app atualizam automaticamente</li>
+      </ul>
+
+      <h3>3.2 Teste rápido (job Pipeline descartável)</h3>
+      <div class="code-wrap">
+        <span class="lang-label">groovy</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre class="groovy"><code>pipeline {
+  agent any
+  environment {
+    DEPLOY_HOST     = credentials('softmusic-deploy-host')
+    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
+    DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
+  }
+  stages {
+    stage('Registry') {
+      steps {
+        sh 'echo "$DOCKER_CREDS_PSW" | docker login -u "$DOCKER_CREDS_USR" --password-stdin'
+        sh 'docker logout || true'
+      }
+    }
+    stage('SSH') {
+      steps {
+        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+          sh '''
+            ssh -o StrictHostKeyChecking=no -p $DEPLOY_SSH_PORT deploy@$DEPLOY_HOST \
+              'docker version --format "{{.Server.Version}}" && id'
+          '''
+        }
+      }
+    }
+  }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- PARTE 4 -->
+    <section id="parte-4">
+      <h2>Parte 4 — Jenkinsfiles em <code>infra/jenkins/</code></h2>
+      <p>Crie um job <strong>Pipeline</strong> por Jenkinsfile, apontando para o caminho no repositório (Multibranch ou SCM).</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Job Jenkins</th><th>Jenkinsfile</th><th>Descrição</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>softmusic-infra</code></td>
+              <td><code>infra/jenkins/Jenkinsfile.infra</code></td>
+              <td>MySQL <strong>8.4</strong> + Redis + RabbitMQ + observabilidade</td>
+            </tr>
+            <tr>
+              <td><code>softmusic-infra-legacy</code></td>
+              <td><code>infra/jenkins/Jenkinsfile.infra-legacy</code></td>
+              <td>MySQL <strong>5.7</strong> para CPUs antigas</td>
+            </tr>
+            <tr>
+              <td><code>softmusic-ia</code></td>
+              <td><code>infra/jenkins/Jenkinsfile.ia</code></td>
+              <td>python-ai + worker Celery (GPU)</td>
+            </tr>
+            <tr>
+              <td><code>softmusic-api</code></td>
+              <td><code>infra/jenkins/Jenkinsfile.api</code></td>
+              <td>BFF cliente + admin-api</td>
+            </tr>
+            <tr>
+              <td><code>softmusic-web</code></td>
+              <td><code>infra/jenkins/Jenkinsfile.web</code></td>
+              <td>app + LP + admin-web via NGINX</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Exemplo — uso de credentials() no Jenkinsfile</h3>
+      <div class="code-wrap">
+        <span class="lang-label">groovy — trecho Jenkinsfile.api</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre class="groovy"><code>environment {
+  REGISTRY        = 'docker.io'
+  IMAGE_API       = 'softmusic-api'
+  DEPLOY_USER     = 'deploy'
+  DEPLOY_HOST     = credentials('softmusic-deploy-host')
+  DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
+  DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
+}
+
+stage('Enviar .env') {
+  steps {
+    withCredentials([file(credentialsId: 'softmusic-production-env', variable: 'ENV_FILE')]) {
+      sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+        sh '''
+          scp -o StrictHostKeyChecking=no -P "$DEPLOY_SSH_PORT" "$ENV_FILE" \
+            "$DEPLOY_USER@$DEPLOY_HOST:/opt/softmusic/.env.production"
+        '''
+      }
+    }
+  }
+}</code></pre>
+      </div>
+      <ul>
+        <li><code>DOCKER_CREDS</code> expõe <code>DOCKER_CREDS_USR</code> e <code>DOCKER_CREDS_PSW</code> automaticamente.</li>
+        <li>Infra usa <code>withCredentials([file(...)])</code> para o <code>.env</code>; jobs de app fazem o mesmo antes do deploy remoto.</li>
+        <li>Nenhum segredo hardcoded — apenas IDs de credential conhecidos.</li>
+      </ul>
+    </section>
+
+    <!-- MYSQL -->
+    <section id="mysql-guia">
+      <h2>Guia de escolha — MySQL 8.4 vs 5.7 (legacy)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Cenário</th><th>Job</th><th>MySQL</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>VPS nova, CPU x86_64 moderna (AVX2)</td>
+              <td><code>softmusic-infra</code></td>
+              <td><strong>8.4</strong> (padrão)</td>
+            </tr>
+            <tr>
+              <td>CPU antiga, erro ao subir MySQL 8.x, sem suporte a instruções recentes</td>
+              <td><code>softmusic-infra-legacy</code></td>
+              <td><strong>5.7</strong> (LEGACY_MYSQL=1)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout callout-warn">
+        <strong>Escolha uma vez</strong>
+        Rode <strong>apenas um</strong> dos jobs de infra no primeiro deploy. Não alterne entre 8.4 e 5.7 no mesmo volume de dados sem migração planejada.
+      </div>
+      <p>Sintomas de incompatibilidade na VPS antiga: container MySQL em restart loop, logs com <code>Illegal instruction</code> ou falha ao iniciar <code>mysqld</code>. Nesse caso, use <code>Jenkinsfile.infra-legacy</code>.</p>
+      <div class="code-wrap">
+        <span class="lang-label">bash — verificar na VPS</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code># Após deploy infra (moderno)
+docker ps --filter name=softmusic-mysql --format 'table {{.Names}}\t{{.Status}}'
+docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
+
+# Legacy — smoke do Jenkinsfile.infra-legacy
+docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL 5.7 OK"</code></pre>
+      </div>
+    </section>
+
+    <!-- PARTE 5 -->
+    <section id="parte-5">
+      <h2>Parte 5 — Ordem do primeiro deploy</h2>
+      <div class="order-list">
+        <span class="order-step">1. VPS + clone</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">2. Credenciais</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">3. infra <em>ou</em> infra-legacy</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">4. ia</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">5. api</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">6. web</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">7. DNS</span>
+      </div>
+
+      <ol class="steps">
+        <li>Preparar VPS: Docker, usuário <code>deploy</code>, UFW 80/443, clone em <code>/opt/softmusic/repo</code></li>
+        <li>Cadastrar as <strong>5 credenciais</strong> no Jenkins</li>
+        <li>Rodar <code>softmusic-infra</code> <strong>ou</strong> <code>softmusic-infra-legacy</code> (não os dois)</li>
+        <li>Rodar <code>softmusic-ia</code> — requer GPU na mesma VPS (ou adapte para worker remoto)</li>
+        <li>Rodar <code>softmusic-api</code> — build, push e deploy da API</li>
+        <li>Rodar <code>softmusic-web</code> — build/push de web + LP, deploy com NGINX</li>
+        <li>Configurar DNS: <code>softmusic.com.br</code>, <code>app.softmusic.com.br</code>, <code>admin.softmusic.com.br</code> → IP da VPS</li>
+      </ol>
+
+      <div class="callout callout-tip">
+        <strong>Deploys seguintes</strong>
+        Após o primeiro go-live, rode apenas o job da camada alterada (ex.: só <code>softmusic-api</code> após mudança no BFF).
+      </div>
+    </section>
+
+    <!-- PARTE 6 -->
+    <section id="parte-6">
+      <h2>Parte 6 — Smoke tests (curl)</h2>
+      <p>Execute na VPS (como <code>deploy</code>) ou de uma máquina com acesso aos domínios.</p>
+
+      <h3>6.1 Na VPS — localhost</h3>
+      <div class="code-wrap">
+        <span class="lang-label">bash — VPS produção</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code># Infra
+docker ps --filter name=softmusic-mysql --filter name=softmusic-redis --filter name=softmusic-rabbitmq \
+  --format 'table {{.Names}}\t{{.Status}}'
+docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
+
+# IA
+curl -sf http://127.0.0.1:8000/health && echo " Python-AI OK"
+
+# API
+curl -sf http://127.0.0.1:8080/health/live && echo " API OK"
+
+# Web (container interno)
+curl -sf http://127.0.0.1:5173/ && echo " Web OK"
+
+# NGINX
+curl -sf -o /dev/null -w '%{http_code}\n' http://127.0.0.1:80</code></pre>
+      </div>
+
+      <h3>6.2 Externo — domínios públicos (HTTPS)</h3>
+      <div class="code-wrap">
+        <span class="lang-label">bash — qualquer host</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code># Landing page
+curl -sfI https://softmusic.com.br/ | head -5
+
+# App + API health
+curl -sf https://app.softmusic.com.br/api/health/live
+curl -sf https://app.softmusic.com.br/api/health/ready
+
+# Admin (espera 200 ou redirect para login)
+curl -sfI https://admin.softmusic.com.br/ | head -5</code></pre>
+      </div>
+
+      <h3>6.3 Containers em execução</h3>
+      <div class="code-wrap">
+        <span class="lang-label">bash</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>docker ps --filter name=softmusic- --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'</code></pre>
+      </div>
+    </section>
+
+    <!-- PARTE 7 -->
+    <section id="parte-7">
+      <h2>Parte 7 — Troubleshooting</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sintoma</th><th>Causa provável</th><th>Solução</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>CredentialsNotFoundException</code></td>
+              <td>ID de credential diferente do Jenkinsfile</td>
+              <td>Conferir os 5 IDs exatos da seção 3</td>
+            </tr>
+            <tr>
+              <td><code>Permission denied (publickey)</code></td>
+              <td>Chave SSH não autorizada</td>
+              <td>Refazer passo 2.2; <code>chmod 600</code> em <code>authorized_keys</code></td>
+            </tr>
+            <tr>
+              <td><code>ERRO: clone o repositório em /opt/softmusic/repo</code></td>
+              <td>Primeiro deploy sem clone</td>
+              <td>Executar seção 1.6 antes do job infra</td>
+            </tr>
+            <tr>
+              <td>MySQL container restart loop</td>
+              <td>CPU incompatível com MySQL 8.4</td>
+              <td>Usar <code>softmusic-infra-legacy</code> (MySQL 5.7)</td>
+            </tr>
+            <tr>
+              <td><code>unauthorized</code> no docker push</td>
+              <td>PAT Docker Hub inválido</td>
+              <td>Atualizar <code>softmusic-docker-registry-creds</code> com PAT Read &amp; Write</td>
+            </tr>
+            <tr>
+              <td><code>docker.sock permission denied</code></td>
+              <td><code>deploy</code> fora do grupo docker</td>
+              <td><code>usermod -aG docker deploy</code> e novo login SSH</td>
+            </tr>
+            <tr>
+              <td>IA health check falhou</td>
+              <td>GPU / NVIDIA Toolkit ausente</td>
+              <td>Seção 1.7; <code>nvidia-smi</code> no host e no container</td>
+            </tr>
+            <tr>
+              <td>502 / connection refused nos domínios</td>
+              <td>NGINX ou app não subiu</td>
+              <td><code>docker logs softmusic-nginx</code>; rodar <code>softmusic-web</code> novamente</td>
+            </tr>
+            <tr>
+              <td>API OK local, falha no domínio</td>
+              <td>DNS ou TLS</td>
+              <td>Verificar registros A/CNAME e certificados no NGINX</td>
+            </tr>
+            <tr>
+              <td>Webhook Asaas não chega</td>
+              <td>URL ou token incorreto</td>
+              <td><code>ASAAS_WEBHOOK_TOKEN</code> no <code>.env</code>; URL pública <code>/api/webhooks/asaas</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ANEXO A -->
+    <section id="anexo-a">
+      <h2>Anexo A — Checklist final</h2>
+      <div class="card">
+        <ul class="checklist">
+          <li><label><input type="checkbox" /> VPS: Ubuntu atualizado, timezone America/Sao_Paulo</label></li>
+          <li><label><input type="checkbox" /> VPS: UFW ativo — SSH + 80 + 443</label></li>
+          <li><label><input type="checkbox" /> VPS: Docker Engine + Compose plugin instalados</label></li>
+          <li><label><input type="checkbox" /> VPS: usuário <code>deploy</code> no grupo <code>docker</code></label></li>
+          <li><label><input type="checkbox" /> VPS: repositório clonado em <code>/opt/softmusic/repo</code></label></li>
+          <li><label><input type="checkbox" /> VPS: (se IA) NVIDIA Toolkit + <code>nvidia-smi</code> OK</label></li>
+          <li><label><input type="checkbox" /> Jenkins: ativo, plugins Pipeline + SSH Agent</label></li>
+          <li><label><input type="checkbox" /> Jenkins: usuário <code>jenkins</code> no grupo <code>docker</code></label></li>
+          <li><label><input type="checkbox" /> Jenkins: chave SSH em <code>/var/lib/jenkins/.ssh/</code></label></li>
+          <li><label><input type="checkbox" /> Jenkins: 5 credenciais cadastradas (IDs exatos)</label></li>
+          <li><label><input type="checkbox" /> Jenkins: 5 jobs apontando para <code>infra/jenkins/Jenkinsfile.*</code></label></li>
+          <li><label><input type="checkbox" /> Primeiro deploy: infra (8.4 ou legacy) → ia → api → web</label></li>
+          <li><label><input type="checkbox" /> DNS: softmusic.com.br, app.*, admin.* → IP da VPS</label></li>
+          <li><label><input type="checkbox" /> Smoke: curl health API, LP e admin retornam 200</label></li>
+          <li><label><input type="checkbox" /> <code>.env</code> de produção sem valores de exemplo (SUBSTITUA)</label></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ANEXO B -->
+    <section id="anexo-b">
+      <h2>Anexo B — Referências no repositório</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Documento</th><th>Conteúdo</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>infra/jenkins/credentials.md</code></td>
+              <td>IDs de credenciais, ordem de deploy, smoke test Groovy</td>
+            </tr>
+            <tr>
+              <td><code>docs/arquitetura/saas-bandas-licencas.md</code></td>
+              <td>Domínios, planos, billing Asaas, estados de banda, papéis</td>
+            </tr>
+            <tr>
+              <td><code>infra/docker/.env.production.example</code></td>
+              <td>Modelo do arquivo <code>softmusic-production-env</code></td>
+            </tr>
+            <tr>
+              <td><code>infra/docker/scripts/deploy-*.sh</code></td>
+              <td>Scripts invocados pelos Jenkinsfiles na VPS</td>
+            </tr>
+            <tr>
+              <td><code>docs/local/desenvolvimento-docker.md</code></td>
+              <td>Stack local espelhando produção Docker</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      SoftMusic SaaS — Tutorial VPS Deploy + Jenkins · <code>docs/producao/tutorial-vps-deploy-jenkins.html</code>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('overlay');
+      const menuToggle = document.getElementById('menuToggle');
+      const navLinks = document.querySelectorAll('#nav a');
+
+      function closeMenu() {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('show');
+      }
+      menuToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('show');
+      });
+      overlay.addEventListener('click', closeMenu);
+      navLinks.forEach(a => a.addEventListener('click', () => {
+        if (window.innerWidth <= 900) closeMenu();
+      }));
+
+      const sections = [...document.querySelectorAll('section[id], header[id]')];
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const id = entry.target.id;
+            navLinks.forEach(link => {
+              link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+            });
+          }
+        });
+      }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+      sections.forEach(s => observer.observe(s));
+
+      document.querySelectorAll('.copy-btn[data-copy]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pre = btn.parentElement.querySelector('pre code');
+          const text = pre ? pre.innerText : '';
+          try {
+            await navigator.clipboard.writeText(text);
+            btn.textContent = 'Copiado!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+              btn.textContent = 'Copiar';
+              btn.classList.remove('copied');
+            }, 2000);
+          } catch {
+            btn.textContent = 'Erro';
+          }
+        });
+      });
+
+      const checks = document.querySelectorAll('.checklist input[type="checkbox"]');
+      const key = 'softmusic-deploy-checklist';
+      const saved = JSON.parse(localStorage.getItem(key) || '[]');
+      checks.forEach((cb, i) => {
+        if (saved[i]) cb.checked = true;
+        cb.addEventListener('change', () => {
+          const state = [...checks].map(c => c.checked);
+          localStorage.setItem(key, JSON.stringify(state));
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

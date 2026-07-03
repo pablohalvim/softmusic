@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tutorial: Grafana &amp; Observabilidade — SoftMusic</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --sidebar: #0f172a;
+      --sidebar-text: #94a3b8;
+      --sidebar-active: #f8fafc;
+      --text: #1e293b;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #f46800;
+      --accent-2: #ff9830;
+      --accent-soft: #fff7ed;
+      --prom: #e6522c;
+      --loki: #2eb886;
+      --otel: #6e56cf;
+      --warn: #b45309;
+      --warn-bg: #fffbeb;
+      --danger: #b91c1c;
+      --danger-bg: #fef2f2;
+      --info-bg: #eff6ff;
+      --info: #1d4ed8;
+      --code-bg: #1e293b;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 24px rgba(15, 23, 42, 0.06);
+      --sidebar-w: 288px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "DM Sans", system-ui, sans-serif;
+      font-size: 1rem;
+      line-height: 1.65;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: var(--sidebar-w);
+      background: var(--sidebar);
+      color: var(--sidebar-text);
+      overflow-y: auto;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-header {
+      padding: 1.5rem 1.25rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .sidebar-header .logo {
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+    .sidebar-header .logo span { color: var(--accent-2); }
+    .sidebar-header p { margin: 0.5rem 0 0; font-size: 0.8rem; line-height: 1.4; }
+    .nav { padding: 0.75rem 0 2rem; flex: 1; }
+    .nav-group { margin-bottom: 0.25rem; }
+    .nav-group-title {
+      padding: 0.5rem 1.25rem 0.25rem;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #475569;
+    }
+    .nav a {
+      display: block;
+      padding: 0.4rem 1.25rem 0.4rem 1.5rem;
+      color: var(--sidebar-text);
+      text-decoration: none;
+      font-size: 0.875rem;
+      border-left: 3px solid transparent;
+      transition: color 0.15s, background 0.15s;
+    }
+    .nav a:hover { color: #e2e8f0; background: rgba(255,255,255,0.04); }
+    .nav a.active {
+      color: var(--sidebar-active);
+      border-left-color: var(--accent);
+      background: rgba(244, 104, 0, 0.15);
+    }
+    .nav a.sub { padding-left: 2rem; font-size: 0.8125rem; }
+
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      max-width: 940px;
+      padding: 2rem 2.5rem 4rem;
+    }
+
+    .menu-toggle, .overlay { display: none; }
+    @media (max-width: 900px) {
+      .sidebar { transform: translateX(-100%); transition: transform 0.25s; }
+      .sidebar.open { transform: translateX(0); }
+      .main { margin-left: 0; padding: 1.25rem 1rem 3rem; }
+      .menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        bottom: 1.25rem;
+        right: 1.25rem;
+        z-index: 200;
+        width: 52px; height: 52px;
+        border: none;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        font-size: 1.4rem;
+        cursor: pointer;
+        box-shadow: var(--shadow);
+      }
+      .overlay {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(15,23,42,0.5);
+        z-index: 90;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s;
+      }
+      .overlay.show { opacity: 1; pointer-events: auto; }
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #0f172a 0%, #7c2d12 45%, #f46800 100%);
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 2.5rem 2rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+    }
+    .hero h1 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(1.5rem, 4vw, 2.1rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+    }
+    .hero .lead { margin: 0; font-size: 1.05rem; opacity: 0.94; max-width: 44em; }
+    .badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.25rem; }
+    .badge {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.22);
+    }
+
+    section { margin-bottom: 3rem; scroll-margin-top: 1.5rem; }
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--accent);
+      color: #0f172a;
+    }
+    h3 { font-size: 1.15rem; font-weight: 600; margin: 1.75rem 0 0.75rem; color: #0f172a; }
+    h4 { font-size: 1rem; font-weight: 600; margin: 1.25rem 0 0.5rem; }
+    p { margin: 0 0 1rem; }
+    ul, ol { margin: 0 0 1rem; padding-left: 1.35rem; }
+    li { margin-bottom: 0.35rem; }
+    a { color: #c2410c; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+
+    .callout {
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin: 1rem 0 1.25rem;
+      font-size: 0.95rem;
+    }
+    .callout strong { display: block; margin-bottom: 0.25rem; }
+    .callout-info { background: var(--info-bg); border: 1px solid #bfdbfe; color: #1e3a5f; }
+    .callout-warn { background: var(--warn-bg); border: 1px solid #fde68a; color: #78350f; }
+    .callout-danger { background: var(--danger-bg); border: 1px solid #fecaca; color: #7f1d1d; }
+    .callout-tip { background: var(--accent-soft); border: 1px solid #fdba74; color: #7c2d12; }
+
+    .arch {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+    }
+    @media (max-width: 800px) { .arch { grid-template-columns: 1fr; } }
+    .arch-node {
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .arch-node h4 { margin: 0 0 0.35rem; font-size: 0.95rem; }
+    .arch-node p { margin: 0; font-size: 0.82rem; color: var(--muted); }
+    .arch-node.prom { border-top: 4px solid var(--prom); }
+    .arch-node.loki { border-top: 4px solid var(--loki); }
+    .arch-node.grafana { border-top: 4px solid var(--accent); }
+    .arch-node.otel { border-top: 4px solid var(--otel); }
+    .arch-node.apps { border-top: 4px solid #3b82f6; grid-column: 1 / -1; }
+
+    .steps { counter-reset: step; list-style: none; padding: 0; margin: 0 0 1rem; }
+    .steps li {
+      counter-increment: step;
+      position: relative;
+      padding: 0 0 1.25rem 2.75rem;
+      margin: 0;
+      border-left: 2px solid var(--border);
+      margin-left: 0.9rem;
+    }
+    .steps li:last-child { border-left-color: transparent; padding-bottom: 0; }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: -0.95rem;
+      top: 0;
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .code-wrap {
+      position: relative;
+      margin: 1rem 0 1.25rem;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .code-wrap .lang-label {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 0.4rem 1rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #94a3b8;
+      background: rgba(0,0,0,0.25);
+      z-index: 1;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 0.35rem;
+      right: 0.5rem;
+      z-index: 2;
+      padding: 0.35rem 0.65rem;
+      font-size: 0.7rem;
+      font-family: inherit;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.1);
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.2); }
+    .copy-btn.copied { background: var(--accent); border-color: var(--accent); }
+    pre {
+      margin: 0;
+      padding: 2.25rem 1.25rem 1.25rem;
+      overflow-x: auto;
+      background: var(--code-bg);
+      color: #e2e8f0;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.8125rem;
+      line-height: 1.55;
+    }
+    code:not(pre code) {
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.88em;
+      background: #e2e8f0;
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+      color: #0f172a;
+    }
+
+    .table-wrap { overflow-x: auto; margin: 1rem 0 1.25rem; border-radius: var(--radius); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; background: var(--surface); }
+    th, td { padding: 0.65rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: #f8fafc; font-weight: 600; color: #334155; }
+    tr:last-child td { border-bottom: none; }
+
+    .pill {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      margin-right: 0.25rem;
+    }
+    .pill-ok { background: #dcfce7; color: #166534; }
+    .pill-warn { background: #fef9c3; color: #854d0e; }
+    .pill-auto { background: #ede9fe; color: #5b21b6; }
+
+    .checklist { list-style: none; padding: 0; margin: 0; }
+    .checklist li { margin-bottom: 0.5rem; }
+    .checklist label { display: flex; gap: 0.6rem; align-items: flex-start; cursor: pointer; }
+    .checklist input { margin-top: 0.25rem; accent-color: var(--accent); }
+
+    .query-grid {
+      display: grid;
+      gap: 1rem;
+      margin: 1rem 0;
+    }
+    @media (min-width: 700px) { .query-grid { grid-template-columns: 1fr 1fr; } }
+    .query-card {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+    .query-card .label {
+      font-family: "DM Sans", sans-serif;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent-2);
+      margin-bottom: 0.5rem;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay" id="overlay"></div>
+  <button class="menu-toggle" id="menuToggle" aria-label="Menu">☰</button>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">Soft<span>Music</span></div>
+        <p>Grafana &amp; Observabilidade — guia completo</p>
+      </div>
+      <nav class="nav" id="nav">
+        <div class="nav-group">
+          <div class="nav-group-title">Introdução</div>
+          <a href="#visao">Visão geral</a>
+          <a href="#arquitetura">Arquitetura</a>
+          <a href="#subir">Subir a stack</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">Grafana</div>
+          <a href="#primeiro-acesso">Primeiro acesso</a>
+          <a href="#datasources">Data sources</a>
+          <a href="#dashboards">Dashboards</a>
+          <a class="sub" href="#dash-overview">Painel geral</a>
+          <a class="sub" href="#dash-api">API &amp; Python AI</a>
+          <a class="sub" href="#dash-logs">Logs (Loki)</a>
+          <a href="#alertas">Alertas</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">Operação</div>
+          <a href="#prometheus">Prometheus</a>
+          <a href="#loki">Loki &amp; Promtail</a>
+          <a href="#otel">OpenTelemetry</a>
+          <a href="#producao">Produção</a>
+          <a href="#troubleshooting">Troubleshooting</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">Anexos</div>
+          <a href="#checklist">Checklist</a>
+          <a href="#referencias">Arquivos no repo</a>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="hero" id="visao">
+        <h1>Configurar observabilidade no Grafana</h1>
+        <p class="lead">
+          Tutorial passo a passo para subir Prometheus, Loki, Promtail e Grafana no SoftMusic,
+          validar métricas e logs, montar dashboards úteis e configurar alertas — local e produção.
+        </p>
+        <div class="badges">
+          <span class="badge">Grafana 11</span>
+          <span class="badge">Prometheus 2.53</span>
+          <span class="badge">Loki 3.1</span>
+          <span class="badge">Docker Compose</span>
+        </div>
+      </header>
+
+      <section id="arquitetura">
+        <h2>Arquitetura da observabilidade</h2>
+        <p>O SoftMusic usa o perfil Docker <code>observability</code>. Os apps enviam telemetria; o Grafana centraliza visualização.</p>
+
+        <div class="arch">
+          <div class="arch-node apps">
+            <h4>Aplicações (perfil <code>app</code>)</h4>
+            <p>
+              <strong>API</strong> expõe <code>/metrics</code> (prom-client) ·
+              <strong>Python AI</strong> expõe <code>/metrics</code> (Prometheus client) ·
+              variáveis <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> apontam para o collector ·
+              logs em stdout → Docker → Promtail
+            </p>
+          </div>
+          <div class="arch-node prom">
+            <h4>Prometheus</h4>
+            <p>Coleta métricas a cada 15s. Retenção 15 dias. Regras em <code>alerts.yml</code>.</p>
+          </div>
+          <div class="arch-node loki">
+            <h4>Loki + Promtail</h4>
+            <p>Promtail lê logs dos containers via Docker socket e envia ao Loki (retenção 7 dias).</p>
+          </div>
+          <div class="arch-node grafana">
+            <h4>Grafana</h4>
+            <p>UI em :3000. Data sources provisionados automaticamente (Prometheus + Loki).</p>
+          </div>
+          <div class="arch-node otel">
+            <h4>OTEL Collector</h4>
+            <p>Recebe traces/métricas OTLP (:4317/:4318). Base para evolução futura de APM.</p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Serviço</th><th>URL local</th><th>Config no repo</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Grafana</td><td><code>http://localhost:3000</code></td><td><code>infra/monitoring/grafana/</code></td></tr>
+              <tr><td>Prometheus</td><td><code>http://localhost:9090</code></td><td><code>infra/monitoring/prometheus/</code></td></tr>
+              <tr><td>Loki</td><td><code>http://localhost:3100</code></td><td><code>infra/monitoring/loki/</code></td></tr>
+              <tr><td>OTEL Collector</td><td><code>localhost:4317</code> (gRPC)</td><td><code>infra/monitoring/otel/</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="subir">
+        <h2>1. Subir a stack de observabilidade</h2>
+
+        <div class="callout callout-info">
+          <strong>Pré-requisito</strong>
+          O perfil <code>observability</code> é independente, mas para métricas dos apps você precisa do perfil <code>app</code> rodando (API + Python AI).
+        </div>
+
+        <h3>Local (desenvolvimento)</h3>
+        <div class="code-wrap">
+          <span class="lang-label">PowerShell / Bash</span>
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>cd softmusic
+
+# Infra + apps + observabilidade
+docker compose -f infra/docker/docker-compose.yml \
+  --profile infra --profile app --profile observability \
+  up -d --build
+
+# Só observabilidade (apps já rodando)
+docker compose -f infra/docker/docker-compose.yml \
+  --profile observability up -d</code></pre>
+        </div>
+
+        <h3>Variáveis no <code>infra/docker/.env</code></h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Variável</th><th>Exemplo local</th><th>Descrição</th></tr></thead>
+            <tbody>
+              <tr><td><code>GRAFANA_ADMIN_USER</code></td><td><code>admin</code></td><td>Usuário admin do Grafana</td></tr>
+              <tr><td><code>GRAFANA_ADMIN_PASSWORD</code></td><td>senha forte</td><td>Obrigatória — compose falha sem ela</td></tr>
+              <tr><td><code>GRAFANA_ROOT_URL</code></td><td><code>http://localhost:3000</code></td><td>URL pública (links em alertas/e-mails)</td></tr>
+              <tr><td><code>GRAFANA_PORT</code></td><td><code>3000</code></td><td>Porta exposta no host</td></tr>
+              <tr><td><code>PROMETHEUS_PORT</code></td><td><code>9090</code></td><td>UI do Prometheus</td></tr>
+              <tr><td><code>OTEL_EXPORTER_OTLP_ENDPOINT</code></td><td><code>http://otel-collector:4317</code></td><td>Já definido nos serviços app</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Verificação rápida</h3>
+        <div class="code-wrap">
+          <span class="lang-label">Shell</span>
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>docker ps --format "table {{.Names}}\t{{.Status}}" | findstr softmusic-grafana
+curl -s -o NUL -w "Grafana:%{http_code} " http://localhost:3000/login
+curl -s -o NUL -w "Prometheus:%{http_code} " http://localhost:9090/-/healthy
+curl -s http://localhost:8080/metrics | findstr process_cpu
+curl -s http://localhost:8000/metrics | findstr python_info</code></pre>
+        </div>
+      </section>
+
+      <section id="primeiro-acesso">
+        <h2>2. Primeiro acesso ao Grafana</h2>
+        <ol class="steps">
+          <li>
+            Abra <a href="http://localhost:3000" target="_blank" rel="noreferrer">http://localhost:3000</a>.
+          </li>
+          <li>
+            Entre com <code>GRAFANA_ADMIN_USER</code> / <code>GRAFANA_ADMIN_PASSWORD</code> do seu <code>.env</code>.
+          </li>
+          <li>
+            Na primeira visita o Grafana pode pedir para alterar a senha — em dev você pode pular; em produção <strong>altere imediatamente</strong>.
+          </li>
+          <li>
+            Vá em <strong>Connections → Data sources</strong>. Você deve ver:
+            <span class="pill pill-auto">Prometheus</span> (default)
+            <span class="pill pill-auto">Loki</span>
+            — provisionados por arquivo, sem clique manual.
+          </li>
+          <li>
+            Clique em <strong>Prometheus → Save &amp; test</strong>. Deve aparecer <em>Successfully queried the Prometheus API</em>.
+          </li>
+          <li>
+            Repita em <strong>Loki → Save &amp; test</strong>.
+          </li>
+        </ol>
+
+        <div class="callout callout-tip">
+          <strong>Dica</strong>
+          Os data sources estão em <code>infra/monitoring/grafana/provisioning/datasources/datasources.yml</code> e são montados read-only no container. Para mudar URL ou auth, edite o arquivo e reinicie o Grafana.
+        </div>
+      </section>
+
+      <section id="datasources">
+        <h2>3. Data sources (já provisionados)</h2>
+        <p>Não é necessário criar manualmente — mas entender o mapeamento ajuda em produção:</p>
+
+        <div class="code-wrap">
+          <span class="lang-label">datasources.yml (resumo)</span>
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>Prometheus → http://prometheus:9090   (default)
+Loki       → http://loki:3100</code></pre>
+        </div>
+
+        <h3>Testar no Explore</h3>
+        <ol>
+          <li>Menu lateral → <strong>Explore</strong></li>
+          <li>Selecione <strong>Prometheus</strong></li>
+          <li>Query: <code>up</code> → Run query</li>
+          <li>Troque para <strong>Loki</strong></li>
+          <li>Query: <code>{service=~"softmusic-.*"}</code> → Run query</li>
+        </ol>
+        <p>Você deve ver séries <code>up{job="softmusic-api"}</code>, <code>softmusic-python-ai</code>, etc., e linhas de log dos containers.</p>
+      </section>
+
+      <section id="dashboards">
+        <h2>4. Criar dashboards</h2>
+        <p>
+          A pasta <code>SoftMusic</code> é provisionada em
+          <code>infra/monitoring/grafana/provisioning/dashboards/dashboards.yml</code>.
+          Salve JSONs em <code>infra/monitoring/grafana/dashboards/</code> para versionar no Git — ou crie pela UI e exporte depois.
+        </p>
+
+        <div class="callout callout-warn">
+          <strong>Pasta vazia?</strong>
+          Se não houver JSON em <code>dashboards/</code>, crie o primeiro painel pela UI:
+          <strong>Dashboards → New → New dashboard</strong>. Ao exportar, coloque o arquivo na pasta acima e reinicie o Grafana.
+        </div>
+
+        <h3 id="dash-overview">4.1 Painel — Visão geral da plataforma</h3>
+        <p><strong>Dashboards → New dashboard → Add visualization</strong></p>
+        <div class="query-grid">
+          <div class="query-card">
+            <div class="label">Stat — Serviços UP</div>
+            sum(up{job=~"softmusic-.*|prometheus"})
+          </div>
+          <div class="query-card">
+            <div class="label">Time series — CPU API</div>
+            rate(process_cpu_seconds_total{job="softmusic-api"}[5m])
+          </div>
+          <div class="query-card">
+            <div class="label">Time series — Memória Python AI</div>
+            process_resident_memory_bytes{job="softmusic-python-ai"}
+          </div>
+          <div class="query-card">
+            <div class="label">Stat — Targets down</div>
+            count(up == 0) OR vector(0)
+          </div>
+        </div>
+        <ol>
+          <li>Organize em uma linha de <strong>Stat</strong> (UP) + linha de <strong>Time series</strong> (recursos).</li>
+          <li>Salve como <strong>SoftMusic / Overview</strong>.</li>
+          <li>Defina refresh <strong>30s</strong> e intervalo de tempo <strong>Last 6 hours</strong>.</li>
+        </ol>
+
+        <h3 id="dash-api">4.2 Painel — API &amp; Python AI</h3>
+        <p>Métricas default do <code>prom-client</code> (Node) e <code>prometheus_client</code> (Python) já estão disponíveis:</p>
+        <div class="query-grid">
+          <div class="query-card">
+            <div class="label">Node — Event loop lag (API)</div>
+            nodejs_eventloop_lag_seconds{job="softmusic-api"}
+          </div>
+          <div class="query-card">
+            <div class="label">Node — Heap usado (API)</div>
+            process_heap_bytes{job="softmusic-api"}
+          </div>
+          <div class="query-card">
+            <div class="label">Python — Info</div>
+            python_info{job="softmusic-python-ai"}
+          </div>
+          <div class="query-card">
+            <div class="label">Disponibilidade</div>
+            avg_over_time(up{job=~"softmusic-api|softmusic-python-ai"}[1h])
+          </div>
+        </div>
+
+        <div class="callout callout-info">
+          <strong>Evolução recomendada</strong>
+          Adicione métricas HTTP customizadas (<code>http_requests_total</code>, latência por rota) no BFF para alimentar os alertas já definidos em <code>alerts.yml</code>. Hoje o endpoint <code>/metrics</code> expõe métricas de runtime do processo.
+        </div>
+
+        <h3 id="dash-logs">4.3 Painel — Logs com Loki</h3>
+        <ol>
+          <li>Novo painel → data source <strong>Loki</strong> → tipo <strong>Logs</strong>.</li>
+          <li>Query base:</li>
+        </ol>
+        <div class="code-wrap">
+          <span class="lang-label">LogQL</span>
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>{service=~"softmusic-api|softmusic-python-ai|softmusic-worker"}</code></pre>
+        </div>
+        <p>Filtros úteis:</p>
+        <div class="code-wrap">
+          <span class="lang-label">LogQL — exemplos</span>
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code># Erros na API
+{service="softmusic-api"} |= "error" or |= "ERROR"
+
+# Worker / análise
+{service="softmusic-worker"} |= "run_analysis"
+
+# Scheduler billing
+{service="softmusic-scheduler"}
+
+# Por container
+{container="softmusic-python-ai"}</code></pre>
+        </div>
+        <p>Adicione um painel <strong>Logs volume</strong> com:</p>
+        <div class="code-wrap">
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>sum by (service) (count_over_time({service=~"softmusic-.*"}[5m]))</code></pre>
+        </div>
+
+        <h3>Variáveis de dashboard (opcional)</h3>
+        <p><strong>Dashboard settings → Variables → Add variable</strong></p>
+        <ul>
+          <li>Nome: <code>service</code></li>
+          <li>Tipo: Query (Loki)</li>
+          <li>Query: <code>label_values(service)</code></li>
+          <li>Use nas queries: <code>{service="$service"}</code></li>
+        </ul>
+      </section>
+
+      <section id="alertas">
+        <h2>5. Alertas</h2>
+        <p>Existem dois níveis: regras no <strong>Prometheus</strong> (arquivo) e contact points no <strong>Grafana</strong> (UI).</p>
+
+        <h3>5.1 Regras já definidas (<code>alerts.yml</code>)</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Alerta</th><th>Condição</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>ServiceDown</code></td>
+                <td><code>up == 0</code> por 2 min</td>
+                <td><span class="pill pill-ok">Funciona hoje</span></td>
+              </tr>
+              <tr>
+                <td><code>HighErrorRate</code></td>
+                <td>5xx &gt; 1% em 5 min</td>
+                <td><span class="pill pill-warn">Requer métrica HTTP</span></td>
+              </tr>
+              <tr>
+                <td><code>AnalysisQueueBacklog</code></td>
+                <td>fila Celery &gt; 100</td>
+                <td><span class="pill pill-warn">Requer métrica fila</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Verifique em Prometheus → <strong>Alerts</strong> e <strong>Status → Rules</strong>.</p>
+
+        <h3>5.2 Alertas no Grafana (recomendado para notificação)</h3>
+        <ol class="steps">
+          <li><strong>Alerting → Contact points → New</strong> — configure e-mail, Slack ou Telegram.</li>
+          <li><strong>Notification policies</strong> — rota default para o contact point.</li>
+          <li>Em um painel, edite um painel → <strong>Alert</strong> → crie regra, ex.:</li>
+        </ol>
+        <div class="code-wrap">
+          <span class="lang-label">PromQL — API down</span>
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>up{job="softmusic-api"} == 0</code></pre>
+        </div>
+        <p>Condição: IS BELOW 1 por 2m → severidade critical → notificar contact point.</p>
+
+        <h3>5.3 Silêncios e manutenção</h3>
+        <p>Em deploys planejados: <strong>Alerting → Silences → New silence</strong> com matcher <code>job=softmusic-api</code> e duração do deploy.</p>
+      </section>
+
+      <section id="prometheus">
+        <h2>6. Prometheus — targets e scrape</h2>
+        <p>Configuração: <code>infra/monitoring/prometheus/prometheus.yml</code></p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Job</th><th>Target</th><th>Path</th></tr></thead>
+            <tbody>
+              <tr><td><code>prometheus</code></td><td>localhost:9090</td><td>/metrics</td></tr>
+              <tr><td><code>softmusic-api</code></td><td>api:8080</td><td>/metrics</td></tr>
+              <tr><td><code>softmusic-python-ai</code></td><td>python-ai:8000</td><td>/metrics</td></tr>
+              <tr><td><code>rabbitmq</code></td><td>rabbitmq:15692</td><td>plugin Prometheus</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Em <a href="http://localhost:9090/targets" target="_blank" rel="noreferrer">localhost:9090/targets</a> todos devem estar <span class="pill pill-ok">UP</span>.</p>
+
+        <div class="callout callout-warn">
+          <strong>RabbitMQ DOWN?</strong>
+          O plugin de métricas precisa estar habilitado na imagem/config do RabbitMQ. Se não usar, remova o job <code>rabbitmq</code> do <code>prometheus.yml</code> ou ignore o target.
+        </div>
+
+        <h3>Recarregar config sem reiniciar</h3>
+        <div class="code-wrap">
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>curl -X POST http://localhost:9090/-/reload</code></pre>
+        </div>
+        <p>(Requer <code>--web.enable-lifecycle</code> — já ativo no compose.)</p>
+      </section>
+
+      <section id="loki">
+        <h2>7. Loki &amp; Promtail</h2>
+        <p>Promtail descobre containers via Docker socket e envia logs com labels <code>container</code> e <code>service</code> (regex <code>softmusic-*</code>).</p>
+
+        <h3>Validar ingestão</h3>
+        <div class="code-wrap">
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code># Labels disponíveis
+curl -s "http://localhost:3100/loki/api/v1/labels" | jq .
+
+# Últimos streams do serviço API
+curl -sG "http://localhost:3100/loki/api/v1/query" \
+  --data-urlencode 'query={service="softmusic-api"}' \
+  --data-urlencode 'limit=5'</code></pre>
+        </div>
+
+        <h3>Retenção</h3>
+        <p>7 dias em <code>loki-config.yaml</code> (<code>retention_period: 168h</code>). Ajuste conforme disco da VPS.</p>
+
+        <div class="callout callout-danger">
+          <strong>Windows + Docker Desktop</strong>
+          Promtail precisa do socket <code>/var/run/docker.sock</code> montado. No Docker Desktop WSL2 isso funciona; se logs não aparecerem, confira se o container promtail está healthy e se os containers têm prefixo <code>softmusic-</code>.
+        </div>
+      </section>
+
+      <section id="otel">
+        <h2>8. OpenTelemetry Collector</h2>
+        <p>O collector sobe com o perfil <code>app</code> e <code>observability</code>. Apps já têm:</p>
+        <div class="code-wrap">
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317</code></pre>
+        </div>
+        <p>Pipeline atual (<code>otel-collector-config.yaml</code>):</p>
+        <ul>
+          <li><strong>Traces</strong> → export logging (dev)</li>
+          <li><strong>Metrics OTLP</strong> → exporter Prometheus na porta <code>8889</code> do collector</li>
+        </ul>
+        <p>Para visualizar métricas OTLP no Grafana, adicione scrape no Prometheus:</p>
+        <div class="code-wrap">
+          <span class="lang-label">prometheus.yml (sugestão)</span>
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>- job_name: otel-collector
+  static_configs:
+    - targets: ["otel-collector:8889"]</code></pre>
+        </div>
+      </section>
+
+      <section id="producao">
+        <h2>9. Produção</h2>
+
+        <h3>9.1 Variáveis</h3>
+        <p>Use <code>infra/docker/.env.production.example</code>:</p>
+        <div class="code-wrap">
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>GRAFANA_ROOT_URL=https://grafana.softmusic.com.br
+GRAFANA_ADMIN_PASSWORD=&lt;senha-forte-única&gt;
+PROMETHEUS_PORT=9090   # não exponha publicamente sem auth</code></pre>
+        </div>
+
+        <h3>9.2 Expor Grafana com segurança</h3>
+        <ol>
+          <li>Coloque Grafana atrás do Nginx com TLS (Let's Encrypt).</li>
+          <li>Restrinja Prometheus/Loki à rede interna Docker — só Grafana acessa.</li>
+          <li>Desative signup: já está <code>GF_USERS_ALLOW_SIGN_UP=false</code>.</li>
+          <li>Crie usuários read-only para a equipe (Role: Viewer).</li>
+          <li>Considere SSO (Google/GitHub) via Grafana auth em produção.</li>
+        </ol>
+
+        <h3>9.3 Backup</h3>
+        <ul>
+          <li>Volume <code>softmusic_grafana_data</code> — dashboards criados na UI, usuários, alertas.</li>
+          <li>Volume <code>softmusic_prometheus_data</code> — histórico de métricas.</li>
+          <li>Prefira dashboards versionados em <code>infra/monitoring/grafana/dashboards/*.json</code>.</li>
+        </ul>
+
+        <h3>9.4 Subir em produção</h3>
+        <div class="code-wrap">
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>docker compose -f infra/docker/docker-compose.yml \
+  -f infra/docker/docker-compose.prod.yml \
+  --env-file /opt/softmusic/.env.production \
+  --profile infra --profile app --profile observability \
+  up -d prometheus grafana loki promtail otel-collector</code></pre>
+        </div>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>10. Troubleshooting</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Sintoma</th><th>Causa provável</th><th>Solução</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Grafana sem data sources</td>
+                <td>Volume provisioning não montado</td>
+                <td>Verifique bind <code>../monitoring/grafana/provisioning</code> e reinicie</td>
+              </tr>
+              <tr>
+                <td>Prometheus target API DOWN</td>
+                <td>API não está no mesmo network</td>
+                <td>Suba perfil <code>app</code>; confira <code>docker network inspect softmusic-network</code></td>
+              </tr>
+              <tr>
+                <td>Loki vazio no Explore</td>
+                <td>Promtail sem acesso ao Docker socket</td>
+                <td>Logs do <code>softmusic-promtail</code>; confira permissões do socket</td>
+              </tr>
+              <tr>
+                <td>Alertas HighErrorRate nunca disparam</td>
+                <td>Métrica <code>http_requests_total</code> ausente</td>
+                <td>Instrumente o BFF ou use alerta <code>up == 0</code> por enquanto</td>
+              </tr>
+              <tr>
+                <td>Login Grafana falha após mudar .env</td>
+                <td>Senha só aplicada na 1ª inicialização</td>
+                <td>Reset via <code>grafana cli admin reset-admin-password</code> no container</td>
+              </tr>
+              <tr>
+                <td>Links em e-mails apontam localhost</td>
+                <td><code>GRAFANA_ROOT_URL</code> incorreto</td>
+                <td>Ajuste para URL pública e reinicie Grafana</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Reset senha admin (emergência)</h3>
+        <div class="code-wrap">
+          <button class="copy-btn" data-copy>Copiar</button>
+          <pre><code>docker exec -it softmusic-grafana grafana cli admin reset-admin-password 'NovaSenhaForte123!'</code></pre>
+        </div>
+      </section>
+
+      <section id="checklist">
+        <h2>Anexo — Checklist de observabilidade</h2>
+        <div class="card">
+          <ul class="checklist" id="obs-checklist">
+            <li><label><input type="checkbox" /> Stack <code>observability</code> rodando (5 containers)</label></li>
+            <li><label><input type="checkbox" /> Grafana login OK em :3000</label></li>
+            <li><label><input type="checkbox" /> Data sources Prometheus + Loki — Save &amp; test OK</label></li>
+            <li><label><input type="checkbox" /> Prometheus /targets — API e Python AI UP</label></li>
+            <li><label><input type="checkbox" /> Explore Loki retorna logs <code>softmusic-*</code></label></li>
+            <li><label><input type="checkbox" /> Dashboard <strong>SoftMusic / Overview</strong> criado</label></li>
+            <li><label><input type="checkbox" /> Dashboard de logs com filtro por serviço</label></li>
+            <li><label><input type="checkbox" /> Contact point de alerta configurado</label></li>
+            <li><label><input type="checkbox" /> Alerta <code>ServiceDown</code> testado (silence em deploys)</label></li>
+            <li><label><input type="checkbox" /> <code>GRAFANA_ROOT_URL</code> correto para o ambiente</label></li>
+            <li><label><input type="checkbox" /> Prometheus/Loki não expostos publicamente em produção</label></li>
+            <li><label><input type="checkbox" /> Dashboards exportados para <code>infra/monitoring/grafana/dashboards/</code></label></li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="referencias">
+        <h2>Referências no repositório</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Caminho</th><th>Conteúdo</th></tr></thead>
+            <tbody>
+              <tr><td><code>infra/docker/docker-compose.yml</code></td><td>Serviços observability (profile)</td></tr>
+              <tr><td><code>infra/monitoring/grafana/provisioning/</code></td><td>Data sources e provider de dashboards</td></tr>
+              <tr><td><code>infra/monitoring/grafana/dashboards/</code></td><td>JSONs de dashboards versionados</td></tr>
+              <tr><td><code>infra/monitoring/prometheus/prometheus.yml</code></td><td>Scrape configs</td></tr>
+              <tr><td><code>infra/monitoring/prometheus/alerts.yml</code></td><td>Regras de alerta Prometheus</td></tr>
+              <tr><td><code>infra/monitoring/promtail/promtail-config.yml</code></td><td>Coleta de logs Docker</td></tr>
+              <tr><td><code>docs/local/desenvolvimento-docker.md</code></td><td>URLs e perfis Docker locais</td></tr>
+              <tr><td><code>docs/producao/tutorial-vps-deploy-jenkins.html</code></td><td>Deploy produção (complementar)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>
+        SoftMusic — Tutorial Grafana &amp; Observabilidade ·
+        <code>docs/producao/tutorial-grafana-observabilidade.html</code>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('overlay');
+      const menuToggle = document.getElementById('menuToggle');
+      const navLinks = document.querySelectorAll('#nav a');
+
+      function closeMenu() {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('show');
+      }
+      menuToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('show');
+      });
+      overlay.addEventListener('click', closeMenu);
+      navLinks.forEach(a => a.addEventListener('click', () => {
+        if (window.innerWidth <= 900) closeMenu();
+      }));
+
+      const sections = [...document.querySelectorAll('section[id], header[id]')];
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const id = entry.target.id;
+            navLinks.forEach(link => {
+              link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+            });
+          }
+        });
+      }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+      sections.forEach(s => observer.observe(s));
+
+      document.querySelectorAll('.copy-btn[data-copy]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pre = btn.parentElement.querySelector('pre');
+          const text = pre ? pre.innerText : '';
+          try {
+            await navigator.clipboard.writeText(text);
+            btn.textContent = 'Copiado!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+              btn.textContent = 'Copiar';
+              btn.classList.remove('copied');
+            }, 2000);
+          } catch {
+            btn.textContent = 'Erro';
+          }
+        });
+      });
+
+      const checks = document.querySelectorAll('#obs-checklist input[type="checkbox"]');
+      const key = 'softmusic-obs-checklist';
+      const saved = JSON.parse(localStorage.getItem(key) || '[]');
+      checks.forEach((cb, i) => {
+        if (saved[i]) cb.checked = true;
+        cb.addEventListener('change', () => {
+          localStorage.setItem(key, JSON.stringify([...checks].map(c => c.checked)));
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

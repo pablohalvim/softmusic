@@ -1,0 +1,10 @@
+{
+  "extends": "@softmusic/config/typescript/base",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

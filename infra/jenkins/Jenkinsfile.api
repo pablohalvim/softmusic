@@ -1,0 +1,89 @@
+/**
+ * SoftMusic — Deploy API (BFF cliente + admin-api quando disponível)
+ */
+pipeline {
+  agent any
+
+  options {
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+  }
+
+  environment {
+    REGISTRY        = 'docker.io'
+    IMAGE_API       = 'softmusic-api'
+    DEPLOY_USER     = 'deploy'
+    DEPLOY_HOST     = credentials('softmusic-deploy-host')
+    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
+    DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build API image') {
+      steps {
+        sh '''
+          docker build -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_API:$BUILD_NUMBER" \
+            -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_API:latest" \
+            -f infra/docker/Dockerfile.api .
+        '''
+      }
+    }
+
+    stage('Push API image') {
+      steps {
+        sh '''
+          echo "$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
+          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_API:$BUILD_NUMBER"
+          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_API:latest"
+          docker logout "$REGISTRY" || true
+        '''
+      }
+    }
+
+    stage('Enviar .env') {
+      steps {
+        withCredentials([file(credentialsId: 'softmusic-production-env', variable: 'ENV_FILE')]) {
+          sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+            sh '''
+              scp -o StrictHostKeyChecking=no -P "$DEPLOY_SSH_PORT" "$ENV_FILE" \
+                "$DEPLOY_USER@$DEPLOY_HOST:/opt/softmusic/.env.production"
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Deploy remoto API') {
+      steps {
+        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
+          sh '''
+            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" << EOS
+              set -e
+              cd /opt/softmusic/repo
+              git fetch --all && git reset --hard origin/main
+              export SOFTMUSIC_API_IMAGE="$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_API:$BUILD_NUMBER"
+              grep -q '^SOFTMUSIC_API_IMAGE=' /opt/softmusic/.env.production && \\
+                sed -i "s|^SOFTMUSIC_API_IMAGE=.*|SOFTMUSIC_API_IMAGE=\$SOFTMUSIC_API_IMAGE|" /opt/softmusic/.env.production || \\
+                echo "SOFTMUSIC_API_IMAGE=\$SOFTMUSIC_API_IMAGE" >> /opt/softmusic/.env.production
+              echo "\$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
+              chmod +x infra/docker/scripts/deploy-api.sh
+              ENV_FILE=/opt/softmusic/.env.production ./infra/docker/scripts/deploy-api.sh
+              docker logout "$REGISTRY" || true
+EOS
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    success { echo 'API SoftMusic deployada.' }
+    failure { echo 'Falha no deploy da API.' }
+  }
+}

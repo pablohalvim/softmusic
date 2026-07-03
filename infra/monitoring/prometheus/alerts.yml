@@ -1,0 +1,34 @@
+groups:
+  - name: softmusic
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Taxa de erro HTTP acima de 1%"
+          description: "{{ $value | humanizePercentage }} das requisições retornam 5xx nos últimos 5 minutos."
+
+      - alert: AnalysisQueueBacklog
+        expr: celery_queue_length{queue="analysis"} > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fila de análise com backlog"
+          description: "{{ $value }} jobs aguardando processamento na fila analysis."
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Serviço indisponível"
+          description: "O target {{ $labels.job }} está down há mais de 2 minutos."

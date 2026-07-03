@@ -1,0 +1,160 @@
+# =============================================================================
+# SoftMusic — Infraestrutura apenas (MySQL 8.4, Redis, RabbitMQ, Observabilidade)
+# =============================================================================
+# Uso:
+#   docker compose -f infra/docker/docker-compose.infra.yml \
+#     --env-file /opt/softmusic/.env.production \
+#     --profile infra --profile observability up -d
+# =============================================================================
+
+name: softmusic
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
+services:
+  mysql:
+    profiles: [infra]
+    image: mysql:8.4
+    container_name: softmusic-mysql
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-softmusic}
+      MYSQL_USER: ${MYSQL_USER:-softmusic}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+    volumes:
+      - softmusic_mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=200
+      - --innodb-buffer-pool-size=256M
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+
+  redis:
+    profiles: [infra]
+    image: redis:7-alpine
+    container_name: softmusic-redis
+    restart: unless-stopped
+    logging: *default-logging
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
+    volumes:
+      - softmusic_redis_data:/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "redis-cli", "ping"]
+
+  rabbitmq:
+    profiles: [infra]
+    image: rabbitmq:3.13-management-alpine
+    container_name: softmusic-rabbitmq
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-softmusic}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is required}
+    volumes:
+      - softmusic_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v2.53.0
+    container_name: softmusic-prometheus
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - softmusic_prometheus_data:/prometheus
+
+  loki:
+    profiles: [observability]
+    image: grafana/loki:3.1.0
+    container_name: softmusic-loki
+    restart: unless-stopped
+    logging: *default-logging
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ../monitoring/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - softmusic_loki_data:/loki
+
+  promtail:
+    profiles: [observability]
+    image: grafana/promtail:3.1.0
+    container_name: softmusic-promtail
+    restart: unless-stopped
+    logging: *default-logging
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ../monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:11.1.0
+    container_name: softmusic-grafana
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - softmusic_grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+
+  otel-collector:
+    profiles: [observability]
+    image: otel/opentelemetry-collector-contrib:0.106.0
+    container_name: softmusic-otel-collector
+    restart: unless-stopped
+    logging: *default-logging
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../monitoring/otel/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+
+volumes:
+  softmusic_mysql_data:
+  softmusic_redis_data:
+  softmusic_rabbitmq_data:
+  softmusic_prometheus_data:
+  softmusic_loki_data:
+  softmusic_grafana_data:
+
+networks:
+  default:
+    name: softmusic-network

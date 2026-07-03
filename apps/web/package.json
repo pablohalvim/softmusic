@@ -1,0 +1,41 @@
+{
+  "name": "@softmusic/web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "react-router build",
+    "dev": "react-router dev --port 5173",
+    "start": "react-router-serve ./build/server/index.js",
+    "typecheck": "react-router typegen && tsc"
+  },
+  "dependencies": {
+    "@react-router/node": "8.0.0",
+    "@react-router/serve": "8.0.0",
+    "@softmusic/sdk": "workspace:*",
+    "@softmusic/shared": "workspace:*",
+    "@softmusic/types": "workspace:*",
+    "@tanstack/react-query": "^5.81.5",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.19.2",
+    "isbot": "^5.1.36",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-hook-form": "^7.58.1",
+    "react-router": "8.0.0",
+    "recharts": "^2.15.3",
+    "tailwind-merge": "^3.3.1",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@react-router/dev": "8.0.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/node": "^22",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.3",
+    "vite-plugin-pwa": "^1.0.1"
+  }
+}

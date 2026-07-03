@@ -1,0 +1,4 @@
+
+> @softmusic/shared@0.1.0 build D:\projetos\pessoal\softmusic\packages\shared
+> tsc -p tsconfig.json
+

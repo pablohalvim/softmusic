@@ -1,0 +1,4 @@
+
+> @softmusic/types@0.1.0 build D:\projetos\pessoal\softmusic\packages\types
+> tsc -p tsconfig.json
+

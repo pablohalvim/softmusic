@@ -1,0 +1,25 @@
+{
+  "name": "@softmusic/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@softmusic/types": "workspace:*",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@softmusic/config": "workspace:*",
+    "@types/node": "^22",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="SoftMusic — cifras inteligentes com análise harmônica por IA para bandas e ministérios de louvor."
+    />
+    <title>SoftMusic — Cifras inteligentes para sua banda</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="container header-inner">
+        <a class="logo" href="/">Soft<span>Music</span></a>
+        <nav class="nav">
+          <a href="#planos">Planos</a>
+          <a href="#recursos">Recursos</a>
+          <a class="btn btn-ghost" id="login-link" href="#">Entrar</a>
+          <a class="btn btn-primary" id="signup-link" href="#">Começar grátis</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="container hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">Para bandas, ministérios e grupos musicais</p>
+            <h1>Cifras com <em>inteligência</em> para quem toca ao vivo</h1>
+            <p class="lead">
+              Análise harmônica por IA, rolagem automática no BPM, variações de cifra e biblioteca
+              compartilhada — tudo organizado por banda.
+            </p>
+            <div class="hero-cta">
+              <a class="btn btn-primary btn-lg" id="hero-cta" href="#">Teste 2 dias grátis</a>
+              <a class="btn btn-ghost btn-lg" href="#planos">Ver planos</a>
+            </div>
+            <p class="trial-note">Trial de 2 dias para visualizar cifras. Análise de músicas após assinatura.</p>
+          </div>
+          <div class="hero-card" aria-hidden="true">
+            <div class="mock-chord">G &nbsp; B &nbsp; C &nbsp; D</div>
+            <div class="mock-line">Grande é o Senhor e mui digno de louvor</div>
+            <div class="mock-meta">Tom G · BPM 103 · Rolagem ativa</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="recursos" class="section">
+        <div class="container">
+          <h2>Tudo que sua banda precisa no palco e no ensaio</h2>
+          <div class="features">
+            <article>
+              <h3>Análise por IA</h3>
+              <p>Importe do YouTube ou Cifra Club e receba tom, BPM, acordes e estrutura da música.</p>
+            </article>
+            <article>
+              <h3>Biblioteca por banda</h3>
+              <p>Cada grupo vê apenas as músicas vinculadas. Convide membros e delegue quem pode analisar.</p>
+            </article>
+            <article>
+              <h3>Rolagem automática</h3>
+              <p>Velocidade sincronizada ao BPM da música, como no Cifra Club — com controle fino.</p>
+            </article>
+            <article>
+              <h3>Uma fatura para todas as bandas</h3>
+              <p>Se você lidera vários grupos, paga tudo em uma única cobrança mensal via PIX ou cartão.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="planos" class="section section-dark">
+        <div class="container">
+          <h2>Planos mensais</h2>
+          <p class="section-lead">Escolha o plano na criação da banda. Membros extras são cobrados só acima do limite.</p>
+          <div class="pricing">
+            <article class="price-card">
+              <h3>Individual</h3>
+              <p class="price">R$ 29,90<span>/mês</span></p>
+              <ul>
+                <li>1 participante incluso</li>
+                <li>+ R$ 19,90 por membro extra</li>
+                <li>Cifras e biblioteca da banda</li>
+              </ul>
+            </article>
+            <article class="price-card featured">
+              <span class="badge">Mais popular</span>
+              <h3>Banda 10</h3>
+              <p class="price">R$ 129,90<span>/mês</span></p>
+              <ul>
+                <li>Até 10 participantes</li>
+                <li>+ R$ 9,90 por membro extra</li>
+                <li>Ideal para ministérios médios</li>
+              </ul>
+            </article>
+            <article class="price-card">
+              <h3>Banda 20</h3>
+              <p class="price">R$ 199,90<span>/mês</span></p>
+              <ul>
+                <li>Até 20 participantes</li>
+                <li>+ R$ 8,90 por membro extra</li>
+                <li>Para orquestras e grandes equipes</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container footer-inner">
+        <p>© <span id="year"></span> SoftMusic. Todos os direitos reservados.</p>
+        <a id="footer-login" href="#">Acessar o app</a>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

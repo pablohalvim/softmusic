@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1
+
+ARG PYTORCH_IMAGE=pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+FROM ${PYTORCH_IMAGE}
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsndfile1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY apps/python-ai /app/apps/python-ai
+WORKDIR /app/apps/python-ai
+RUN pip install --no-cache-dir .
+
+COPY infra/docker/python-ai/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && mkdir -p uploads models
+
+EXPOSE 8000
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

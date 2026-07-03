@@ -1,0 +1,10 @@
+.DS_Store
+.env
+/node_modules/
+
+# React Router
+/.react-router/
+/build/
+
+# PWA: gerado a cada build pelo plugin de versão
+/public/version.json
