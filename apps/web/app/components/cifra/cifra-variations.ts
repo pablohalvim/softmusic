@@ -1,6 +1,7 @@
 import type { EditableCifraSheet } from "@softmusic/shared/cifra-layout";
 
 import { authFetch } from "../../lib/api";
+import { loadActiveBandId } from "../../lib/auth-storage";
 import type { CifraKeyOverride } from "./cifra-key";
 
 export interface CifraVariationSnapshot {
@@ -21,7 +22,12 @@ export interface CifraVariation {
 }
 
 function variationsStorageKey(songId: string): string {
-  return `softmusic:cifra-variations:${songId}`;
+  // Escopa o cache local por banda para que variações de uma banda não vazem
+  // para outra no mesmo dispositivo/navegador.
+  const bandId = loadActiveBandId();
+  return bandId
+    ? `softmusic:cifra-variations:${bandId}:${songId}`
+    : `softmusic:cifra-variations:${songId}`;
 }
 
 export function mergeCifraVariations(local: CifraVariation[], server: CifraVariation[]): CifraVariation[] {

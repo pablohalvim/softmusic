@@ -4,6 +4,7 @@ import { Link } from "react-router";
 
 import { StatusBadge } from "../components/analysis/StatusBadge";
 import { fetchDashboardStats } from "../lib/api";
+import { useBand } from "../lib/band-context";
 
 function formatDuration(seconds: number | null): string {
   if (seconds == null) return "—";
@@ -19,9 +20,11 @@ function formatPercent(value: number | null): string {
 }
 
 export default function Dashboard() {
+  const { activeBand } = useBand();
   const statsQuery = useQuery({
-    queryKey: ["dashboard-stats"],
+    queryKey: ["dashboard-stats", activeBand?.id ?? null],
     queryFn: fetchDashboardStats,
+    enabled: Boolean(activeBand?.id),
     refetchInterval: 10_000,
   });
 

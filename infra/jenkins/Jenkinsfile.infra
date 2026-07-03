@@ -80,12 +80,17 @@ EOS
       }
     }
 
-    stage('Smoke') {
+    stage('Smoke infra + observabilidade') {
       steps {
         sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
           sh '''
             ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-              "docker ps --filter name=softmusic-mysql --filter name=softmusic-redis --filter name=softmusic-rabbitmq --format 'table {{.Names}}\\t{{.Status}}'"
+              "docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo 'MySQL 8.4 OK'; \
+               docker ps \
+                 --filter name=softmusic-mysql --filter name=softmusic-redis --filter name=softmusic-rabbitmq \
+                 --filter name=softmusic-prometheus --filter name=softmusic-loki --filter name=softmusic-promtail \
+                 --filter name=softmusic-grafana --filter name=softmusic-otel-collector \
+                 --format 'table {{.Names}}\\t{{.Status}}'"
           '''
         }
       }

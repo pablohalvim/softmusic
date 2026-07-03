@@ -2,7 +2,9 @@
  * SoftMusic — Deploy INFRA LEGACY (MySQL 5.7)
  *
  * Use em servidores antigos que NÃO suportam MySQL 8.4.
- * Sobe Redis, RabbitMQ e observabilidade igual ao job padrão.
+ * Prepara o servidor por completo: MySQL 5.7 + Redis + RabbitMQ + toda a
+ * observabilidade (Prometheus, Loki, Promtail, Grafana, OTel Collector),
+ * igual ao job padrão (que usa MySQL 8.4).
  */
 pipeline {
   agent any
@@ -65,12 +67,17 @@ pipeline {
       }
     }
 
-    stage('Smoke') {
+    stage('Smoke infra + observabilidade') {
       steps {
         sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
           sh '''
             ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-              "docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo MySQL 5.7 OK"
+              "docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo 'MySQL 5.7 OK'; \
+               docker ps \
+                 --filter name=softmusic-mysql --filter name=softmusic-redis --filter name=softmusic-rabbitmq \
+                 --filter name=softmusic-prometheus --filter name=softmusic-loki --filter name=softmusic-promtail \
+                 --filter name=softmusic-grafana --filter name=softmusic-otel-collector \
+                 --format 'table {{.Names}}\\t{{.Status}}'"
           '''
         }
       }

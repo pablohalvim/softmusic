@@ -3,11 +3,14 @@ import { Link } from "react-router";
 
 import { SongListItem } from "../components/analysis/SongListItem";
 import { fetchSongs, isActiveSong } from "../lib/api";
+import { useBand } from "../lib/band-context";
 
 export default function Library() {
+  const { activeBand } = useBand();
   const songsQuery = useQuery({
-    queryKey: ["songs"],
+    queryKey: ["songs", activeBand?.id ?? null],
     queryFn: () => fetchSongs(50),
+    enabled: Boolean(activeBand?.id),
     refetchInterval: (query) => {
       const hasActive = query.state.data?.items.some((song) => isActiveSong(song.status));
       return hasActive ? 3000 : false;

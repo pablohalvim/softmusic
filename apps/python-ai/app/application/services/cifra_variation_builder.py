@@ -50,14 +50,17 @@ def import_variation_base_name(now: datetime | None = None) -> str:
     return f"Importado_{current.day:02d}{current.month:02d}{current.year}"
 
 
-async def next_import_variation_name(session: AsyncSession, song_id: str) -> str:
+async def next_import_variation_name(
+    session: AsyncSession, song_id: str, band_id: str | None = None
+) -> str:
     base = import_variation_base_name()
-    result = await session.execute(
-        select(CifraVariation.name).where(
-            CifraVariation.song_id == song_id,
-            CifraVariation.name.like(f"{base}%"),
-        )
+    query = select(CifraVariation.name).where(
+        CifraVariation.song_id == song_id,
+        CifraVariation.name.like(f"{base}%"),
     )
+    if band_id is not None:
+        query = query.where(CifraVariation.band_id == band_id)
+    result = await session.execute(query)
     existing = {name for name in result.scalars().all()}
     if base not in existing:
         return base

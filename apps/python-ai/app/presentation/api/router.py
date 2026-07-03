@@ -123,7 +123,9 @@ async def analyze(
             )
             if cifra_str:
                 try:
-                    variation = await service.add_cifra_variation_from_cifra_club(existing.id, cifra_str)
+                    variation = await service.add_cifra_variation_from_cifra_club(
+                        existing.id, cifra_str, band_id
+                    )
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
                 await band_service.link_song(band_id, existing.id, user.id)
@@ -401,7 +403,7 @@ async def list_cifra_variations(
 ) -> dict[str, Any]:
     await _ensure_song_access(session, band_id, user.id, song_id)
     service = AnalysisService(session)
-    items = await service.list_cifra_variations(song_id)
+    items = await service.list_cifra_variations(song_id, band_id)
     return {"items": items}
 
 
@@ -440,7 +442,7 @@ async def import_cifra_variation(
         raise HTTPException(status_code=400, detail="URL do Cifra Club inválida")
 
     try:
-        variation = await service.add_cifra_variation_from_cifra_club(song_id, url)
+        variation = await service.add_cifra_variation_from_cifra_club(song_id, url, band_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

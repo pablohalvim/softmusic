@@ -146,24 +146,30 @@ class AnalysisService:
         )
         return result.scalar_one_or_none()
 
-    async def list_cifra_variations(self, song_id: str) -> list[dict[str, Any]]:
-        result = await self.session.execute(
-            select(CifraVariation)
-            .where(CifraVariation.song_id == song_id)
-            .order_by(CifraVariation.created_at.desc())
-        )
+    async def list_cifra_variations(
+        self, song_id: str, band_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        query = select(CifraVariation).where(CifraVariation.song_id == song_id)
+        if band_id is not None:
+            # Cada banda só enxerga as variações que ela mesma importou.
+            query = query.where(CifraVariation.band_id == band_id)
+        query = query.order_by(CifraVariation.created_at.desc())
+        result = await self.session.execute(query)
         return [serialize_cifra_variation(variation) for variation in result.scalars().all()]
 
-    async def add_cifra_variation_from_cifra_club(self, song_id: str, url: str) -> dict[str, Any]:
+    async def add_cifra_variation_from_cifra_club(
+        self, song_id: str, url: str, band_id: str | None = None
+    ) -> dict[str, Any]:
         payload = self.fetch_cifra_club_payload(url)
         if not payload:
             raise ValueError("Não foi possível importar a cifra do Cifra Club")
 
-        name = await next_import_variation_name(self.session, song_id)
+        name = await next_import_variation_name(self.session, song_id, band_id)
         snapshot = build_cifra_variation_snapshot(payload)
         variation = CifraVariation(
             id=_new_id("var"),
             song_id=song_id,
+            band_id=band_id,
             name=name,
             snapshot_json=json.dumps(snapshot),
             cifra_club_url=url.strip(),

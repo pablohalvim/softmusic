@@ -75,6 +75,9 @@ class CifraVariation(Base):
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     song_id: Mapped[str] = mapped_column(String(32), index=True)
+    # Variações importadas ficam vinculadas à banda que as criou, para que uma
+    # banda não veja as variações de outra (song é compartilhada entre bandas).
+    band_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(128))
     snapshot_json: Mapped[str] = mapped_column(Text)
     cifra_club_url: Mapped[str | None] = mapped_column(Text, nullable=True)
