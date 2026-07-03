@@ -1,6 +1,10 @@
 /**
- * SoftMusic — Deploy IA (python-ai + worker Celery)
- * Requer NVIDIA Container Toolkit na VPS de deploy.
+ * SoftMusic — Deploy da IA (python-ai + worker + scheduler)
+ *
+ * Jenkins em container: builda a imagem LOCALMENTE no daemon do host (sem push)
+ * e sobe python-ai/worker/scheduler. As MIGRATIONS do banco são aplicadas no
+ * entrypoint do python-ai (alembic upgrade head) — este é o job que migra o
+ * schema. Segredos: credenciais "Secret text".
  */
 pipeline {
   agent any
@@ -11,91 +15,57 @@ pipeline {
   }
 
   environment {
-    REGISTRY        = 'docker.io'
-    IMAGE_IA        = 'softmusic-python-ai'
-    DEPLOY_USER     = 'deploy'
-    DEPLOY_HOST     = credentials('softmusic-deploy-host')
-    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
-    DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
+    DEPLOY_DIR      = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
+    DEPLOY_DIR_HOST = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
+    IMAGE_TAG       = "${env.BUILD_NUMBER ?: 'latest'}"
+    IMAGE_PREFIX    = 'softmusic'
   }
 
   stages {
     stage('Checkout') {
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
 
-    stage('Build IA image') {
+    stage('Build imagem (local)') {
       steps {
         sh '''
-          docker build -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:$BUILD_NUMBER" \
-            -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:latest" \
-            -f infra/docker/Dockerfile.python-ai .
+          docker build -f infra/docker/Dockerfile.python-ai \
+            -t ${IMAGE_PREFIX}/python-ai:${IMAGE_TAG} \
+            -t ${IMAGE_PREFIX}/python-ai:latest \
+            .
         '''
       }
     }
 
-    stage('Push IA image') {
+    stage('Gerar .env de produção') {
       steps {
-        sh '''
-          echo "$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
-          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:$BUILD_NUMBER"
-          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:latest"
-          docker logout "$REGISTRY" || true
-        '''
-      }
-    }
-
-    stage('Enviar .env') {
-      steps {
-        withCredentials([file(credentialsId: 'softmusic-production-env', variable: 'ENV_FILE')]) {
-          sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-            sh '''
-              scp -o StrictHostKeyChecking=no -P "$DEPLOY_SSH_PORT" "$ENV_FILE" \
-                "$DEPLOY_USER@$DEPLOY_HOST:/opt/softmusic/.env.production"
-            '''
-          }
+        withCredentials([
+          string(credentialsId: 'softmusic-mysql-root-password',      variable: 'MYSQL_ROOT_PASSWORD'),
+          string(credentialsId: 'softmusic-mysql-password',           variable: 'MYSQL_PASSWORD'),
+          string(credentialsId: 'softmusic-redis-password',           variable: 'REDIS_PASSWORD'),
+          string(credentialsId: 'softmusic-rabbitmq-password',        variable: 'RABBITMQ_PASSWORD'),
+          string(credentialsId: 'softmusic-jwt-private-key',          variable: 'JWT_PRIVATE_KEY'),
+          string(credentialsId: 'softmusic-admin-jwt-private-key',    variable: 'ADMIN_JWT_PRIVATE_KEY'),
+          string(credentialsId: 'softmusic-admin-bootstrap-password', variable: 'ADMIN_BOOTSTRAP_PASSWORD'),
+          string(credentialsId: 'softmusic-asaas-api-key',            variable: 'ASAAS_API_KEY'),
+          string(credentialsId: 'softmusic-asaas-webhook-token',      variable: 'ASAAS_WEBHOOK_TOKEN'),
+          string(credentialsId: 'softmusic-grafana-admin-password',   variable: 'GRAFANA_ADMIN_PASSWORD'),
+        ]) {
+          sh 'bash infra/docker/scripts/render-env.sh'
         }
       }
     }
 
-    stage('Deploy remoto IA') {
+    stage('Deploy IA (aplica migrations)') {
       steps {
-        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-          sh '''
-            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" << EOS
-              set -e
-              cd /opt/softmusic/repo
-              git fetch --all && git reset --hard origin/main
-              export SOFTMUSIC_PYTHON_AI_IMAGE="$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_IA:$BUILD_NUMBER"
-              grep -q '^SOFTMUSIC_PYTHON_AI_IMAGE=' /opt/softmusic/.env.production && \\
-                sed -i "s|^SOFTMUSIC_PYTHON_AI_IMAGE=.*|SOFTMUSIC_PYTHON_AI_IMAGE=\$SOFTMUSIC_PYTHON_AI_IMAGE|" /opt/softmusic/.env.production || \\
-                echo "SOFTMUSIC_PYTHON_AI_IMAGE=\$SOFTMUSIC_PYTHON_AI_IMAGE" >> /opt/softmusic/.env.production
-              echo "\$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
-              chmod +x infra/docker/scripts/deploy-ia.sh
-              ENV_FILE=/opt/softmusic/.env.production ./infra/docker/scripts/deploy-ia.sh
-              docker logout "$REGISTRY" || true
-EOS
-          '''
-        }
-      }
-    }
-
-    stage('Smoke GPU') {
-      steps {
-        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-          sh '''
-            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-              "curl -sf http://127.0.0.1:8000/health && echo ' Python-AI OK' || echo 'AVISO: health check falhou'"
-          '''
-        }
+        sh 'bash infra/docker/scripts/deploy-ia.sh'
       }
     }
   }
 
   post {
-    success { echo 'IA SoftMusic deployada.' }
-    failure { echo 'Falha no deploy da IA. Verifique GPU e logs do worker.' }
+    always  { sh 'docker image prune -f || true' }
+    success { echo 'IA SoftMusic deployada e migrations aplicadas.' }
+    failure { echo 'Falha no deploy da IA. Verifique os logs acima.' }
   }
 }

@@ -1,29 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-COMPOSE_DIR="${ROOT_DIR}/infra/docker"
-ENV_FILE="${ENV_FILE:-/opt/softmusic/.env.production}"
-IMAGE_TAG="${IMAGE_TAG:-latest}"
+# =============================================================================
+# SoftMusic — Deploy da API (BFF). Imagem buildada localmente pelo Jenkins
+# (sem registry); aqui só sobe/atualiza o serviço `api` no daemon do host.
+# =============================================================================
 
-if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "ERRO: ${ENV_FILE} não encontrado."
-  exit 1
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_common.sh
+source "${SCRIPT_DIR}/_common.sh"
 
-cd "${COMPOSE_DIR}"
+require_env_file
+stage_assets
+cd "${DEPLOY_DIR}"
 
-COMPOSE_FILES=(
-  -f docker-compose.yml
-  -f docker-compose.prod.yml
-)
+COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
 
-if [[ -n "${SOFTMUSIC_API_IMAGE:-}" ]]; then
-  docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" --profile infra --profile app pull api || true
-fi
-
-docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" --profile infra --profile app up -d --no-deps api
+docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
+  --profile infra --profile app up -d --no-deps --force-recreate api
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps api
 
-curl -sf "http://127.0.0.1:${API_PORT:-8080}/health/live" && echo " API OK"
+wait_http "http://127.0.0.1:${API_PORT:-8080}/health/live"

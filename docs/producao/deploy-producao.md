@@ -1,402 +1,220 @@
-# Deploy em produção
+# Deploy em produção (VPS única + Jenkins em container + Docker Compose)
 
-Guia para implantar o SoftMusic em ambiente de produção com alta disponibilidade, segurança e observabilidade.
+Guia direto para subir o SoftMusic numa **única VPS** onde o **Jenkins roda
+dentro de um container** e fala com o daemon Docker do **host** via
+`/var/run/docker.sock`. O deploy é **local, sem SSH**: as imagens são buildadas
+no daemon do host (**sem push para registry**) e o `docker compose` sobe os
+serviços na própria máquina.
 
-## Visão geral
+> Mesmo padrão do projeto `sportshub` que já roda nesta VPS.
+> Objetivo: criar 1 pipeline de infra + 1 para cada app (API, IA, Web),
+> cadastrar as credenciais e subir a versão em ~30 min.
+
+## Arquitetura no servidor
 
 ```mermaid
-flowchart LR
-    CDN[CDN / Cloudflare] --> LB[Load Balancer]
-    LB --> NGINX[NGINX Ingress]
-    NGINX --> WEB[Web Pods]
-    NGINX --> API[API Pods]
-    API --> AI[Python AI Pods]
-    AI --> WRK[Celery Workers]
-    WRK --> RMQ[RabbitMQ Cluster]
-    API --> MYSQL[(MySQL Primary + Replicas)]
-    API --> REDIS[(Redis Sentinel)]
-    WRK --> OBJ[Object Storage S3/R2/GCS]
+flowchart TB
+    subgraph VPS["VPS (uma máquina)"]
+      subgraph JC["Container Jenkins (usuário 1000, --group-add docker)"]
+        JENKINS["Jenkins"]
+      end
+      subgraph DOCKER["Docker Engine do host — projeto compose 'softmusic'"]
+        NGINX[nginx + TLS] --> WEB[web / lp / admin-web]
+        NGINX --> API[api BFF]
+        API --> AI[python-ai + worker]
+        API --> MYSQL[(MySQL)]
+        API --> REDIS[(Redis)]
+        AI --> RMQ[RabbitMQ]
+        OBS[Prometheus · Loki · Promtail · Grafana · OTel]
+      end
+      JENKINS -->|/var/run/docker.sock| DOCKER
+    end
+    DNS[DNS] --> NGINX
 ```
 
-## Pré-requisitos de infraestrutura
+Tudo roda no mesmo Docker Engine, no **projeto compose `softmusic`** (rede
+`softmusic-network`). Como o Jenkins fala com o daemon do host via socket, todo
+**bind mount** de configuração (observabilidade, nginx, `mysql/init`) precisa
+apontar para um caminho que o **host** enxergue. Por isso os pipelines **copiam**
+os arquivos de deploy para o `DEPLOY_DIR` (dentro do volume do Jenkins) e os bind
+mounts usam esse caminho na visão do host (`DEPLOY_DIR_HOST`).
 
-| Componente | Requisito mínimo (produção) |
-|------------|----------------------------|
-| Kubernetes | 1.28+ (EKS, GKE, AKS ou self-hosted) |
-| Nodes worker | 3+ (anti-affinity por AZ) |
-| CPU total | 16 vCPU (escala com fila de análise) |
-| RAM total | 64 GB (workers de IA) |
-| GPU (opcional) | NVIDIA T4/A10 por worker Demucs |
-| Object Storage | S3, R2, Azure Blob ou GCS |
-| TLS | Cert-manager + Let's Encrypt ou ACM |
-| DNS | Registro apontando para LB/Ingress |
+## Pré-requisitos (uma vez só)
 
-## 1. Preparar secrets
-
-Nunca commite secrets. Use um secret manager:
-
-- **AWS:** Secrets Manager + External Secrets Operator
-- **GCP:** Secret Manager
-- **Azure:** Key Vault
-- **Cloudflare:** Secrets Store (Workers) ou Vault
-
-Secrets obrigatórios:
+### 1. Container do Jenkins com acesso ao Docker do host
 
 ```bash
-# Gerar chaves JWT (RS256 recomendado em produção)
-openssl genrsa -out jwt-private.pem 4096
-openssl rsa -in jwt-private.pem -pubout -out jwt-public.pem
+DOCKER_GID=$(getent group docker | cut -d: -f3)
 
-# Criar secrets no cluster
-kubectl create namespace softmusic
+docker run -d \
+  --name jenkins \
+  --restart unless-stopped \
+  -p 8080:8080 -p 50000:50000 \
+  -v /dados/jenkins_home:/var/jenkins_home \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /usr/bin/docker:/usr/bin/docker \
+  --group-add "$DOCKER_GID" \
+  jenkins/jenkins:lts
 
-kubectl -n softmusic create secret generic softmusic-secrets \
-  --from-literal=DATABASE_URL='mysql+aiomysql://user:pass@mysql-primary:3306/softmusic' \
-  --from-literal=REDIS_URL='redis://redis-sentinel:26379/0' \
-  --from-literal=CELERY_BROKER_URL='amqp://user:pass@rabbitmq:5672//' \
-  --from-literal=JWT_PRIVATE_KEY="$(cat jwt-private.pem)" \
-  --from-literal=JWT_PUBLIC_KEY="$(cat jwt-public.pem)" \
-  --from-literal=STORAGE_ACCESS_KEY='...' \
-  --from-literal=STORAGE_SECRET_KEY='...'
+# Se usar docker compose no pipeline, monte o plugin (caminho pode variar):
+#   -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/local/lib/docker/cli-plugins/docker-compose
 ```
 
-Consulte [Variáveis de ambiente](./variaveis-ambiente.md) para a lista completa.
-
-## 2. Object Storage
-
-Configure um bucket dedicado com lifecycle policy:
-
-```json
-{
-  "Rules": [
-    {
-      "ID": "ExpireTempUploads",
-      "Prefix": "uploads/tmp/",
-      "Status": "Enabled",
-      "Expiration": { "Days": 7 }
-    },
-    {
-      "ID": "TransitionStems",
-      "Prefix": "stems/",
-      "Status": "Enabled",
-      "Transitions": [{ "Days": 90, "StorageClass": "STANDARD_IA" }]
-    }
-  ]
-}
-```
-
-Variáveis:
-
-```env
-STORAGE_PROVIDER=s3
-STORAGE_BUCKET=softmusic-prod
-STORAGE_REGION=us-east-1
-STORAGE_ENDPOINT=          # vazio para AWS; preencher para R2/MinIO
-STORAGE_PUBLIC_URL=https://cdn.softmusic.app/assets
-```
-
-## 3. Banco de dados (MySQL 8)
-
-### Configuração recomendada
-
-- Primary + 2 read replicas
-- `innodb_buffer_pool_size` = 70% RAM do node dedicado
-- Backups automáticos (PITR) com retenção de 30 dias
-- Conexões via pooler (ProxySQL ou RDS Proxy)
-
-### Migrations em produção
+Teste dentro do container:
 
 ```bash
-# Job Kubernetes one-shot (idempotente)
-kubectl -n softmusic apply -f infra/kubernetes/jobs/migrate.yaml
-kubectl -n softmusic wait --for=condition=complete job/softmusic-migrate --timeout=300s
+docker exec -u jenkins jenkins docker ps
+docker exec -u jenkins jenkins docker compose version
 ```
 
-Nunca rode `alembic upgrade` manualmente em múltiplos pods simultaneamente.
+### 2. DEPLOY_DIR
 
-## 4. Deploy com Kubernetes
+Os pipelines gravam compose + configs em `DEPLOY_DIR`. Defaults (ajustáveis por
+*Environment variables* do job):
 
-### Estrutura de manifests
+| Variável | Visão do Jenkins | No host |
+|----------|------------------|---------|
+| `DEPLOY_DIR` | `/var/jenkins_home/deploy/softmusic` | `/dados/jenkins_home/deploy/softmusic` |
+| `DEPLOY_DIR_HOST` | `/dados/jenkins_home/deploy/softmusic` | (mesmo caminho no host) |
 
-```
-infra/kubernetes/
-├── base/
-│   ├── namespace.yaml
-│   ├── configmap.yaml
-│   ├── api/
-│   ├── web/
-│   ├── python-ai/
-│   ├── worker/
-│   ├── ingress.yaml
-│   └── kustomization.yaml
-├── overlays/
-│   ├── staging/
-│   └── production/
-└── helm/
-    └── softmusic/
-```
+Se o `jenkins_home` estiver montado de outro caminho no host, ajuste
+`DEPLOY_DIR_HOST`.
 
-### Staging
+### 3. DNS + TLS
+
+Aponte `softmusic.com.br`, `app.softmusic.com.br` e `admin.softmusic.com.br`
+para o IP da VPS. O `nginx`/`certbot` do overlay de produção cuidam do HTTPS
+(ver seção TLS).
+
+## Passo 1 — Credenciais no Jenkins (Secret text)
+
+**Manage Jenkins → Credentials → System → Global credentials.** Todas como
+**Secret text** (evita o erro de upload de "Secret file"):
+
+| ID | Obrigatória | Conteúdo |
+|----|-------------|----------|
+| `softmusic-mysql-root-password` | Sim | Senha root do MySQL |
+| `softmusic-mysql-password` | Sim | Senha do usuário `softmusic` |
+| `softmusic-redis-password` | Sim | Senha do Redis |
+| `softmusic-rabbitmq-password` | Sim | Senha do RabbitMQ |
+| `softmusic-jwt-private-key` | Sim | Chave JWT da API (mín. 32 chars) |
+| `softmusic-grafana-admin-password` | Sim | Senha admin do Grafana |
+| `softmusic-admin-jwt-private-key` | Recomendada | Chave JWT do admin |
+| `softmusic-admin-bootstrap-password` | Recomendada | Senha do admin inicial |
+| `softmusic-asaas-api-key` | Se usar Asaas | API key do Asaas |
+| `softmusic-asaas-webhook-token` | Se usar Asaas | Token do webhook Asaas |
+
+As demais chaves (domínios, portas, URLs de conexão) têm defaults em
+`infra/docker/scripts/render-env.sh` — sobrescrevíveis por *Environment
+variables* do job. **Não há credencial de registry** (build é local).
+
+Detalhes: [Credenciais e jobs do Jenkins](../../infra/jenkins/credentials.md).
+
+## Passo 2 — Criar os pipelines
+
+Crie **5 jobs** do tipo *Pipeline* (um por Jenkinsfile), todos com
+**"Pipeline script from SCM"**:
+
+| Job Jenkins | Script Path | Quando usar |
+|-------------|-------------|-------------|
+| `softmusic-infra` | `infra/jenkins/Jenkinsfile.infra` | Servidor com MySQL **8.4** |
+| `softmusic-infra-legacy` | `infra/jenkins/Jenkinsfile.infra-legacy` | CPU antiga → MySQL **5.7** |
+| `softmusic-api` | `infra/jenkins/Jenkinsfile.api` | API (BFF) |
+| `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | python-ai + worker (**aplica migrations**) |
+| `softmusic-web` | `infra/jenkins/Jenkinsfile.web` | web + landing page |
+
+Crie **infra OU infra-legacy** — não os dois.
+
+## Passo 3 — Deploy (ordem para subir a versão)
+
+1. **`softmusic-infra`** (ou `-legacy`) — provisiona MySQL + Redis + RabbitMQ +
+   toda a observabilidade. Só precisa rodar de novo se mudar algo de infra.
+2. **`softmusic-ia`** — builda a imagem, sobe python-ai + worker e **aplica as
+   migrations** (`alembic upgrade head` no entrypoint). Toda mudança de schema
+   entra aqui.
+3. **`softmusic-api`** — builda e sobe a API.
+4. **`softmusic-web`** — builda e sobe web + landing page (+ nginx).
+
+> **Regra de ouro sobre migrations:** o banco só é migrado pelo job
+> **`softmusic-ia`**. A API não aplica migrations. Se um deploy depende de
+> schema novo, rode a **IA antes**.
+
+O que cada job faz (local, sem SSH nem registry):
+
+1. `checkout scm` → clona o repo no workspace do Jenkins.
+2. (apps) `docker build` da imagem no daemon do host, marcando `:latest` (sem
+   push).
+3. `render-env.sh` monta `DEPLOY_DIR/.env.production` a partir das credenciais
+   Secret text (senhas URL-encoded nas URLs de conexão).
+4. `deploy-*.sh` copia compose + configs para `DEPLOY_DIR` e roda
+   `docker compose up -d --no-deps --force-recreate <serviço>` + health check.
+
+> O `admin-web` **não** é deployado pelas pipelines atuais (nenhuma builda a
+> imagem). Para publicá-lo, crie um `Jenkinsfile.admin` no mesmo molde e rode o
+> `deploy-web.sh` com `DEPLOY_ADMIN_WEB=1`.
+
+## Observabilidade
+
+Os dois jobs de infra sobem a stack completa: Prometheus, Loki, Promtail,
+Grafana e OpenTelemetry Collector (`WITH_OBSERVABILITY=1`). O `deploy-infra.sh`
+verifica no fim se todos os containers subiram. Detalhes em
+[Monitoramento](./monitoramento.md).
+
+Grafana atende em `GRAFANA_ROOT_URL` (ex.: `https://grafana.softmusic.com.br`).
+
+## TLS / NGINX
+
+O overlay `docker-compose.prod.yml` inclui `nginx` (portas 80/443) e um
+`certbot` sidecar. Na primeira vez, emita os certificados (DNS já apontando para
+a VPS):
 
 ```bash
-kubectl apply -k infra/kubernetes/overlays/staging
-kubectl -n softmusic-staging rollout status deployment/softmusic-api
-kubectl -n softmusic-staging rollout status deployment/softmusic-python-ai
+docker run --rm \
+  -v softmusic_certbot_certs:/etc/letsencrypt \
+  -v softmusic_certbot_www:/var/www/certbot \
+  certbot/certbot certonly --webroot -w /var/www/certbot \
+  -d softmusic.com.br -d app.softmusic.com.br -d admin.softmusic.com.br \
+  --email voce@dominio.com --agree-tos --no-eff-email
 ```
 
-### Production
+O `softmusic-web` sobe o nginx usando esses certificados. Enquanto não houver
+certificado, o `deploy-web.sh` apenas avisa (não falha) que o nginx não subiu.
+
+## Smoke test manual (opcional)
 
 ```bash
-# Validar manifests
-kubectl kustomize infra/kubernetes/overlays/production | kubectl apply --dry-run=server -f -
+# na VPS (host)
+docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
+curl -sf http://127.0.0.1:8000/health && echo " python-ai OK"
+curl -sf http://127.0.0.1:8080/health/live && echo " api OK"
+curl -sf http://127.0.0.1:5173/ >/dev/null && echo " web OK"
 
-# Deploy
-kubectl apply -k infra/kubernetes/overlays/production
-
-# Verificar rollouts
-kubectl -n softmusic rollout status deployment/softmusic-api --timeout=600s
-kubectl -n softmusic rollout status deployment/softmusic-web --timeout=300s
-kubectl -n softmusic rollout status deployment/softmusic-worker --timeout=600s
+cd /dados/jenkins_home/deploy/softmusic
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  --env-file .env.production ps
 ```
 
-### Autoscaling
+## Rollback
 
-| Deployment | HPA métrica | Min | Max |
-|------------|-------------|-----|-----|
-| `softmusic-api` | CPU 70%, RPS custom | 3 | 20 |
-| `softmusic-web` | CPU 60% | 2 | 10 |
-| `softmusic-python-ai` | CPU 75%, queue depth | 2 | 15 |
-| `softmusic-worker` | RabbitMQ queue `analysis` | 2 | 30 |
+Sem registry, o rollback é rebuildar a imagem a partir do commit anterior
+(rode o job apontando para o ref anterior). As imagens antigas ainda ficam no
+daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 
-Exemplo HPA por fila (KEDA):
+## Troubleshooting rápido
 
-```yaml
-apiVersion: keda.sh/v1alpha1
-kind: ScaledObject
-metadata:
-  name: softmusic-worker
-  namespace: softmusic
-spec:
-  scaleTargetRef:
-    name: softmusic-worker
-  minReplicaCount: 2
-  maxReplicaCount: 30
-  triggers:
-    - type: rabbitmq
-      metadata:
-        queueName: analysis
-        mode: QueueLength
-        value: "5"
-        hostFromEnv: CELERY_BROKER_URL
-```
-
-## 5. NGINX Ingress e TLS
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: softmusic
-  namespace: softmusic
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/rate-limit: "100"
-    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - api.softmusic.app
-        - app.softmusic.app
-      secretName: softmusic-tls
-  rules:
-    - host: app.softmusic.app
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: softmusic-web
-                port:
-                  number: 80
-    - host: api.softmusic.app
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: softmusic-api
-                port:
-                  number: 8080
-```
-
-Rate limiting adicional por plano de assinatura é aplicado no BFF via Redis.
-
-## 6. CI/CD (GitHub Actions)
-
-Pipeline em `.github/workflows/release.yml`:
-
-```yaml
-name: Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build and push images
-        run: |
-          docker build -t ghcr.io/seu-org/softmusic-api:${{ github.ref_name }} -f infra/docker/Dockerfile.api .
-          docker build -t ghcr.io/seu-org/softmusic-web:${{ github.ref_name }} -f infra/docker/Dockerfile.web .
-          docker build -t ghcr.io/seu-org/softmusic-python-ai:${{ github.ref_name }} -f infra/docker/Dockerfile.python-ai .
-          docker push --all-tags ghcr.io/seu-org/softmusic-api
-          docker push --all-tags ghcr.io/seu-org/softmusic-web
-          docker push --all-tags ghcr.io/seu-org/softmusic-python-ai
-
-      - name: Deploy to production
-        run: |
-          kubectl set image deployment/softmusic-api api=ghcr.io/seu-org/softmusic-api:${{ github.ref_name }} -n softmusic
-          kubectl rollout status deployment/softmusic-api -n softmusic
-```
-
-Versionamento: [Semantic Versioning](https://semver.org/) com [Conventional Commits](https://www.conventionalcommits.org/).
-
-## 7. Docker Compose em produção (single-node)
-
-Para VPS ou bare-metal sem Kubernetes:
-
-```bash
-cp infra/docker/.env.example infra/docker/.env.production
-# Editar .env.production com valores de produção
-
-docker compose -f infra/docker/docker-compose.yml \
-  -f infra/docker/docker-compose.prod.yml \
-  --env-file infra/docker/.env.production \
-  --profile infra --profile app --profile observability \
-  up -d --build
-```
-
-O overlay `docker-compose.prod.yml` adiciona:
-
-- Restart policy `always`
-- Limites de CPU/memória
-- NGINX com TLS (Let's Encrypt via certbot sidecar)
-- Desabilita portas expostas de MySQL/Redis/RabbitMQ
-
-## 8. Checklist de go-live
-
-### Segurança
-
-- [ ] JWT RS256 com rotação de chaves
-- [ ] RBAC configurado (admin, user, api_key)
-- [ ] Rate limiting ativo (NGINX + Redis)
-- [ ] CORS restrito aos domínios de produção
-- [ ] Secrets fora do repositório
-- [ ] Network policies entre namespaces
-- [ ] Pod Security Standards (restricted)
-- [ ] Scan de imagens (Trivy/Snyk) no CI
-
-### Resiliência
-
-- [ ] Health checks (`/health/live`, `/health/ready`) em todos os pods
-- [ ] PDB (Pod Disruption Budget) minAvailable: 1
-- [ ] Retry policies no Celery (max 3, exponential backoff)
-- [ ] Circuit breaker no BFF para chamadas ao Python AI
-- [ ] Graceful shutdown (SIGTERM, drain 30s)
-
-### Dados
-
-- [ ] Backups MySQL testados (restore drill mensal)
-- [ ] Migrations versionadas (Alembic)
-- [ ] Soft delete e audit logs habilitados
-- [ ] Retention policy de uploads temporários
-
-### Observabilidade
-
-- [ ] Prometheus scraping configurado
-- [ ] Dashboards Grafana importados (`infra/monitoring/grafana/dashboards/`)
-- [ ] Alertas críticos (ver [Monitoramento](./monitoramento.md))
-- [ ] OpenTelemetry exportando traces
-- [ ] Logs estruturados JSON → Loki
-
-### Performance
-
-- [ ] CDN para assets estáticos e stems públicos
-- [ ] Redis cache para análises idempotentes (hash do áudio)
-- [ ] Connection pooling (API → MySQL, Python → MySQL)
-- [ ] HPA/KEDA validado sob carga
-
-## 9. Smoke test pós-deploy
-
-```bash
-API=https://api.softmusic.app
-
-# Health
-curl -sf "$API/health/ready" | jq .status
-
-# Métricas
-curl -sf "$API/metrics" | head -5
-
-# Análise end-to-end (com token de serviço)
-JOB=$(curl -sf -X POST "$API/songs/analyze" \
-  -H "Authorization: Bearer $SERVICE_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"source":{"type":"http","url":"https://cdn.softmusic.app/samples/demo.mp3"}}' \
-  | jq -r .job_id)
-
-# Poll até completed (max 10 min)
-until [ "$(curl -sf "$API/jobs/$JOB" -H "Authorization: Bearer $SERVICE_TOKEN" | jq -r .status)" = "completed" ]; do
-  sleep 10
-done
-
-curl -sf "$API/songs/$(curl -sf "$API/jobs/$JOB" -H "Authorization: Bearer $SERVICE_TOKEN" | jq -r .song_id)/analysis" \
-  -H "Authorization: Bearer $SERVICE_TOKEN" \
-  -H "Accept: application/vnd.softmusic.v1+json" \
-  | jq '.harmony.key, .rhythm.bpm, .structure.sections | length'
-```
-
-## 10. Rollback
-
-### Kubernetes
-
-```bash
-kubectl -n softmusic rollout undo deployment/softmusic-api
-kubectl -n softmusic rollout undo deployment/softmusic-python-ai
-kubectl -n softmusic rollout undo deployment/softmusic-worker
-```
-
-### Docker Compose
-
-```bash
-export SOFTMUSIC_VERSION=v1.2.3  # versão anterior
-docker compose -f infra/docker/docker-compose.yml \
-  -f infra/docker/docker-compose.prod.yml \
-  --env-file infra/docker/.env.production \
-  up -d
-```
-
-## 11. Manutenção
-
-| Tarefa | Frequência |
-|--------|------------|
-| Rotação de JWT keys | 90 dias |
-| Rotação de DB credentials | 90 dias |
-| Restore drill MySQL | Mensal |
-| Atualização de modelos IA | Conforme release |
-| Patch de segurança (nodes) | Semanal |
-| Revisão de alertas | Quinzenal |
+| Sintoma | Causa provável | Ação |
+|---------|----------------|------|
+| `permission denied` no `/var/run/docker.sock` | Jenkins sem `--group-add` do GID do docker | Recriar o container do Jenkins (pré-requisito 1) |
+| Observabilidade/nginx sobem com config vazia | `DEPLOY_DIR_HOST` errado (bind mount não visível no host) | Ajustar `DEPLOY_DIR_HOST` para o caminho real do `jenkins_home` no host |
+| Deploy infra aborta citando variável | Credencial Secret text ausente/vazia | Cadastrar a credencial e re-rodar |
+| Coluna/tabela nova não existe | Migration não aplicada | Rodar o job **`softmusic-ia`** |
+| `image not found` no compose up | Job de app não buildou antes | Rodar o job de app (ele builda e sobe) |
+| MySQL em restart loop | CPU incompatível com MySQL 8.4 | Usar `softmusic-infra-legacy` |
+| 502 nos domínios | nginx sem certificado / app não subiu | Emitir TLS; ver `docker logs softmusic-nginx` |
 
 ## Referências
 
+- [Credenciais e jobs do Jenkins](../../infra/jenkins/credentials.md)
 - [Variáveis de ambiente](./variaveis-ambiente.md)
 - [Monitoramento e observabilidade](./monitoramento.md)
 - [Desenvolvimento local com Docker](../local/desenvolvimento-docker.md)

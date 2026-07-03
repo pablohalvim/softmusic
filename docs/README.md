@@ -12,7 +12,7 @@ Plataforma de inteligência musical open-source. Esta documentação cobre arqui
 | [Credenciais Jenkins](../infra/jenkins/credentials.md) | IDs das credentials obrigatórias |
 | [Pré-requisitos](./local/pre-requisitos.md) | Hardware, software e portas necessárias |
 | [Desenvolvimento local com Docker](./local/desenvolvimento-docker.md) | Subir todo o stack localmente com Docker Compose |
-| [Deploy em produção](./producao/deploy-producao.md) | Kubernetes, NGINX, CI/CD e checklist de go-live |
+| [Deploy em produção](./producao/deploy-producao.md) | VPS única + Jenkins local + Docker Compose (fonte do tutorial HTML) |
 | [Variáveis de ambiente](./producao/variaveis-ambiente.md) | Referência completa de configuração por serviço |
 | [Monitoramento e observabilidade](./producao/monitoramento.md) | Prometheus, Grafana, Loki e OpenTelemetry |
 

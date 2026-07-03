@@ -1,99 +1,81 @@
 /**
- * SoftMusic — Deploy Web (app + LP + admin-web)
+ * SoftMusic — Deploy do Front (web + landing page) + NGINX
+ *
+ * Jenkins em container: builda as imagens LOCALMENTE no daemon do host (sem
+ * push) e sobe web + lp + nginx. O admin-web NÃO é deployado (DEPLOY_ADMIN_WEB=0)
+ * — nenhum pipeline builda essa imagem hoje. Segredos: credenciais "Secret text".
  */
 pipeline {
   agent any
 
   options {
     disableConcurrentBuilds()
-    buildDiscarder(logRotator(numToKeepStr: '30'))
+    buildDiscarder(logRotator(numToKeepStr: '20'))
   }
 
   environment {
-    REGISTRY        = 'docker.io'
-    IMAGE_WEB       = 'softmusic-web'
-    IMAGE_LP        = 'softmusic-lp'
-    DEPLOY_USER     = 'deploy'
-    DEPLOY_HOST     = credentials('softmusic-deploy-host')
-    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
-    DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
+    DEPLOY_DIR       = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
+    DEPLOY_DIR_HOST  = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
+    IMAGE_TAG        = "${env.BUILD_NUMBER ?: 'latest'}"
+    IMAGE_PREFIX     = 'softmusic'
+    WEB_VITE_API_URL = "${env.WEB_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
+    LP_VITE_APP_URL  = "${env.LP_VITE_APP_URL ?: 'https://app.softmusic.com.br'}"
+    DEPLOY_ADMIN_WEB = '0'
   }
 
   stages {
     stage('Checkout') {
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
 
-    stage('Build Web images') {
+    stage('Build imagens (local)') {
       steps {
         sh '''
-          docker build -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:$BUILD_NUMBER" \
-            -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:latest" \
-            -f infra/docker/Dockerfile.web .
-          docker build -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:$BUILD_NUMBER" \
-            -t "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:latest" \
-            -f infra/docker/Dockerfile.lp .
+          docker build -f infra/docker/Dockerfile.web \
+            --build-arg VITE_API_URL="${WEB_VITE_API_URL}" \
+            --build-arg VITE_PWA_ENABLED=true \
+            -t ${IMAGE_PREFIX}/web:${IMAGE_TAG} \
+            -t ${IMAGE_PREFIX}/web:latest \
+            .
+
+          docker build -f infra/docker/Dockerfile.lp \
+            --build-arg VITE_APP_URL="${LP_VITE_APP_URL}" \
+            -t ${IMAGE_PREFIX}/lp:${IMAGE_TAG} \
+            -t ${IMAGE_PREFIX}/lp:latest \
+            .
         '''
       }
     }
 
-    stage('Push Web images') {
+    stage('Gerar .env de produção') {
       steps {
-        sh '''
-          echo "$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
-          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:$BUILD_NUMBER"
-          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:latest"
-          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:$BUILD_NUMBER"
-          docker push "$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:latest"
-          docker logout "$REGISTRY" || true
-        '''
-      }
-    }
-
-    stage('Enviar .env') {
-      steps {
-        withCredentials([file(credentialsId: 'softmusic-production-env', variable: 'ENV_FILE')]) {
-          sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-            sh '''
-              scp -o StrictHostKeyChecking=no -P "$DEPLOY_SSH_PORT" "$ENV_FILE" \
-                "$DEPLOY_USER@$DEPLOY_HOST:/opt/softmusic/.env.production"
-            '''
-          }
+        withCredentials([
+          string(credentialsId: 'softmusic-mysql-root-password',      variable: 'MYSQL_ROOT_PASSWORD'),
+          string(credentialsId: 'softmusic-mysql-password',           variable: 'MYSQL_PASSWORD'),
+          string(credentialsId: 'softmusic-redis-password',           variable: 'REDIS_PASSWORD'),
+          string(credentialsId: 'softmusic-rabbitmq-password',        variable: 'RABBITMQ_PASSWORD'),
+          string(credentialsId: 'softmusic-jwt-private-key',          variable: 'JWT_PRIVATE_KEY'),
+          string(credentialsId: 'softmusic-admin-jwt-private-key',    variable: 'ADMIN_JWT_PRIVATE_KEY'),
+          string(credentialsId: 'softmusic-admin-bootstrap-password', variable: 'ADMIN_BOOTSTRAP_PASSWORD'),
+          string(credentialsId: 'softmusic-asaas-api-key',            variable: 'ASAAS_API_KEY'),
+          string(credentialsId: 'softmusic-asaas-webhook-token',      variable: 'ASAAS_WEBHOOK_TOKEN'),
+          string(credentialsId: 'softmusic-grafana-admin-password',   variable: 'GRAFANA_ADMIN_PASSWORD'),
+        ]) {
+          sh 'bash infra/docker/scripts/render-env.sh'
         }
       }
     }
 
-    stage('Deploy remoto Web') {
+    stage('Deploy Web + LP') {
       steps {
-        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-          sh '''
-            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" << EOS
-              set -e
-              cd /opt/softmusic/repo
-              git fetch --all && git reset --hard origin/main
-              export SOFTMUSIC_WEB_IMAGE="$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_WEB:$BUILD_NUMBER"
-              export SOFTMUSIC_LP_IMAGE="$REGISTRY/$DOCKER_CREDS_USR/$IMAGE_LP:$BUILD_NUMBER"
-              for kv in SOFTMUSIC_WEB_IMAGE SOFTMUSIC_LP_IMAGE; do
-                eval val=\\\$$kv
-                grep -q "^\$kv=" /opt/softmusic/.env.production && \\
-                  sed -i "s|^\$kv=.*|\$kv=\$val|" /opt/softmusic/.env.production || \\
-                  echo "\$kv=\$val" >> /opt/softmusic/.env.production
-              done
-              echo "\$DOCKER_CREDS_PSW" | docker login "$REGISTRY" -u "$DOCKER_CREDS_USR" --password-stdin
-              chmod +x infra/docker/scripts/deploy-web.sh
-              ENV_FILE=/opt/softmusic/.env.production DEPLOY_LP=1 ./infra/docker/scripts/deploy-web.sh
-              docker logout "$REGISTRY" || true
-EOS
-          '''
-        }
+        sh 'bash infra/docker/scripts/deploy-web.sh'
       }
     }
   }
 
   post {
-    success { echo 'Frontends SoftMusic deployados.' }
-    failure { echo 'Falha no deploy Web/LP.' }
+    always  { sh 'docker image prune -f || true' }
+    success { echo 'Front SoftMusic (web + LP) deployado com sucesso.' }
+    failure { echo 'Falha no deploy do front. Verifique os logs acima.' }
   }
 }

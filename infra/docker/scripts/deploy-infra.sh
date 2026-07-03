@@ -6,36 +6,32 @@ set -euo pipefail
 # MySQL + Redis + RabbitMQ + Observabilidade (Prometheus, Loki, Promtail,
 # Grafana, OpenTelemetry Collector).
 #
-# Objetivo: deixar o servidor pronto para a aplicação rodar. Os serviços de
-# app (api, python-ai, worker, web, lp, admin-web) são deployados por seus
-# próprios jobs, no MESMO projeto/rede docker (`softmusic`).
+# Roda com o Jenkins DENTRO de um container: os assets (compose + configs de
+# observabilidade) são copiados para ${DEPLOY_DIR} (visível ao daemon do host
+# em ${DEPLOY_DIR_HOST}) e os bind mounts usam esse caminho de host.
 #
 # Variáveis:
-#   ENV_FILE            (default /opt/softmusic/.env.production)
+#   DEPLOY_DIR / DEPLOY_DIR_HOST  (ver _common.sh)
+#   ENV_FILE            (default ${DEPLOY_DIR}/.env.production)
 #   LEGACY_MYSQL=1      usa MySQL 5.7 (CPUs antigas)
 #   WITH_OBSERVABILITY  (default 1) sobe toda a stack de observabilidade
-#   SKIP_PULL=1         pula o docker compose pull
+#   SKIP_PULL=1         pula o docker compose pull das imagens públicas
 # =============================================================================
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-COMPOSE_DIR="${ROOT_DIR}/infra/docker"
-ENV_FILE="${ENV_FILE:-/opt/softmusic/.env.production}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_common.sh
+source "${SCRIPT_DIR}/_common.sh"
+
 LEGACY="${LEGACY_MYSQL:-0}"
 OBSERVABILITY="${WITH_OBSERVABILITY:-1}"
 
-if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "ERRO: ${ENV_FILE} não encontrado."
-  exit 1
-fi
+require_env_file
 
-# --- Preflight: variáveis obrigatórias --------------------------------------
-# Sem elas o `docker compose up` aborta a stack inteira (inclusive o MySQL),
-# com um erro pouco claro. Validamos antes, com mensagem objetiva.
+# --- Preflight: variáveis obrigatórias no .env ------------------------------
 required_vars=(MYSQL_ROOT_PASSWORD MYSQL_PASSWORD RABBITMQ_PASSWORD)
 if [[ "${OBSERVABILITY}" == "1" ]]; then
   required_vars+=(GRAFANA_ADMIN_PASSWORD)
 fi
-
 missing=()
 for var in "${required_vars[@]}"; do
   value="$(grep -E "^${var}=" "${ENV_FILE}" | tail -n1 | cut -d= -f2- || true)"
@@ -46,14 +42,16 @@ done
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "ERRO: variáveis obrigatórias ausentes/não configuradas em ${ENV_FILE}:"
   printf '   - %s\n' "${missing[@]}"
-  echo "      Preencha-as (veja infra/docker/.env.production.example) e rode novamente."
   exit 1
 fi
 
+stage_assets
+cd "${DEPLOY_DIR}"
+
 # --- Seleção de arquivos compose --------------------------------------------
-COMPOSE_FILES=(-f "${COMPOSE_DIR}/docker-compose.infra.yml")
+COMPOSE_FILES=(-f docker-compose.infra.yml)
 if [[ "${LEGACY}" == "1" ]]; then
-  COMPOSE_FILES+=(-f "${COMPOSE_DIR}/docker-compose.infra-legacy.yml")
+  COMPOSE_FILES+=(-f docker-compose.infra-legacy.yml)
   echo ">> Modo LEGACY: MySQL 5.7"
 else
   echo ">> Modo padrão: MySQL 8.4"
@@ -65,20 +63,16 @@ EXPECTED=(softmusic-mysql softmusic-redis softmusic-rabbitmq)
 if [[ "${OBSERVABILITY}" == "1" ]]; then
   PROFILES+=(--profile observability)
   EXPECTED+=(softmusic-prometheus softmusic-loki softmusic-promtail softmusic-grafana softmusic-otel-collector)
-  echo ">> Observabilidade: HABILITADA (Prometheus, Loki, Promtail, Grafana, OTel Collector)"
+  echo ">> Observabilidade: HABILITADA"
 else
   echo ">> Observabilidade: DESABILITADA (WITH_OBSERVABILITY=0)"
 fi
-
-cd "${COMPOSE_DIR}"
 
 if [[ "${SKIP_PULL:-0}" != "1" ]]; then
   docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" pull
 fi
 
-# Sem --remove-orphans: a infra compartilha o projeto `softmusic` com os
-# serviços de app (deployados por outros jobs). Remover órfãos aqui apagaria
-# os containers da aplicação.
+# Sem --remove-orphans: a infra compartilha o projeto `softmusic` com os apps.
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" up -d
 
 echo ">> Aguardando MySQL..."
@@ -104,12 +98,8 @@ for name in "${EXPECTED[@]}"; do
   fi
 done
 if [[ "${fail}" -ne 0 ]]; then
-  echo "ERRO: nem todos os serviços de infra/observabilidade subiram. Cheque os logs acima."
+  echo "ERRO: nem todos os serviços subiram. Cheque os logs acima."
   exit 1
 fi
 
-if [[ "${OBSERVABILITY}" == "1" ]]; then
-  echo ">> Servidor preparado: MySQL + Redis + RabbitMQ + observabilidade prontos."
-else
-  echo ">> Servidor preparado: MySQL + Redis + RabbitMQ prontos (sem observabilidade)."
-fi
+echo ">> Servidor preparado."

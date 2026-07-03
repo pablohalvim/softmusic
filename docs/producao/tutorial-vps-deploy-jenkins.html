@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Tutorial: VPS Deploy + Jenkins — SoftMusic SaaS</title>
+  <title>Tutorial: Deploy SoftMusic em VPS (Jenkins em container + Docker Compose)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -433,46 +433,40 @@
   <aside class="sidebar" id="sidebar" aria-label="Navegação">
     <div class="sidebar-header">
       <div class="logo">SoftMusic <span>Deploy</span></div>
-      <p>VPS + Jenkins + Docker — guia de produção SaaS</p>
+      <p>Jenkins em container + Docker Compose — deploy local, sem SSH nem registry</p>
     </div>
     <nav class="nav" id="nav">
       <div class="nav-group">
         <div class="nav-group-title">Início</div>
         <a href="#intro">Introdução</a>
         <a href="#dominios">Domínios</a>
-        <a href="#fluxo">Visão geral</a>
+        <a href="#fluxo">Arquitetura no servidor</a>
       </div>
       <div class="nav-group">
-        <div class="nav-group-title">Parte 1 — VPS</div>
-        <a href="#parte-1" class="sub">Preparar Ubuntu</a>
-        <a href="#p1-1" class="sub">1.1 Sistema</a>
-        <a href="#p1-2" class="sub">1.2 SSH</a>
-        <a href="#p1-3" class="sub">1.3 Firewall (80/443)</a>
-        <a href="#p1-4" class="sub">1.4 Docker</a>
-        <a href="#p1-5" class="sub">1.5 Usuário deploy</a>
-        <a href="#p1-6" class="sub">1.6 Clone do repo</a>
-        <a href="#p1-7" class="sub">1.7 GPU (opcional)</a>
+        <div class="nav-group-title">Preparação</div>
+        <a href="#prereq" class="sub">Container do Jenkins</a>
+        <a href="#deploydir" class="sub">DEPLOY_DIR e bind mounts</a>
       </div>
       <div class="nav-group">
-        <div class="nav-group-title">Parte 2 — Jenkins</div>
-        <a href="#parte-2" class="sub">Instalar Jenkins</a>
-        <a href="#p2-1" class="sub">2.1 Chave SSH</a>
-        <a href="#p2-2" class="sub">2.2 authorized_keys</a>
-        <a href="#p2-3" class="sub">2.3 Testar SSH</a>
+        <div class="nav-group-title">Passo a passo</div>
+        <a href="#creds">1. Credenciais (Secret text)</a>
+        <a href="#pipelines">2. Criar as pipelines</a>
+        <a href="#mysql-guia" class="sub">MySQL 8.4 vs 5.7</a>
+        <a href="#ordem">3. Ordem do deploy</a>
+        <a href="#jobs" class="sub">O que cada job faz</a>
       </div>
       <div class="nav-group">
-        <div class="nav-group-title">Partes 3–7</div>
-        <a href="#parte-3">Credenciais Jenkins</a>
-        <a href="#parte-4">Jenkinsfiles</a>
-        <a href="#mysql-guia">MySQL 8.4 vs 5.7</a>
-        <a href="#parte-5">Ordem do deploy</a>
-        <a href="#parte-6">Smoke tests</a>
-        <a href="#parte-7">Troubleshooting</a>
+        <div class="nav-group-title">Operação</div>
+        <a href="#observabilidade">Observabilidade</a>
+        <a href="#tls">TLS / NGINX</a>
+        <a href="#smoke">Smoke tests</a>
+        <a href="#rollback">Rollback</a>
+        <a href="#troubleshooting">Troubleshooting</a>
       </div>
       <div class="nav-group">
         <div class="nav-group-title">Anexos</div>
-        <a href="#anexo-a">Checklist</a>
-        <a href="#anexo-b">Referências</a>
+        <a href="#checklist">Checklist</a>
+        <a href="#referencias">Referências</a>
       </div>
     </nav>
   </aside>
@@ -481,36 +475,37 @@
 
   <main class="main">
     <header class="hero" id="intro">
-      <h1>Tutorial: Deploy SoftMusic SaaS em VPS</h1>
+      <h1>Deploy SoftMusic em VPS — Jenkins em container + Docker Compose</h1>
       <p class="lead">
-        Implante o <strong>SoftMusic</strong> em produção com <strong>Jenkins</strong> (build/push de imagens),
-        <strong>SSH</strong> (deploy remoto) e <strong>Docker Compose</strong> na VPS.
-        Segredos ficam nas <strong>Credentials</strong> do Jenkins — nunca no <code>Jenkinsfile</code>.
+        Cenário: uma <strong>VPS única</strong> onde o <strong>Jenkins roda dentro de um container</strong>
+        e fala com o daemon Docker do <strong>host</strong> via <code>/var/run/docker.sock</code>.
+        O deploy é <strong>local, sem SSH</strong>: as imagens são buildadas no daemon do host
+        (<strong>sem push para registry</strong>) e o <code>docker compose</code> sobe os serviços
+        na própria máquina. Mesmo padrão do projeto <code>sportshub</code> que já roda nesta VPS.
       </p>
       <div class="badges">
-        <span class="badge">Jenkins + SSH</span>
-        <span class="badge">Docker Hub</span>
+        <span class="badge">Jenkins em container</span>
+        <span class="badge">Sem SSH</span>
+        <span class="badge">Sem registry</span>
+        <span class="badge">Secret text</span>
         <span class="badge">5 pipelines</span>
-        <span class="badge">Ubuntu 22.04 / 24.04</span>
-        <span class="badge">SaaS multi-domínio</span>
       </div>
     </header>
 
     <div class="card conventions">
       <strong>Convenções deste guia</strong>
       <ul>
-        <li><strong>VPS de produção</strong> — uma máquina Ubuntu com Docker, NGINX (80/443), MySQL, Redis, RabbitMQ, API, IA e frontends.</li>
-        <li><strong>VPS-Jenkins</strong> — pode ser a mesma VPS ou outra máquina; usuário <code>jenkins</code> faz SSH como <code>deploy</code>.</li>
-        <li><strong><code>deploy</code></strong> — usuário Linux na VPS de produção; membro do grupo <code>docker</code>.</li>
-        <li><strong><code>/opt/softmusic/repo</code></strong> — clone Git do monorepo SoftMusic.</li>
-        <li><strong><code>/opt/softmusic/.env.production</code></strong> — arquivo de ambiente enviado pelo Jenkins a cada deploy.</li>
-        <li><strong>Sem segredos no código</strong> — pipelines usam apenas <code>credentials('...')</code>.</li>
+        <li><strong>VPS única</strong> — Docker Engine, container do Jenkins, MySQL, Redis, RabbitMQ, API, IA, frontends e observabilidade na mesma máquina.</li>
+        <li><strong>Container do Jenkins</strong> — usuário <code>jenkins</code> (UID 1000), com <code>--group-add</code> do GID do grupo <code>docker</code> do host e o socket montado.</li>
+        <li><strong>Projeto compose <code>softmusic</code></strong> — todos os serviços compartilham o projeto e a rede <code>softmusic-network</code>.</li>
+        <li><strong><code>DEPLOY_DIR</code></strong> — pasta (no volume do Jenkins) onde os pipelines copiam compose + configs + <code>.env.production</code>.</li>
+        <li><strong>Sem segredos no código</strong> — os pipelines usam credenciais <code>Secret text</code> e o <code>render-env.sh</code> monta o <code>.env</code>.</li>
       </ul>
     </div>
 
     <section id="dominios">
       <h2>Domínios de produção</h2>
-      <p>O SoftMusic SaaS expõe três portais públicos. Configure DNS (A/AAAA ou CNAME via Cloudflare) apontando para o IP da VPS.</p>
+      <p>O SoftMusic expõe três portais públicos. Configure DNS (A/AAAA ou CNAME) apontando para o IP da VPS.</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -525,453 +520,224 @@
             <tr>
               <td><code>app.softmusic.com.br</code></td>
               <td><code>apps/web</code> + API em <code>/api</code></td>
-              <td>Cadastro, bandas, biblioteca, cifras, faturas (owner)</td>
+              <td>Cadastro, bandas, biblioteca, cifras, faturas</td>
             </tr>
             <tr>
               <td><code>admin.softmusic.com.br</code></td>
               <td><code>apps/admin-web</code></td>
-              <td>Equipe SoftMusic (credenciais internas)</td>
+              <td>Equipe SoftMusic (não deployado pelas pipelines atuais)</td>
             </tr>
           </tbody>
         </table>
       </div>
       <div class="callout callout-tip">
-        <strong>Variáveis no .env de produção</strong>
-        Defina <code>WEB_ORIGIN</code>, <code>API_BASE_URL</code>, <code>LP_ORIGIN</code> e <code>ADMIN_ORIGIN</code> com esses domínios HTTPS.
-        Modelo completo em <code>infra/docker/.env.production.example</code>.
+        <strong>Domínios no .env</strong>
+        <code>WEB_ORIGIN</code>, <code>API_BASE_URL</code>, <code>LP_ORIGIN</code> e <code>ADMIN_ORIGIN</code> têm defaults
+        em <code>render-env.sh</code>; sobrescreva por <em>Environment variables</em> do job se seus domínios diferirem.
       </div>
-      <p>Detalhes de produto, planos e billing: <code>docs/arquitetura/saas-bandas-licencas.md</code>.</p>
     </section>
 
     <section id="fluxo">
-      <h2>Visão geral do fluxo</h2>
+      <h2>Arquitetura no servidor</h2>
+      <p>O container do Jenkins builda e sobe os serviços no <strong>daemon do host</strong> (via socket). Não há registry: a imagem buildada já fica disponível no mesmo daemon.</p>
       <div class="flow">
         <div class="flow-box">
-          <h4>Jenkins</h4>
+          <h4>Container Jenkins</h4>
           <ul>
-            <li>git checkout</li>
-            <li>docker build</li>
-            <li>docker push</li>
-            <li>scp .env</li>
-            <li>ssh deploy@VPS</li>
+            <li>checkout scm</li>
+            <li>docker build (host)</li>
+            <li>render-env.sh</li>
+            <li>docker compose up</li>
           </ul>
         </div>
         <span class="flow-arrow">→</span>
-        <div class="flow-registry">Docker Hub</div>
+        <div class="flow-registry">/var/run/docker.sock</div>
         <span class="flow-arrow">→</span>
         <div class="flow-box">
-          <h4>VPS produção</h4>
+          <h4>Docker Engine do host</h4>
           <ul>
-            <li>usuário <code>deploy</code></li>
-            <li>docker pull</li>
-            <li>compose up -d</li>
-            <li>NGINX 80/443</li>
+            <li>projeto <code>softmusic</code></li>
+            <li>MySQL · Redis · RabbitMQ</li>
+            <li>api · python-ai · web</li>
+            <li>observabilidade · nginx</li>
           </ul>
         </div>
       </div>
-      <ul>
-        <li>Jobs de <strong>infra</strong> não fazem build de app — sobem MySQL, Redis, RabbitMQ e observabilidade.</li>
-        <li>Jobs <strong>ia</strong>, <strong>api</strong> e <strong>web</strong> constroem imagens, fazem push e atualizam tags no <code>.env.production</code> remoto.</li>
-        <li>IP, porta SSH, registry e <code>.env</code> vêm das <strong>5 credenciais</strong> Jenkins (seção 3).</li>
-      </ul>
-    </section>
-
-    <!-- PARTE 1 -->
-    <section id="parte-1">
-      <h2>Parte 1 — Preparar a VPS de produção</h2>
-      <div class="callout callout-info">
-        Execute como <strong>root</strong> ou com <code>sudo</code>. Recomendado: <strong>Ubuntu 22.04 ou 24.04 LTS</strong>.
-        Mínimo sugerido: 8 vCPU, 32 GB RAM, 200 GB SSD; GPU NVIDIA se rodar IA na mesma máquina.
-      </div>
-
-      <h3 id="p1-1">1.1 Atualizar o sistema</h3>
-      <div class="code-wrap">
-        <span class="lang-label">bash</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>apt update && apt upgrade -y
-apt install -y ca-certificates curl gnupg lsb-release ufw fail2ban git unattended-upgrades
-
-dpkg-reconfigure -plow unattended-upgrades
-timedatectl set-timezone America/Sao_Paulo
-hostnamectl set-hostname softmusic-prod-01</code></pre>
-      </div>
-
-      <h3 id="p1-2">1.2 Hardening básico de SSH</h3>
-      <p>Edite <code>/etc/ssh/sshd_config</code>:</p>
-      <div class="code-wrap">
-        <span class="lang-label">sshd_config</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre class="text"><code>PermitRootLogin no
-PasswordAuthentication no
-PubkeyAuthentication yes
-ChallengeResponseAuthentication no</code></pre>
-      </div>
       <div class="callout callout-warn">
-        <strong>Atenção</strong>
-        Só desligue <code>PasswordAuthentication</code> depois de validar login com chave (passo 2.3).
-      </div>
-      <div class="code-wrap">
-        <span class="lang-label">bash</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>systemctl restart ssh</code></pre>
-      </div>
-
-      <h3 id="p1-3">1.3 Firewall (UFW) — portas 80 e 443</h3>
-      <p>O NGINX na VPS expõe HTTP/HTTPS para os três domínios. MySQL, Redis e RabbitMQ ficam apenas na rede Docker interna.</p>
-      <div class="code-wrap">
-        <span class="lang-label">bash — VPS produção</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>ufw default deny incoming
-ufw default allow outgoing
-ufw allow OpenSSH
-ufw allow 22/tcp
-ufw allow 2230/tcp              # SSH customizado (se usar)
-ufw allow 80/tcp comment 'HTTP — redirect / ACME'
-ufw allow 443/tcp comment 'HTTPS — LP, app, admin'
-
-ufw enable
-ufw status verbose</code></pre>
-      </div>
-      <div class="callout callout-tip">
-        <strong>Não exponha</strong> portas 3306, 6379 ou 5672 na internet. O <code>docker-compose.prod.yml</code> já evita bind público desses serviços.
-      </div>
-
-      <h3 id="p1-4">1.4 Instalar Docker Engine + Compose</h3>
-      <div class="code-wrap">
-        <span class="lang-label">bash</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
-  > /etc/apt/sources.list.d/docker.list
-
-apt update
-apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-systemctl enable --now docker
-docker --version
-docker compose version</code></pre>
-      </div>
-
-      <h3 id="p1-5">1.5 Criar o usuário <code>deploy</code></h3>
-      <div class="code-wrap">
-        <span class="lang-label">bash</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>adduser --disabled-password --gecos "" deploy
-usermod -aG docker deploy
-
-mkdir -p /opt/softmusic
-chown deploy:deploy /opt/softmusic
-
-mkdir -p /home/deploy/.ssh
-chmod 700 /home/deploy/.ssh
-touch /home/deploy/.ssh/authorized_keys
-chmod 600 /home/deploy/.ssh/authorized_keys
-chown -R deploy:deploy /home/deploy/.ssh</code></pre>
-      </div>
-
-      <h3 id="p1-6">1.6 Clonar o repositório em <code>/opt/softmusic/repo</code></h3>
-      <p>Faça o clone <strong>antes</strong> do primeiro deploy Jenkins — os pipelines fazem <code>git fetch</code> e <code>reset --hard origin/main</code>, mas exigem o diretório <code>.git</code> existente.</p>
-      <div class="code-wrap">
-        <span class="lang-label">bash — como deploy</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>sudo -iu deploy
-cd /opt/softmusic
-git clone https://github.com/SEU_ORG/softmusic.git repo
-cd repo && git checkout main
-ls -la infra/jenkins/</code></pre>
-      </div>
-      <div class="callout callout-warn">
-        <strong>Deploy key ou PAT</strong>
-        Se o repositório for privado, configure chave de deploy do usuário <code>deploy</code> ou use HTTPS com token no <code>git clone</code>.
-      </div>
-
-      <h3 id="p1-7">1.7 (Opcional) GPU NVIDIA para IA</h3>
-      <p>Necessário para o job <code>softmusic-ia</code> (python-ai + worker Celery com Demucs).</p>
-      <div class="code-wrap">
-        <span class="lang-label">bash</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>apt install -y ubuntu-drivers-common
-ubuntu-drivers autoinstall
-reboot
-# Após reboot:
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-  | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-
-curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-  > /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-apt update
-apt install -y nvidia-container-toolkit
-nvidia-ctk runtime configure --runtime=docker
-systemctl restart docker
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi</code></pre>
+        <strong>Por que copiar os configs para o DEPLOY_DIR?</strong>
+        Como o Jenkins fala com o daemon do host, todo <strong>bind mount</strong> (observabilidade,
+        nginx, <code>mysql/init</code>) precisa apontar para um caminho que o <strong>host</strong> enxergue.
+        Os pipelines copiam esses arquivos para o <code>DEPLOY_DIR</code> (dentro do volume do Jenkins,
+        visível no host em <code>DEPLOY_DIR_HOST</code>) e os bind mounts usam esse caminho.
       </div>
     </section>
 
-    <!-- PARTE 2 -->
-    <section id="parte-2">
-      <h2>Parte 2 — Jenkins e chave SSH</h2>
-      <div class="callout callout-info">
-        Jenkins instalado via <code>apt</code>, usuário <code>jenkins</code>, home em <code>/var/lib/jenkins</code>.
-        Para <code>docker build</code> e <code>push</code>, o usuário <code>jenkins</code> precisa estar no grupo <code>docker</code>.
-      </div>
-
-      <h3 id="p2-0">2.0 Instalar o Jenkins</h3>
+    <section id="prereq">
+      <h2>Pré-requisito — container do Jenkins com acesso ao Docker</h2>
+      <p>O usuário <code>jenkins</code> (UID 1000) precisa falar com o Docker do host. Recrie o container com o socket, o binário do Docker e o <code>--group-add</code> do GID do grupo <code>docker</code>:</p>
       <div class="code-wrap">
-        <span class="lang-label">bash — VPS-Jenkins</span>
+        <span class="lang-label">bash — na VPS</span>
         <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>apt update
-apt install -y ca-certificates curl gnupg fontconfig openjdk-17-jre
+        <pre><code>DOCKER_GID=$(getent group docker | cut -d: -f3)
 
-curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key \
-  | tee /usr/share/keyrings/jenkins-keyring.asc > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
-      https://pkg.jenkins.io/debian-stable binary/" \
-  > /etc/apt/sources.list.d/jenkins.list
+docker run -d \
+  --name jenkins \
+  --restart unless-stopped \
+  -p 8080:8080 -p 50000:50000 \
+  -v /dados/jenkins_home:/var/jenkins_home \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /usr/bin/docker:/usr/bin/docker \
+  --group-add "$DOCKER_GID" \
+  jenkins/jenkins:lts
 
-apt update
-apt install -y jenkins
-systemctl enable --now jenkins
-cat /var/lib/jenkins/secrets/initialAdminPassword</code></pre>
+# Se usar docker compose no pipeline, monte o plugin (o caminho pode variar):
+#   -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/local/lib/docker/cli-plugins/docker-compose</code></pre>
       </div>
-      <p>UI na porta <strong>8080</strong>. Instale plugins: <strong>Pipeline</strong>, <strong>SSH Agent</strong>, <strong>Credentials Binding</strong>.</p>
+      <p>Teste dentro do container antes de rodar os jobs:</p>
       <div class="code-wrap">
         <span class="lang-label">bash</span>
         <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>usermod -aG docker jenkins
-systemctl restart jenkins</code></pre>
+        <pre><code>docker exec -u jenkins jenkins docker ps
+docker exec -u jenkins jenkins docker compose version</code></pre>
       </div>
+      <div class="callout callout-info">
+        <strong>GPU (opcional)</strong>
+        Se a IA usa GPU, instale o NVIDIA Container Toolkit no host. Sem GPU, ajuste a variável
+        <code>DOCKER_GPUS</code> do serviço python-ai conforme necessário.
+      </div>
+    </section>
 
-      <h3 id="p2-1">2.1 Gerar chave ed25519 para deploy</h3>
-      <div class="code-wrap">
-        <span class="lang-label">bash — VPS-Jenkins</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>sudo -iu jenkins
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-ssh-keygen -t ed25519 -C "jenkins@softmusic-ci" -f ~/.ssh/id_ed25519_deploy -N ""
-ls -la ~/.ssh/id_ed25519_deploy*</code></pre>
-      </div>
+    <section id="deploydir">
+      <h2>DEPLOY_DIR e bind mounts</h2>
+      <p>Os pipelines gravam compose + configs em <code>DEPLOY_DIR</code>. Como esse diretório fica no volume do Jenkins (<code>/dados/jenkins_home</code> no host), os arquivos existem também no host — e é esse caminho (<code>DEPLOY_DIR_HOST</code>) que os bind mounts usam.</p>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Arquivo</th><th>Uso</th></tr>
+            <tr><th>Variável</th><th>Visão do Jenkins (container)</th><th>No host</th></tr>
           </thead>
           <tbody>
-            <tr>
-              <td><code>id_ed25519_deploy</code></td>
-              <td>Chave <strong>privada</strong> → credential <code>softmusic-ssh-deploy-vps</code></td>
-            </tr>
-            <tr>
-              <td><code>id_ed25519_deploy.pub</code></td>
-              <td>Chave <strong>pública</strong> → <code>/home/deploy/.ssh/authorized_keys</code> na VPS</td>
-            </tr>
+            <tr><td><code>DEPLOY_DIR</code></td><td><code>/var/jenkins_home/deploy/softmusic</code></td><td><code>/dados/jenkins_home/deploy/softmusic</code></td></tr>
+            <tr><td><code>DEPLOY_DIR_HOST</code></td><td>—</td><td><code>/dados/jenkins_home/deploy/softmusic</code></td></tr>
           </tbody>
         </table>
       </div>
-
-      <h3 id="p2-2">2.2 Copiar chave pública para a VPS</h3>
-      <ol class="steps">
-        <li>Na VPS-Jenkins: <code>sudo cat /var/lib/jenkins/.ssh/id_ed25519_deploy.pub</code></li>
-        <li>Na VPS de produção: cole em <code>/home/deploy/.ssh/authorized_keys</code></li>
-        <li>Ajuste permissões:
-          <div class="code-wrap" style="margin-top:0.5rem">
-            <button type="button" class="copy-btn" data-copy>Copiar</button>
-            <pre><code>chown deploy:deploy /home/deploy/.ssh/authorized_keys
-chmod 600 /home/deploy/.ssh/authorized_keys</code></pre>
-          </div>
-        </li>
-      </ol>
-
-      <h3 id="p2-3">2.3 Testar SSH sem senha</h3>
-      <div class="code-wrap">
-        <span class="lang-label">bash</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>sudo -iu jenkins
-ssh -i ~/.ssh/id_ed25519_deploy -p 22 -o StrictHostKeyChecking=accept-new \
-    deploy@SEU_IP_VPS 'docker version && id && ls /opt/softmusic/repo/.git'</code></pre>
+      <div class="callout callout-danger">
+        <strong>Se o jenkins_home estiver em outro caminho no host</strong>
+        Ajuste <code>DEPLOY_DIR_HOST</code> (em <em>Environment variables</em> do job ou no <code>environment {}</code>
+        do Jenkinsfile). Se ficar errado, observabilidade/nginx sobem com config vazia.
       </div>
-      <p>Esperado: versão do Docker, <code>deploy</code> no grupo <code>docker</code> e diretório <code>.git</code> presente.</p>
     </section>
 
-    <!-- PARTE 3 -->
-    <section id="parte-3">
-      <h2>Parte 3 — Credenciais no Jenkins</h2>
-      <p><strong>Manage Jenkins → Credentials → System → Global credentials → + Add Credentials</strong></p>
-      <p>Documentação detalhada: <code>infra/jenkins/credentials.md</code></p>
-      <div class="callout callout-danger">
-        <strong>Regra de ouro</strong>
-        Nunca coloque senhas, tokens ou IPs no <code>Jenkinsfile</code>. Use apenas <code>credentials('id-exato')</code>.
-      </div>
-
-      <h3>As 5 credenciais obrigatórias</h3>
-      <p>IDs devem bater <strong>letra por letra</strong> ou o pipeline falha com <code>CredentialsNotFoundException</code>.</p>
+    <section id="creds">
+      <h2>Passo 1 — Credenciais no Jenkins (Secret text)</h2>
+      <p><strong>Manage Jenkins → Credentials → System → Global credentials.</strong> Todas do tipo <strong>Secret text</strong> — isso evita o erro de upload de "Secret file" (crumb 403). O <code>render-env.sh</code> monta o <code>.env</code> a partir delas.</p>
 
       <div class="cred-grid">
         <div class="cred-card">
-          <div class="id">softmusic-docker-registry-creds</div>
-          <div class="kind">Username with password</div>
-          <p style="margin:0.5rem 0 0;font-size:0.85rem">Docker Hub — build/push das imagens (api, ia, web, lp)</p>
+          <div class="id">softmusic-mysql-root-password</div>
+          <div class="kind">Secret text — obrigatória</div>
         </div>
         <div class="cred-card">
-          <div class="id">softmusic-ssh-deploy-vps</div>
-          <div class="kind">SSH Username with private key</div>
-          <p style="margin:0.5rem 0 0;font-size:0.85rem">Username: <code>deploy</code> — todos os pipelines</p>
+          <div class="id">softmusic-mysql-password</div>
+          <div class="kind">Secret text — obrigatória</div>
         </div>
         <div class="cred-card">
-          <div class="id">softmusic-deploy-host</div>
-          <div class="kind">Secret text</div>
-          <p style="margin:0.5rem 0 0;font-size:0.85rem">IP ou DNS da VPS (sem <code>http://</code>)</p>
+          <div class="id">softmusic-redis-password</div>
+          <div class="kind">Secret text — obrigatória</div>
         </div>
         <div class="cred-card">
-          <div class="id">softmusic-deploy-host-port</div>
-          <div class="kind">Secret text</div>
-          <p style="margin:0.5rem 0 0;font-size:0.85rem">Porta SSH (ex.: <code>22</code> ou <code>2230</code>)</p>
+          <div class="id">softmusic-rabbitmq-password</div>
+          <div class="kind">Secret text — obrigatória</div>
         </div>
         <div class="cred-card">
-          <div class="id">softmusic-production-env</div>
-          <div class="kind">Secret file</div>
-          <p style="margin:0.5rem 0 0;font-size:0.85rem">Arquivo <code>.env</code> completo de produção</p>
+          <div class="id">softmusic-jwt-private-key</div>
+          <div class="kind">Secret text — obrigatória</div>
+        </div>
+        <div class="cred-card">
+          <div class="id">softmusic-grafana-admin-password</div>
+          <div class="kind">Secret text — obrigatória</div>
+        </div>
+        <div class="cred-card">
+          <div class="id">softmusic-admin-jwt-private-key</div>
+          <div class="kind">Secret text — recomendada</div>
+        </div>
+        <div class="cred-card">
+          <div class="id">softmusic-admin-bootstrap-password</div>
+          <div class="kind">Secret text — recomendada</div>
+        </div>
+        <div class="cred-card">
+          <div class="id">softmusic-asaas-api-key</div>
+          <div class="kind">Secret text — se usar Asaas</div>
+        </div>
+        <div class="cred-card">
+          <div class="id">softmusic-asaas-webhook-token</div>
+          <div class="kind">Secret text — se usar Asaas</div>
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>#</th><th>ID</th><th>Kind</th><th>Uso</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>1</td><td><code>softmusic-docker-registry-creds</code></td><td>Username with password</td><td>Login Docker Hub nos jobs api, ia, web</td></tr>
-            <tr><td>2</td><td><code>softmusic-ssh-deploy-vps</code></td><td>SSH private key</td><td>SSH/SCP para usuário <code>deploy</code></td></tr>
-            <tr><td>3</td><td><code>softmusic-deploy-host</code></td><td>Secret text</td><td>Host da VPS</td></tr>
-            <tr><td>4</td><td><code>softmusic-deploy-host-port</code></td><td>Secret text</td><td>Porta SSH</td></tr>
-            <tr><td>5</td><td><code>softmusic-production-env</code></td><td>Secret file</td><td>Copiado para <code>/opt/softmusic/.env.production</code></td></tr>
-          </tbody>
-        </table>
+      <div class="callout callout-tip">
+        <strong>Config não-secreta</strong>
+        Domínios, portas e modelo Demucs têm defaults em <code>infra/docker/scripts/render-env.sh</code>.
+        As URLs de conexão (<code>DATABASE_URL</code>, <code>REDIS_URL</code>, <code>CELERY_*</code>) são montadas
+        automaticamente com as senhas <strong>URL-encoded</strong>. Gere segredos com
+        <code>openssl rand -base64 32</code>.
       </div>
-
-      <h3>3.1 Arquivo <code>softmusic-production-env</code></h3>
-      <p>Baseie-se em <code>infra/docker/.env.production.example</code>. Inclua obrigatoriamente:</p>
-      <ul>
-        <li>MySQL, Redis, RabbitMQ</li>
-        <li>JWT e URLs dos domínios (<code>WEB_ORIGIN</code>, <code>LP_ORIGIN</code>, <code>ADMIN_ORIGIN</code>)</li>
-        <li>Asaas (<code>ASAAS_API_KEY</code>, <code>ASAAS_WEBHOOK_TOKEN</code>)</li>
-        <li>Tags de imagem (<code>SOFTMUSIC_*_IMAGE</code>) — pipelines de app atualizam automaticamente</li>
-      </ul>
-
-      <h3>3.2 Teste rápido (job Pipeline descartável)</h3>
-      <div class="code-wrap">
-        <span class="lang-label">groovy</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre class="groovy"><code>pipeline {
-  agent any
-  environment {
-    DEPLOY_HOST     = credentials('softmusic-deploy-host')
-    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
-    DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
-  }
-  stages {
-    stage('Registry') {
-      steps {
-        sh 'echo "$DOCKER_CREDS_PSW" | docker login -u "$DOCKER_CREDS_USR" --password-stdin'
-        sh 'docker logout || true'
-      }
-    }
-    stage('SSH') {
-      steps {
-        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-          sh '''
-            ssh -o StrictHostKeyChecking=no -p $DEPLOY_SSH_PORT deploy@$DEPLOY_HOST \
-              'docker version --format "{{.Server.Version}}" && id'
-          '''
-        }
-      }
-    }
-  }
-}</code></pre>
-      </div>
+      <p style="font-size:0.9rem;color:var(--muted)">Sem credencial de registry — o build é local. Detalhes: <code>infra/jenkins/credentials.md</code>.</p>
     </section>
 
-    <!-- PARTE 4 -->
-    <section id="parte-4">
-      <h2>Parte 4 — Jenkinsfiles em <code>infra/jenkins/</code></h2>
-      <p>Crie um job <strong>Pipeline</strong> por Jenkinsfile, apontando para o caminho no repositório (Multibranch ou SCM).</p>
-
+    <section id="pipelines">
+      <h2>Passo 2 — Criar as pipelines</h2>
+      <p>Crie <strong>5 jobs</strong> do tipo <em>Pipeline</em>, todos com <strong>"Pipeline script from SCM"</strong> apontando para este repositório e o respectivo caminho.</p>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Job Jenkins</th><th>Jenkinsfile</th><th>Descrição</th></tr>
+            <tr><th>Job Jenkins</th><th>Script Path</th><th>O que faz</th></tr>
           </thead>
           <tbody>
-            <tr>
-              <td><code>softmusic-infra</code></td>
-              <td><code>infra/jenkins/Jenkinsfile.infra</code></td>
-              <td>MySQL <strong>8.4</strong> + Redis + RabbitMQ + observabilidade</td>
-            </tr>
-            <tr>
-              <td><code>softmusic-infra-legacy</code></td>
-              <td><code>infra/jenkins/Jenkinsfile.infra-legacy</code></td>
-              <td>MySQL <strong>5.7</strong> para CPUs antigas</td>
-            </tr>
-            <tr>
-              <td><code>softmusic-ia</code></td>
-              <td><code>infra/jenkins/Jenkinsfile.ia</code></td>
-              <td>python-ai + worker Celery (GPU)</td>
-            </tr>
-            <tr>
-              <td><code>softmusic-api</code></td>
-              <td><code>infra/jenkins/Jenkinsfile.api</code></td>
-              <td>BFF cliente + admin-api</td>
-            </tr>
-            <tr>
-              <td><code>softmusic-web</code></td>
-              <td><code>infra/jenkins/Jenkinsfile.web</code></td>
-              <td>app + LP + admin-web via NGINX</td>
-            </tr>
+            <tr><td><code>softmusic-infra</code></td><td><code>infra/jenkins/Jenkinsfile.infra</code></td><td>MySQL <strong>8.4</strong> + Redis + RabbitMQ + observabilidade</td></tr>
+            <tr><td><code>softmusic-infra-legacy</code></td><td><code>infra/jenkins/Jenkinsfile.infra-legacy</code></td><td>Igual, com MySQL <strong>5.7</strong></td></tr>
+            <tr><td><code>softmusic-api</code></td><td><code>infra/jenkins/Jenkinsfile.api</code></td><td>Builda e sobe a API</td></tr>
+            <tr><td><code>softmusic-ia</code></td><td><code>infra/jenkins/Jenkinsfile.ia</code></td><td>Builda e sobe IA (<strong>aplica migrations</strong>)</td></tr>
+            <tr><td><code>softmusic-web</code></td><td><code>infra/jenkins/Jenkinsfile.web</code></td><td>Builda e sobe web + landing page</td></tr>
           </tbody>
         </table>
       </div>
+      <div class="callout callout-info">Crie <strong>infra OU infra-legacy</strong> — não os dois.</div>
 
-      <h3>Exemplo — uso de credentials() no Jenkinsfile</h3>
+      <h3>Como os pipelines usam as credenciais</h3>
       <div class="code-wrap">
-        <span class="lang-label">groovy — trecho Jenkinsfile.api</span>
+        <span class="lang-label">groovy — trecho comum</span>
         <button type="button" class="copy-btn" data-copy>Copiar</button>
         <pre class="groovy"><code>environment {
-  REGISTRY        = 'docker.io'
-  IMAGE_API       = 'softmusic-api'
-  DEPLOY_USER     = 'deploy'
-  DEPLOY_HOST     = credentials('softmusic-deploy-host')
-  DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
-  DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
+  DEPLOY_DIR      = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
+  DEPLOY_DIR_HOST = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
+  IMAGE_TAG       = "${env.BUILD_NUMBER ?: 'latest'}"
+  IMAGE_PREFIX    = 'softmusic'
 }
 
-stage('Enviar .env') {
+stage('Gerar .env de produção') {
   steps {
-    withCredentials([file(credentialsId: 'softmusic-production-env', variable: 'ENV_FILE')]) {
-      sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-        sh '''
-          scp -o StrictHostKeyChecking=no -P "$DEPLOY_SSH_PORT" "$ENV_FILE" \
-            "$DEPLOY_USER@$DEPLOY_HOST:/opt/softmusic/.env.production"
-        '''
-      }
+    withCredentials([
+      string(credentialsId: 'softmusic-mysql-root-password',    variable: 'MYSQL_ROOT_PASSWORD'),
+      string(credentialsId: 'softmusic-mysql-password',         variable: 'MYSQL_PASSWORD'),
+      string(credentialsId: 'softmusic-redis-password',         variable: 'REDIS_PASSWORD'),
+      string(credentialsId: 'softmusic-rabbitmq-password',      variable: 'RABBITMQ_PASSWORD'),
+      string(credentialsId: 'softmusic-jwt-private-key',        variable: 'JWT_PRIVATE_KEY'),
+      string(credentialsId: 'softmusic-grafana-admin-password', variable: 'GRAFANA_ADMIN_PASSWORD'),
+      // + admin-jwt, admin-bootstrap, asaas...
+    ]) {
+      sh 'bash infra/docker/scripts/render-env.sh'
     }
   }
 }</code></pre>
       </div>
       <ul>
-        <li><code>DOCKER_CREDS</code> expõe <code>DOCKER_CREDS_USR</code> e <code>DOCKER_CREDS_PSW</code> automaticamente.</li>
-        <li>Infra usa <code>withCredentials([file(...)])</code> para o <code>.env</code>; jobs de app fazem o mesmo antes do deploy remoto.</li>
-        <li>Nenhum segredo hardcoded — apenas IDs de credential conhecidos.</li>
+        <li>Apps buildam local: <code>docker build -f infra/docker/Dockerfile.&lt;svc&gt; -t softmusic/&lt;svc&gt;:latest .</code> (sem push).</li>
+        <li><code>render-env.sh</code> grava <code>DEPLOY_DIR/.env.production</code>; <code>deploy-*.sh</code> copia os assets e sobe o compose.</li>
+        <li>Nenhum segredo no código — apenas IDs de credential Secret text.</li>
       </ul>
     </section>
 
-    <!-- MYSQL -->
     <section id="mysql-guia">
       <h2>Guia de escolha — MySQL 8.4 vs 5.7 (legacy)</h2>
       <div class="table-wrap">
@@ -980,243 +746,207 @@ stage('Enviar .env') {
             <tr><th>Cenário</th><th>Job</th><th>MySQL</th></tr>
           </thead>
           <tbody>
-            <tr>
-              <td>VPS nova, CPU x86_64 moderna (AVX2)</td>
-              <td><code>softmusic-infra</code></td>
-              <td><strong>8.4</strong> (padrão)</td>
-            </tr>
-            <tr>
-              <td>CPU antiga, erro ao subir MySQL 8.x, sem suporte a instruções recentes</td>
-              <td><code>softmusic-infra-legacy</code></td>
-              <td><strong>5.7</strong> (LEGACY_MYSQL=1)</td>
-            </tr>
+            <tr><td>VPS nova, CPU x86_64 moderna (AVX2)</td><td><code>softmusic-infra</code></td><td><strong>8.4</strong> (padrão)</td></tr>
+            <tr><td>CPU antiga, erro ao subir MySQL 8.x</td><td><code>softmusic-infra-legacy</code></td><td><strong>5.7</strong> (LEGACY_MYSQL=1)</td></tr>
           </tbody>
         </table>
       </div>
       <div class="callout callout-warn">
         <strong>Escolha uma vez</strong>
-        Rode <strong>apenas um</strong> dos jobs de infra no primeiro deploy. Não alterne entre 8.4 e 5.7 no mesmo volume de dados sem migração planejada.
+        Rode <strong>apenas um</strong> dos jobs de infra. Não alterne entre 8.4 e 5.7 no mesmo volume de dados sem migração planejada.
       </div>
-      <p>Sintomas de incompatibilidade na VPS antiga: container MySQL em restart loop, logs com <code>Illegal instruction</code> ou falha ao iniciar <code>mysqld</code>. Nesse caso, use <code>Jenkinsfile.infra-legacy</code>.</p>
+    </section>
+
+    <section id="ordem">
+      <h2>Passo 3 — Ordem do deploy</h2>
+      <div class="order-list">
+        <span class="order-step">1. infra <em>ou</em> infra-legacy</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">2. ia (migrations)</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">3. api</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">4. web</span>
+      </div>
+      <ol class="steps">
+        <li><strong>softmusic-infra</strong> (ou <code>-legacy</code>) — provisiona MySQL + Redis + RabbitMQ + toda a observabilidade.</li>
+        <li><strong>softmusic-ia</strong> — builda a imagem, sobe python-ai + worker e <strong>aplica as migrations</strong> (<code>alembic upgrade head</code> no entrypoint).</li>
+        <li><strong>softmusic-api</strong> — builda e sobe a API.</li>
+        <li><strong>softmusic-web</strong> — builda e sobe web + landing page (+ nginx).</li>
+      </ol>
+      <div class="callout callout-danger">
+        <strong>Regra de ouro sobre migrations</strong>
+        O banco só é migrado pelo job <strong>softmusic-ia</strong>. A API <em>não</em> aplica migrations.
+        Se um deploy depende de schema novo, rode a IA antes.
+      </div>
+    </section>
+
+    <section id="jobs">
+      <h2>O que cada job de app faz (local, sem registry)</h2>
+      <ol class="steps">
+        <li><code>checkout scm</code> → clona o repo no workspace do Jenkins.</li>
+        <li><code>docker build</code> da imagem no daemon do host, marcando <code>:latest</code> (sem push).</li>
+        <li><code>render-env.sh</code> gera <code>DEPLOY_DIR/.env.production</code> a partir das credenciais.</li>
+        <li><code>deploy-*.sh</code> copia compose + configs para <code>DEPLOY_DIR</code> e roda <code>docker compose up -d --no-deps --force-recreate &lt;serviço&gt;</code> + health check.</li>
+      </ol>
+      <div class="callout callout-tip">
+        <strong>admin-web</strong>
+        Não é deployado pelas pipelines atuais. Para publicá-lo, crie um <code>Jenkinsfile.admin</code> no mesmo molde
+        e rode o <code>deploy-web.sh</code> com <code>DEPLOY_ADMIN_WEB=1</code>.
+      </div>
+    </section>
+
+    <section id="observabilidade">
+      <h2>Observabilidade</h2>
+      <p>Os dois jobs de infra sobem a stack completa: Prometheus, Loki, Promtail, Grafana e OpenTelemetry Collector (<code>WITH_OBSERVABILITY=1</code>). O <code>deploy-infra.sh</code> verifica no fim se todos os containers subiram.</p>
       <div class="code-wrap">
         <span class="lang-label">bash — verificar na VPS</span>
         <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code># Após deploy infra (moderno)
-docker ps --filter name=softmusic-mysql --format 'table {{.Names}}\t{{.Status}}'
-docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
-
-# Legacy — smoke do Jenkinsfile.infra-legacy
-docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL 5.7 OK"</code></pre>
+        <pre><code>docker ps \
+  --filter name=softmusic-prometheus --filter name=softmusic-loki \
+  --filter name=softmusic-promtail --filter name=softmusic-grafana \
+  --filter name=softmusic-otel-collector \
+  --format 'table {{.Names}}\t{{.Status}}'</code></pre>
       </div>
+      <p>Grafana atende em <code>GRAFANA_ROOT_URL</code>. Guia dedicado: <code>docs/producao/tutorial-grafana-observabilidade.html</code>.</p>
     </section>
 
-    <!-- PARTE 5 -->
-    <section id="parte-5">
-      <h2>Parte 5 — Ordem do primeiro deploy</h2>
-      <div class="order-list">
-        <span class="order-step">1. VPS + clone</span>
-        <span class="order-arrow">→</span>
-        <span class="order-step">2. Credenciais</span>
-        <span class="order-arrow">→</span>
-        <span class="order-step">3. infra <em>ou</em> infra-legacy</span>
-        <span class="order-arrow">→</span>
-        <span class="order-step">4. ia</span>
-        <span class="order-arrow">→</span>
-        <span class="order-step">5. api</span>
-        <span class="order-arrow">→</span>
-        <span class="order-step">6. web</span>
-        <span class="order-arrow">→</span>
-        <span class="order-step">7. DNS</span>
+    <section id="tls">
+      <h2>TLS / NGINX</h2>
+      <p>O overlay <code>docker-compose.prod.yml</code> inclui <code>nginx</code> (80/443) e um <code>certbot</code> sidecar. Na primeira vez, emita os certificados (DNS já apontando para a VPS):</p>
+      <div class="code-wrap">
+        <span class="lang-label">bash — na VPS</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>docker run --rm \
+  -v softmusic_certbot_certs:/etc/letsencrypt \
+  -v softmusic_certbot_www:/var/www/certbot \
+  certbot/certbot certonly --webroot -w /var/www/certbot \
+  -d softmusic.com.br -d app.softmusic.com.br -d admin.softmusic.com.br \
+  --email voce@dominio.com --agree-tos --no-eff-email</code></pre>
       </div>
-
-      <ol class="steps">
-        <li>Preparar VPS: Docker, usuário <code>deploy</code>, UFW 80/443, clone em <code>/opt/softmusic/repo</code></li>
-        <li>Cadastrar as <strong>5 credenciais</strong> no Jenkins</li>
-        <li>Rodar <code>softmusic-infra</code> <strong>ou</strong> <code>softmusic-infra-legacy</code> (não os dois)</li>
-        <li>Rodar <code>softmusic-ia</code> — requer GPU na mesma VPS (ou adapte para worker remoto)</li>
-        <li>Rodar <code>softmusic-api</code> — build, push e deploy da API</li>
-        <li>Rodar <code>softmusic-web</code> — build/push de web + LP, deploy com NGINX</li>
-        <li>Configurar DNS: <code>softmusic.com.br</code>, <code>app.softmusic.com.br</code>, <code>admin.softmusic.com.br</code> → IP da VPS</li>
-      </ol>
-
-      <div class="callout callout-tip">
-        <strong>Deploys seguintes</strong>
-        Após o primeiro go-live, rode apenas o job da camada alterada (ex.: só <code>softmusic-api</code> após mudança no BFF).
-      </div>
+      <p>Enquanto não houver certificado, o <code>deploy-web.sh</code> apenas <strong>avisa</strong> (não falha) que o nginx não subiu.</p>
     </section>
 
-    <!-- PARTE 6 -->
-    <section id="parte-6">
-      <h2>Parte 6 — Smoke tests (curl)</h2>
-      <p>Execute na VPS (como <code>deploy</code>) ou de uma máquina com acesso aos domínios.</p>
-
-      <h3>6.1 Na VPS — localhost</h3>
+    <section id="smoke">
+      <h2>Smoke tests</h2>
       <div class="code-wrap">
-        <span class="lang-label">bash — VPS produção</span>
+        <span class="lang-label">bash — na VPS (host)</span>
         <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code># Infra
-docker ps --filter name=softmusic-mysql --filter name=softmusic-redis --filter name=softmusic-rabbitmq \
-  --format 'table {{.Names}}\t{{.Status}}'
-docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
+        <pre><code>docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
+curl -sf http://127.0.0.1:8000/health && echo " python-ai OK"
+curl -sf http://127.0.0.1:8080/health/live && echo " api OK"
+curl -sf http://127.0.0.1:5173/ >/dev/null && echo " web OK"
 
-# IA
-curl -sf http://127.0.0.1:8000/health && echo " Python-AI OK"
-
-# API
-curl -sf http://127.0.0.1:8080/health/live && echo " API OK"
-
-# Web (container interno)
-curl -sf http://127.0.0.1:5173/ && echo " Web OK"
-
-# NGINX
-curl -sf -o /dev/null -w '%{http_code}\n' http://127.0.0.1:80</code></pre>
+cd /dados/jenkins_home/deploy/softmusic
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  --env-file .env.production ps</code></pre>
       </div>
-
-      <h3>6.2 Externo — domínios públicos (HTTPS)</h3>
       <div class="code-wrap">
-        <span class="lang-label">bash — qualquer host</span>
+        <span class="lang-label">bash — domínios públicos (HTTPS)</span>
         <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code># Landing page
-curl -sfI https://softmusic.com.br/ | head -5
-
-# App + API health
+        <pre><code>curl -sfI https://softmusic.com.br/ | head -5
 curl -sf https://app.softmusic.com.br/api/health/live
-curl -sf https://app.softmusic.com.br/api/health/ready
-
-# Admin (espera 200 ou redirect para login)
-curl -sfI https://admin.softmusic.com.br/ | head -5</code></pre>
-      </div>
-
-      <h3>6.3 Containers em execução</h3>
-      <div class="code-wrap">
-        <span class="lang-label">bash</span>
-        <button type="button" class="copy-btn" data-copy>Copiar</button>
-        <pre><code>docker ps --filter name=softmusic- --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'</code></pre>
+curl -sf https://app.softmusic.com.br/api/health/ready</code></pre>
       </div>
     </section>
 
-    <!-- PARTE 7 -->
-    <section id="parte-7">
-      <h2>Parte 7 — Troubleshooting</h2>
+    <section id="rollback">
+      <h2>Rollback</h2>
+      <p>Sem registry, o rollback é <strong>rebuildar</strong> a imagem a partir do commit anterior — rode o job apontando para o ref anterior. As imagens antigas ficam no daemon do host, marcadas por <code>BUILD_NUMBER</code>, até o <code>docker image prune</code>.</p>
+      <div class="code-wrap">
+        <span class="lang-label">bash — reusar imagem antiga (ex.: build #7)</span>
+        <button type="button" class="copy-btn" data-copy>Copiar</button>
+        <pre><code>cd /dados/jenkins_home/deploy/softmusic
+sed -i 's|^SOFTMUSIC_API_IMAGE=.*|SOFTMUSIC_API_IMAGE=softmusic/api:7|' .env.production
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  --env-file .env.production --profile infra --profile app \
+  up -d --no-deps --force-recreate api</code></pre>
+      </div>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Sintoma</th><th>Causa provável</th><th>Solução</th></tr></thead>
+          <thead><tr><th>Sintoma</th><th>Causa provável</th><th>Ação</th></tr></thead>
           <tbody>
             <tr>
-              <td><code>CredentialsNotFoundException</code></td>
-              <td>ID de credential diferente do Jenkinsfile</td>
-              <td>Conferir os 5 IDs exatos da seção 3</td>
+              <td><code>permission denied</code> no <code>docker.sock</code></td>
+              <td>Jenkins sem <code>--group-add</code> do GID do docker</td>
+              <td>Recriar o container do Jenkins (seção Pré-requisito)</td>
             </tr>
             <tr>
-              <td><code>Permission denied (publickey)</code></td>
-              <td>Chave SSH não autorizada</td>
-              <td>Refazer passo 2.2; <code>chmod 600</code> em <code>authorized_keys</code></td>
+              <td>Observabilidade/nginx com config vazia</td>
+              <td><code>DEPLOY_DIR_HOST</code> não bate com o caminho real no host</td>
+              <td>Ajustar <code>DEPLOY_DIR_HOST</code> ao mapeamento do <code>jenkins_home</code></td>
             </tr>
             <tr>
-              <td><code>ERRO: clone o repositório em /opt/softmusic/repo</code></td>
-              <td>Primeiro deploy sem clone</td>
-              <td>Executar seção 1.6 antes do job infra</td>
+              <td>Deploy infra aborta citando variável</td>
+              <td>Credencial Secret text ausente/vazia</td>
+              <td>Cadastrar a credencial e re-rodar</td>
             </tr>
             <tr>
-              <td>MySQL container restart loop</td>
+              <td><code>image not found</code> no <code>compose up</code></td>
+              <td>Job de app não buildou antes</td>
+              <td>Rodar o job de app (ele builda e sobe)</td>
+            </tr>
+            <tr>
+              <td>Coluna/tabela nova não existe</td>
+              <td>Migration não aplicada</td>
+              <td>Rodar o job <strong>softmusic-ia</strong></td>
+            </tr>
+            <tr>
+              <td>MySQL em restart loop</td>
               <td>CPU incompatível com MySQL 8.4</td>
-              <td>Usar <code>softmusic-infra-legacy</code> (MySQL 5.7)</td>
+              <td>Usar <code>softmusic-infra-legacy</code></td>
             </tr>
             <tr>
-              <td><code>unauthorized</code> no docker push</td>
-              <td>PAT Docker Hub inválido</td>
-              <td>Atualizar <code>softmusic-docker-registry-creds</code> com PAT Read &amp; Write</td>
-            </tr>
-            <tr>
-              <td><code>docker.sock permission denied</code></td>
-              <td><code>deploy</code> fora do grupo docker</td>
-              <td><code>usermod -aG docker deploy</code> e novo login SSH</td>
-            </tr>
-            <tr>
-              <td>IA health check falhou</td>
-              <td>GPU / NVIDIA Toolkit ausente</td>
-              <td>Seção 1.7; <code>nvidia-smi</code> no host e no container</td>
-            </tr>
-            <tr>
-              <td>502 / connection refused nos domínios</td>
-              <td>NGINX ou app não subiu</td>
-              <td><code>docker logs softmusic-nginx</code>; rodar <code>softmusic-web</code> novamente</td>
-            </tr>
-            <tr>
-              <td>API OK local, falha no domínio</td>
-              <td>DNS ou TLS</td>
-              <td>Verificar registros A/CNAME e certificados no NGINX</td>
-            </tr>
-            <tr>
-              <td>Webhook Asaas não chega</td>
-              <td>URL ou token incorreto</td>
-              <td><code>ASAAS_WEBHOOK_TOKEN</code> no <code>.env</code>; URL pública <code>/api/webhooks/asaas</code></td>
+              <td>502 nos domínios</td>
+              <td>nginx sem certificado / app não subiu</td>
+              <td>Emitir TLS; <code>docker logs softmusic-nginx</code></td>
             </tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- ANEXO A -->
-    <section id="anexo-a">
-      <h2>Anexo A — Checklist final</h2>
+    <section id="checklist">
+      <h2>Checklist final</h2>
       <div class="card">
         <ul class="checklist">
-          <li><label><input type="checkbox" /> VPS: Ubuntu atualizado, timezone America/Sao_Paulo</label></li>
-          <li><label><input type="checkbox" /> VPS: UFW ativo — SSH + 80 + 443</label></li>
-          <li><label><input type="checkbox" /> VPS: Docker Engine + Compose plugin instalados</label></li>
-          <li><label><input type="checkbox" /> VPS: usuário <code>deploy</code> no grupo <code>docker</code></label></li>
-          <li><label><input type="checkbox" /> VPS: repositório clonado em <code>/opt/softmusic/repo</code></label></li>
-          <li><label><input type="checkbox" /> VPS: (se IA) NVIDIA Toolkit + <code>nvidia-smi</code> OK</label></li>
-          <li><label><input type="checkbox" /> Jenkins: ativo, plugins Pipeline + SSH Agent</label></li>
-          <li><label><input type="checkbox" /> Jenkins: usuário <code>jenkins</code> no grupo <code>docker</code></label></li>
-          <li><label><input type="checkbox" /> Jenkins: chave SSH em <code>/var/lib/jenkins/.ssh/</code></label></li>
-          <li><label><input type="checkbox" /> Jenkins: 5 credenciais cadastradas (IDs exatos)</label></li>
-          <li><label><input type="checkbox" /> Jenkins: 5 jobs apontando para <code>infra/jenkins/Jenkinsfile.*</code></label></li>
-          <li><label><input type="checkbox" /> Primeiro deploy: infra (8.4 ou legacy) → ia → api → web</label></li>
-          <li><label><input type="checkbox" /> DNS: softmusic.com.br, app.*, admin.* → IP da VPS</label></li>
-          <li><label><input type="checkbox" /> Smoke: curl health API, LP e admin retornam 200</label></li>
-          <li><label><input type="checkbox" /> <code>.env</code> de produção sem valores de exemplo (SUBSTITUA)</label></li>
+          <li><label><input type="checkbox" /> Container do Jenkins recriado com socket + <code>--group-add</code> docker</label></li>
+          <li><label><input type="checkbox" /> <code>docker exec -u jenkins jenkins docker ps</code> funciona</label></li>
+          <li><label><input type="checkbox" /> <code>DEPLOY_DIR_HOST</code> confere com o caminho do <code>jenkins_home</code> no host</label></li>
+          <li><label><input type="checkbox" /> Credenciais Secret text cadastradas (IDs exatos)</label></li>
+          <li><label><input type="checkbox" /> 5 jobs (Pipeline from SCM) apontando para <code>infra/jenkins/Jenkinsfile.*</code></label></li>
+          <li><label><input type="checkbox" /> Deploy: infra (8.4 ou legacy) → ia → api → web</label></li>
+          <li><label><input type="checkbox" /> Observabilidade: 5 containers no ar</label></li>
+          <li><label><input type="checkbox" /> TLS: certificados emitidos; nginx servindo os 3 domínios</label></li>
+          <li><label><input type="checkbox" /> Smoke: health de python-ai, api e web retornam OK</label></li>
         </ul>
       </div>
     </section>
 
-    <!-- ANEXO B -->
-    <section id="anexo-b">
-      <h2>Anexo B — Referências no repositório</h2>
+    <section id="referencias">
+      <h2>Referências no repositório</h2>
       <div class="table-wrap">
         <table>
           <thead>
             <tr><th>Documento</th><th>Conteúdo</th></tr>
           </thead>
           <tbody>
-            <tr>
-              <td><code>infra/jenkins/credentials.md</code></td>
-              <td>IDs de credenciais, ordem de deploy, smoke test Groovy</td>
-            </tr>
-            <tr>
-              <td><code>docs/arquitetura/saas-bandas-licencas.md</code></td>
-              <td>Domínios, planos, billing Asaas, estados de banda, papéis</td>
-            </tr>
-            <tr>
-              <td><code>infra/docker/.env.production.example</code></td>
-              <td>Modelo do arquivo <code>softmusic-production-env</code></td>
-            </tr>
-            <tr>
-              <td><code>infra/docker/scripts/deploy-*.sh</code></td>
-              <td>Scripts invocados pelos Jenkinsfiles na VPS</td>
-            </tr>
-            <tr>
-              <td><code>docs/local/desenvolvimento-docker.md</code></td>
-              <td>Stack local espelhando produção Docker</td>
-            </tr>
+            <tr><td><code>docs/producao/deploy-producao.md</code></td><td>Este tutorial em Markdown (fonte)</td></tr>
+            <tr><td><code>infra/jenkins/credentials.md</code></td><td>Credenciais Secret text e jobs do Jenkins</td></tr>
+            <tr><td><code>infra/docker/scripts/render-env.sh</code></td><td>Gera o <code>.env</code> a partir das credenciais</td></tr>
+            <tr><td><code>infra/docker/scripts/deploy-*.sh</code></td><td>Staging + <code>docker compose</code> local</td></tr>
+            <tr><td><code>docs/producao/tutorial-grafana-observabilidade.html</code></td><td>Guia de observabilidade / Grafana</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <footer>
-      SoftMusic SaaS — Tutorial VPS Deploy + Jenkins · <code>docs/producao/tutorial-vps-deploy-jenkins.html</code>
+      SoftMusic — Deploy em VPS (Jenkins em container + Docker Compose) · <code>docs/producao/tutorial-vps-deploy-jenkins.html</code>
     </footer>
   </main>
 
@@ -1272,7 +1002,7 @@ curl -sfI https://admin.softmusic.com.br/ | head -5</code></pre>
       });
 
       const checks = document.querySelectorAll('.checklist input[type="checkbox"]');
-      const key = 'softmusic-deploy-checklist';
+      const key = 'softmusic-deploy-checklist-container';
       const saved = JSON.parse(localStorage.getItem(key) || '[]');
       checks.forEach((cb, i) => {
         if (saved[i]) cb.checked = true;

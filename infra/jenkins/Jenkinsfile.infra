@@ -1,14 +1,12 @@
 /**
  * SoftMusic — Deploy INFRA (MySQL 8.4 + Redis + RabbitMQ + Observabilidade)
  *
- * Escolha este job em servidores com CPU moderna que suporta MySQL 8.4.
- * Para CPUs antigas, use Jenkinsfile.infra-legacy.
+ * Cenário: o Jenkins roda DENTRO de um container e fala com o daemon do HOST
+ * via /var/run/docker.sock. Os assets de deploy são copiados para DEPLOY_DIR
+ * (no host, DEPLOY_DIR_HOST), de onde o docker compose sobe os serviços.
  *
- * Credenciais Jenkins (IDs exatos):
- *   softmusic-ssh-deploy-vps
- *   softmusic-deploy-host
- *   softmusic-deploy-host-port
- *   softmusic-production-env  (Secret file — .env completo)
+ * Segredos: credenciais "Secret text" (ver infra/jenkins/credentials.md).
+ * Para CPUs antigas sem MySQL 8.4, use Jenkinsfile.infra-legacy.
  */
 pipeline {
   agent any
@@ -19,86 +17,45 @@ pipeline {
   }
 
   environment {
-    DEPLOY_USER     = 'deploy'
-    DEPLOY_HOST     = credentials('softmusic-deploy-host')
-    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
-    REMOTE_DIR      = '/opt/softmusic'
-    LEGACY_MYSQL    = '0'
+    DEPLOY_DIR         = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
+    DEPLOY_DIR_HOST    = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
+    WITH_OBSERVABILITY = '1'
+    LEGACY_MYSQL       = '0'
   }
 
   stages {
     stage('Checkout') {
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
 
-    stage('Enviar .env de produção') {
+    stage('Gerar .env de produção') {
       steps {
-        withCredentials([file(credentialsId: 'softmusic-production-env', variable: 'ENV_FILE')]) {
-          sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-            sh '''
-              ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-                "mkdir -p '"$REMOTE_DIR"'/repo/infra/docker/scripts"
-              scp -o StrictHostKeyChecking=no -P "$DEPLOY_SSH_PORT" "$ENV_FILE" \
-                "$DEPLOY_USER@$DEPLOY_HOST:$REMOTE_DIR/.env.production"
-            '''
-          }
-        }
-      }
-    }
-
-    stage('Sincronizar repositório') {
-      steps {
-        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-          sh '''
-            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" << 'EOS'
-              set -e
-              if [ ! -d /opt/softmusic/repo/.git ]; then
-                echo "ERRO: clone o repositório em /opt/softmusic/repo antes do primeiro deploy"
-                exit 1
-              fi
-              cd /opt/softmusic/repo
-              git fetch --all
-              git reset --hard origin/main
-EOS
-          '''
+        withCredentials([
+          string(credentialsId: 'softmusic-mysql-root-password',      variable: 'MYSQL_ROOT_PASSWORD'),
+          string(credentialsId: 'softmusic-mysql-password',           variable: 'MYSQL_PASSWORD'),
+          string(credentialsId: 'softmusic-redis-password',           variable: 'REDIS_PASSWORD'),
+          string(credentialsId: 'softmusic-rabbitmq-password',        variable: 'RABBITMQ_PASSWORD'),
+          string(credentialsId: 'softmusic-jwt-private-key',          variable: 'JWT_PRIVATE_KEY'),
+          string(credentialsId: 'softmusic-admin-jwt-private-key',    variable: 'ADMIN_JWT_PRIVATE_KEY'),
+          string(credentialsId: 'softmusic-admin-bootstrap-password', variable: 'ADMIN_BOOTSTRAP_PASSWORD'),
+          string(credentialsId: 'softmusic-asaas-api-key',            variable: 'ASAAS_API_KEY'),
+          string(credentialsId: 'softmusic-asaas-webhook-token',      variable: 'ASAAS_WEBHOOK_TOKEN'),
+          string(credentialsId: 'softmusic-grafana-admin-password',   variable: 'GRAFANA_ADMIN_PASSWORD'),
+        ]) {
+          sh 'bash infra/docker/scripts/render-env.sh'
         }
       }
     }
 
     stage('Deploy infra (MySQL 8.4)') {
       steps {
-        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-          sh '''
-            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-              "cd /opt/softmusic/repo && chmod +x infra/docker/scripts/deploy-infra.sh && \
-               ENV_FILE=/opt/softmusic/.env.production LEGACY_MYSQL=0 WITH_OBSERVABILITY=1 \
-               ./infra/docker/scripts/deploy-infra.sh"
-          '''
-        }
-      }
-    }
-
-    stage('Smoke infra + observabilidade') {
-      steps {
-        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-          sh '''
-            ssh -o StrictHostKeyChecking=no -p "$DEPLOY_SSH_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-              "docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo 'MySQL 8.4 OK'; \
-               docker ps \
-                 --filter name=softmusic-mysql --filter name=softmusic-redis --filter name=softmusic-rabbitmq \
-                 --filter name=softmusic-prometheus --filter name=softmusic-loki --filter name=softmusic-promtail \
-                 --filter name=softmusic-grafana --filter name=softmusic-otel-collector \
-                 --format 'table {{.Names}}\\t{{.Status}}'"
-          '''
-        }
+        sh 'bash infra/docker/scripts/deploy-infra.sh'
       }
     }
   }
 
   post {
-    success { echo 'Infra SoftMusic (MySQL 8.4) deployada com sucesso.' }
-    failure { echo 'Falha no deploy de infra. Verifique logs no Jenkins e docker compose na VPS.' }
+    success { echo 'Infra SoftMusic (MySQL 8.4) provisionada com sucesso.' }
+    failure { echo 'Falha no deploy de infra. Verifique os logs do docker compose acima.' }
   }
 }

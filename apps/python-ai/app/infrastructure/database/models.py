@@ -2,7 +2,11 @@ from datetime import UTC, date, datetime
 from enum import StrEnum
 
 from sqlalchemy import Boolean, Date, DateTime, Float, Integer, String, Text
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+# Payload da análise pode passar de 64KB (limite do TEXT no MySQL); usa LONGTEXT.
+JsonText = Text().with_variant(LONGTEXT, "mysql")
 
 
 class Base(DeclarativeBase):
@@ -95,7 +99,7 @@ class AnalysisResult(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     song_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     version: Mapped[str] = mapped_column(String(16))
-    payload_json: Mapped[str] = mapped_column(Text)
+    payload_json: Mapped[str] = mapped_column(JsonText)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 

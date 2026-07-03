@@ -1,77 +1,110 @@
-# Credenciais Jenkins — SoftMusic
+# Credenciais e deploy do Jenkins — SoftMusic
 
-Todos os segredos ficam em **Manage Jenkins → Credentials → System → Global credentials**.
+Cenário desta VPS: o **Jenkins roda dentro de um container** e fala com o daemon
+Docker do **host** via `/var/run/docker.sock`. O deploy é **local** (sem SSH):
+as imagens são buildadas no daemon do host (**sem push para registry**) e o
+`docker compose` sobe os serviços na própria máquina.
 
-Nunca coloque senhas no `Jenkinsfile`. Para trocar ambiente, atualize a credential e rode o pipeline novamente.
+> Mesmo padrão do projeto `sportshub` que já roda nesta VPS.
 
-## Credenciais obrigatórias
+## Pré-requisitos do container Jenkins (uma vez)
 
-| ID | Kind | Uso |
-|----|------|-----|
-| `softmusic-docker-registry-creds` | Username with password | Docker Hub — build/push das imagens |
-| `softmusic-ssh-deploy-vps` | SSH Username with private key | Acesso SSH ao usuário `deploy` na VPS |
-| `softmusic-deploy-host` | Secret text | IP ou DNS da VPS (sem `http://`) |
-| `softmusic-deploy-host-port` | Secret text | Porta SSH (ex.: `22` ou `2230`) |
-| `softmusic-production-env` | Secret file | Arquivo `.env` completo de produção |
+O usuário `jenkins` (UID 1000) precisa falar com o Docker do host. Recrie o
+container do Jenkins com o socket, o binário do Docker e o `--group-add` do GID
+do grupo `docker` do host:
 
-### `softmusic-production-env`
+```bash
+DOCKER_GID=$(getent group docker | cut -d: -f3)
 
-Arquivo único copiado para `/opt/softmusic/.env.production` em cada deploy.
+docker run -d \
+  --name jenkins \
+  --restart unless-stopped \
+  -p 8080:8080 -p 50000:50000 \
+  -v /dados/jenkins_home:/var/jenkins_home \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /usr/bin/docker:/usr/bin/docker \
+  --group-add "$DOCKER_GID" \
+  jenkins/jenkins:lts
 
-Baseie-se em `infra/docker/.env.production.example`. Inclua:
+# Se usar docker compose no pipeline, monte também o plugin:
+#   -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/local/lib/docker/cli-plugins/docker-compose
+```
 
-- MySQL, Redis, RabbitMQ
-- JWT, URLs dos domínios
-- Asaas (`ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN`)
-- Tags de imagem (`SOFTMUSIC_API_IMAGE`, etc.) — pipelines de app atualizam automaticamente
+Teste dentro do container antes de rodar os jobs:
+
+```bash
+docker exec -u jenkins jenkins docker ps
+docker exec -u jenkins jenkins docker compose version
+```
+
+### DEPLOY_DIR (onde o compose e as configs são gravados)
+
+Os pipelines copiam os arquivos de deploy (compose + configs de observabilidade
++ nginx + mysql/init) para um diretório dentro do volume do Jenkins. Isso é
+necessário porque os **bind mounts** precisam de um caminho que o daemon do
+**host** enxergue.
+
+| Variável | Default (visão do Jenkins) | No host |
+|----------|----------------------------|---------|
+| `DEPLOY_DIR` | `/var/jenkins_home/deploy/softmusic` | `/dados/jenkins_home/deploy/softmusic` |
+| `DEPLOY_DIR_HOST` | `/dados/jenkins_home/deploy/softmusic` | (mesmo caminho no host) |
+
+Se o seu `jenkins_home` estiver montado de outro caminho no host, ajuste
+`DEPLOY_DIR_HOST` na configuração do job (Environment variables) ou no
+`environment {}` do Jenkinsfile.
+
+## Credenciais (tipo "Secret text")
+
+Crie em **Manage Jenkins → Credentials → System → Global credentials**, todas
+como **Secret text** (evita o problema de upload de "Secret file"). O
+`render-env.sh` monta o `.env` de produção a partir delas.
+
+| ID | Obrigatória | Conteúdo |
+|----|-------------|----------|
+| `softmusic-mysql-root-password` | Sim | Senha root do MySQL |
+| `softmusic-mysql-password` | Sim | Senha do usuário `softmusic` no MySQL |
+| `softmusic-redis-password` | Sim | Senha do Redis |
+| `softmusic-rabbitmq-password` | Sim | Senha do RabbitMQ |
+| `softmusic-jwt-private-key` | Sim | Chave JWT da API (mín. 32 chars) |
+| `softmusic-grafana-admin-password` | Sim | Senha admin do Grafana |
+| `softmusic-admin-jwt-private-key` | Recomendada | Chave JWT do admin (default = JWT da API) |
+| `softmusic-admin-bootstrap-password` | Recomendada | Senha do admin inicial |
+| `softmusic-asaas-api-key` | Se usar Asaas | API key do Asaas |
+| `softmusic-asaas-webhook-token` | Se usar Asaas | Token do webhook Asaas |
+
+Gerar senha/chave forte:
+
+```bash
+openssl rand -base64 32
+```
+
+> As demais chaves do `.env` (domínios, portas, URLs de conexão, modelo Demucs,
+> etc.) têm **defaults** em `infra/docker/scripts/render-env.sh` e podem ser
+> sobrescritas por *Environment variables* do job. As URLs de conexão
+> (`DATABASE_URL`, `REDIS_URL`, `CELERY_*`) são montadas automaticamente com as
+> senhas **URL-encoded**.
 
 ## Jobs e Jenkinsfiles
 
-| Job Jenkins | Jenkinsfile | Quando usar |
-|-------------|-------------|-------------|
-| `softmusic-infra` | `infra/jenkins/Jenkinsfile.infra` | Servidor novo — MySQL **8.4** |
-| `softmusic-infra-legacy` | `infra/jenkins/Jenkinsfile.infra-legacy` | CPU antiga — MySQL **5.7** |
-| `softmusic-api` | `infra/jenkins/Jenkinsfile.api` | Só API BFF |
-| `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | python-ai + worker |
-| `softmusic-web` | `infra/jenkins/Jenkinsfile.web` | web + LP |
+Todos são *Pipeline* com **"Pipeline script from SCM"** apontando para o
+respectivo caminho. **Não há credencial de registry** (build é local).
+
+| Job Jenkins | Jenkinsfile | O que faz |
+|-------------|-------------|-----------|
+| `softmusic-infra` | `infra/jenkins/Jenkinsfile.infra` | MySQL **8.4** + Redis + RabbitMQ + observabilidade |
+| `softmusic-infra-legacy` | `infra/jenkins/Jenkinsfile.infra-legacy` | Igual, com MySQL **5.7** (CPU antiga) |
+| `softmusic-api` | `infra/jenkins/Jenkinsfile.api` | Builda e sobe a API (BFF) |
+| `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | Builda e sobe python-ai + worker (**aplica migrations**) |
+| `softmusic-web` | `infra/jenkins/Jenkinsfile.web` | Builda e sobe web + landing page (+ nginx) |
 
 ## Ordem do primeiro deploy
 
-1. Preparar VPS (`deploy` + Docker + clone em `/opt/softmusic/repo`)
-2. Cadastrar credenciais
-3. `softmusic-infra` **ou** `softmusic-infra-legacy`
-4. `softmusic-ia` (se GPU na mesma VPS)
+1. Recriar o container do Jenkins com socket + `--group-add` (acima)
+2. Cadastrar as credenciais Secret text
+3. `softmusic-infra` **ou** `softmusic-infra-legacy` (não os dois)
+4. `softmusic-ia` (sobe a IA e **aplica as migrations**)
 5. `softmusic-api`
 6. `softmusic-web`
-7. DNS: `softmusic.com.br`, `app.softmusic.com.br`, `admin.softmusic.com.br`
+7. Emitir certificados TLS e configurar DNS dos domínios
 
-## Smoke test (job Pipeline descartável)
-
-```groovy
-pipeline {
-  agent any
-  environment {
-    DEPLOY_HOST     = credentials('softmusic-deploy-host')
-    DEPLOY_SSH_PORT = credentials('softmusic-deploy-host-port')
-    DOCKER_CREDS    = credentials('softmusic-docker-registry-creds')
-  }
-  stages {
-    stage('Registry') {
-      steps {
-        sh 'echo "$DOCKER_CREDS_PSW" | docker login -u "$DOCKER_CREDS_USR" --password-stdin'
-        sh 'docker logout || true'
-      }
-    }
-    stage('SSH') {
-      steps {
-        sshagent(credentials: ['softmusic-ssh-deploy-vps']) {
-          sh '''
-            ssh -o StrictHostKeyChecking=no -p $DEPLOY_SSH_PORT deploy@$DEPLOY_HOST \
-              'docker version --format "{{.Server.Version}}" && id'
-          '''
-        }
-      }
-    }
-  }
-}
-```
+Guia completo: [docs/producao/deploy-producao.md](../../docs/producao/deploy-producao.md).
