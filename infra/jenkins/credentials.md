@@ -84,6 +84,20 @@ openssl rand -base64 32
 > (`DATABASE_URL`, `REDIS_URL`, `CELERY_*`) são montadas automaticamente com as
 > senhas **URL-encoded**.
 
+### Quais credenciais cada job exige
+
+O `withCredentials` do Jenkins **falha se qualquer ID não existir**. Por isso os
+jobs pedem apenas o que precisam:
+
+- **`softmusic-infra` / `-legacy`**: apenas as **6 obrigatórias** (mysql-root,
+  mysql, redis, rabbitmq, jwt-private-key, grafana-admin-password). **Não**
+  precisa de admin/Asaas para provisionar a infra.
+- **`softmusic-api` / `-ia` / `-web` / `-admin`**: exigem as 6 acima **+**
+  `admin-jwt-private-key`, `admin-bootstrap-password`, `asaas-api-key` e
+  `asaas-webhook-token`. Se ainda não usa Asaas, cadastre esses dois IDs com um
+  valor placeholder (ex.: `disabled`) — o pagamento só é ativado quando a chave
+  real for informada.
+
 ## Jobs e Jenkinsfiles
 
 Todos são *Pipeline* com **"Pipeline script from SCM"** apontando para o

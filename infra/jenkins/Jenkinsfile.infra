@@ -30,17 +30,15 @@ pipeline {
 
     stage('Gerar .env de produção') {
       steps {
+        // Infra só precisa dos segredos de MySQL/Redis/RabbitMQ/JWT/Grafana.
+        // Segredos de app (admin/Asaas) são exigidos pelos jobs api/ia/web/admin.
         withCredentials([
-          string(credentialsId: 'softmusic-mysql-root-password',      variable: 'MYSQL_ROOT_PASSWORD'),
-          string(credentialsId: 'softmusic-mysql-password',           variable: 'MYSQL_PASSWORD'),
-          string(credentialsId: 'softmusic-redis-password',           variable: 'REDIS_PASSWORD'),
-          string(credentialsId: 'softmusic-rabbitmq-password',        variable: 'RABBITMQ_PASSWORD'),
-          string(credentialsId: 'softmusic-jwt-private-key',          variable: 'JWT_PRIVATE_KEY'),
-          string(credentialsId: 'softmusic-admin-jwt-private-key',    variable: 'ADMIN_JWT_PRIVATE_KEY'),
-          string(credentialsId: 'softmusic-admin-bootstrap-password', variable: 'ADMIN_BOOTSTRAP_PASSWORD'),
-          string(credentialsId: 'softmusic-asaas-api-key',            variable: 'ASAAS_API_KEY'),
-          string(credentialsId: 'softmusic-asaas-webhook-token',      variable: 'ASAAS_WEBHOOK_TOKEN'),
-          string(credentialsId: 'softmusic-grafana-admin-password',   variable: 'GRAFANA_ADMIN_PASSWORD'),
+          string(credentialsId: 'softmusic-mysql-root-password',    variable: 'MYSQL_ROOT_PASSWORD'),
+          string(credentialsId: 'softmusic-mysql-password',         variable: 'MYSQL_PASSWORD'),
+          string(credentialsId: 'softmusic-redis-password',         variable: 'REDIS_PASSWORD'),
+          string(credentialsId: 'softmusic-rabbitmq-password',      variable: 'RABBITMQ_PASSWORD'),
+          string(credentialsId: 'softmusic-jwt-private-key',        variable: 'JWT_PRIVATE_KEY'),
+          string(credentialsId: 'softmusic-grafana-admin-password', variable: 'GRAFANA_ADMIN_PASSWORD'),
         ]) {
           sh 'bash infra/docker/scripts/render-env.sh'
         }
@@ -56,6 +54,6 @@ pipeline {
 
   post {
     success { echo 'Infra SoftMusic (MySQL 8.4) provisionada com sucesso.' }
-    failure { echo 'Falha no deploy de infra. Verifique os logs do docker compose acima.' }
+    failure { echo 'Falha no deploy de infra. Veja o ERRO acima: credencial ausente no estágio ".env" ou imagem/compose com problema.' }
   }
 }
