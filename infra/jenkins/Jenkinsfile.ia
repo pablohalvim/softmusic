@@ -9,6 +9,14 @@
 pipeline {
   agent any
 
+  parameters {
+    choice(
+      name: 'IA_COMPUTE',
+      choices: ['gpu', 'cpu'],
+      description: 'gpu = python-ai/worker com runtime NVIDIA (USE_GPU=1) · cpu = só CPU (USE_GPU=0)'
+    )
+  }
+
   options {
     disableConcurrentBuilds()
     buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -19,6 +27,7 @@ pipeline {
     DEPLOY_DIR_HOST = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
     IMAGE_TAG       = "${env.BUILD_NUMBER ?: 'latest'}"
     IMAGE_PREFIX    = 'softmusic'
+    USE_GPU         = "${(params.IA_COMPUTE ?: 'gpu') == 'gpu' ? '1' : '0'}"
     // Object storage (Cloudflare R2). Endpoint = https://<account_id>.r2.cloudflarestorage.com
     S3_ENDPOINT_URL = "${env.S3_ENDPOINT_URL ?: 'https://9939081e6ba254ac6535099e21fbab2a.r2.cloudflarestorage.com'}"
     STORAGE_BUCKET  = "${env.STORAGE_BUCKET ?: 'softmusic'}"
@@ -65,14 +74,17 @@ pipeline {
 
     stage('Deploy IA (aplica migrations)') {
       steps {
+        echo "Modo de compute: ${params.IA_COMPUTE} (USE_GPU=${USE_GPU})"
         sh 'bash infra/docker/scripts/deploy-ia.sh'
       }
     }
   }
 
   post {
-    always  { sh 'docker image prune -f || true' }
-    success { echo 'IA SoftMusic deployada e migrations aplicadas.' }
+    success {
+      sh 'docker image prune -f || true'
+      echo 'IA SoftMusic deployada e migrations aplicadas.'
+    }
     failure { echo 'Falha no deploy da IA. Verifique os logs acima.' }
   }
 }

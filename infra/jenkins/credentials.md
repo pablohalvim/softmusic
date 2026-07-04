@@ -119,7 +119,7 @@ respectivo caminho. **Não há credencial de registry** (build é local).
 | `softmusic-infra` | `infra/jenkins/Jenkinsfile.infra` | MySQL **8.4** + Redis + RabbitMQ + observabilidade |
 | `softmusic-infra-legacy` | `infra/jenkins/Jenkinsfile.infra-legacy` | Igual, com **MariaDB 10.5.28** (CPU antiga) |
 | `softmusic-api` | `infra/jenkins/Jenkinsfile.api` | Builda e sobe a API (BFF) |
-| `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | Builda e sobe python-ai + worker (**aplica migrations**) |
+| `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | Builda e sobe python-ai + worker (**aplica migrations**). Parâmetro **`IA_COMPUTE`**: `gpu` (padrão) ou `cpu`. |
 | `softmusic-web` | `infra/jenkins/Jenkinsfile.web` | Builda e sobe web + landing page (+ nginx) |
 | `softmusic-admin` | `infra/jenkins/Jenkinsfile.admin` | Builda e sobe o painel admin-web (+ nginx) |
 

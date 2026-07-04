@@ -121,7 +121,7 @@ Crie **6 jobs** do tipo *Pipeline* (um por Jenkinsfile), todos com
 | `softmusic-infra` | `infra/jenkins/Jenkinsfile.infra` | Servidor com MySQL **8.4** |
 | `softmusic-infra-legacy` | `infra/jenkins/Jenkinsfile.infra-legacy` | CPU antiga → **MariaDB 10.5.28** |
 | `softmusic-api` | `infra/jenkins/Jenkinsfile.api` | API (BFF) |
-| `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | python-ai + worker (**aplica migrations**) |
+| `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | python-ai + worker (**aplica migrations**). Parâmetro **`IA_COMPUTE`**: `gpu` ou `cpu` |
 | `softmusic-web` | `infra/jenkins/Jenkinsfile.web` | web + landing page |
 | `softmusic-admin` | `infra/jenkins/Jenkinsfile.admin` | painel administrativo (admin-web) |
 
@@ -239,8 +239,10 @@ docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all \
   nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
 ```
 
-Se o teste acima funcionar, re-rode o job **`softmusic-ia`**. Para subir sem GPU
-(emergência), defina `USE_GPU=0` no `.env.production` ou no Environment do job.
+Se o teste acima funcionar, re-rode o job **`softmusic-ia`**. Para subir **sem
+GPU**, no job escolha o parâmetro **`IA_COMPUTE = cpu`** (equivale a
+`USE_GPU=0`). Com **`IA_COMPUTE = gpu`** (padrão) entra o overlay
+`docker-compose.gpu.yml`.
 
 ## E-mail (Resend)
 
