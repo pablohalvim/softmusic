@@ -20,6 +20,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (
     user &&
+    !bandLoading &&
     !PUBLIC_PATHS.has(location.pathname) &&
     location.pathname !== "/bandas" &&
     location.pathname !== "/faturas" &&

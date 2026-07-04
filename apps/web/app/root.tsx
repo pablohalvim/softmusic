@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
-import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+import { Link, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 
 import { AuthGuard } from "./components/AuthGuard";
 import { BandSelector } from "./components/BandSelector";
@@ -42,40 +42,40 @@ function AppHeader() {
 
   return (
     <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-      <a href="/" className="text-xl font-semibold tracking-tight">
+      <Link to="/" className="text-xl font-semibold tracking-tight">
         SoftMusic
-      </a>
+      </Link>
       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-300">
         {user ? (
           <>
             <BandSelector />
-            <a href="/dashboard" className="hover:text-white">
+            <Link to="/dashboard" className="hover:text-white">
               Dashboard
-            </a>
-            <a href="/library" className="hover:text-white">
+            </Link>
+            <Link to="/library" className="hover:text-white">
               Biblioteca
-            </a>
-            <a href="/analyze" className="hover:text-white">
+            </Link>
+            <Link to="/analyze" className="hover:text-white">
               Analisar
-            </a>
-            <a href="/bandas" className="hover:text-white">
+            </Link>
+            <Link to="/bandas" className="hover:text-white">
               Bandas
-            </a>
-            <a href="/faturas" className="hover:text-white">
+            </Link>
+            <Link to="/faturas" className="hover:text-white">
               Faturas
-            </a>
+            </Link>
             <button type="button" onClick={() => void logout()} className="hover:text-white">
               Sair
             </button>
           </>
         ) : (
           <>
-            <a href="/login" className="hover:text-white">
+            <Link to="/login" className="hover:text-white">
               Entrar
-            </a>
-            <a href="/cadastro" className="hover:text-white">
+            </Link>
+            <Link to="/cadastro" className="hover:text-white">
               Cadastro
-            </a>
+            </Link>
           </>
         )}
         <InstallButton className="inline-flex items-center gap-2 rounded-lg border border-indigo-500/50 bg-indigo-500/10 px-3 py-1.5 text-sm font-medium text-indigo-100 transition-colors hover:border-indigo-400 hover:bg-indigo-500/20 hover:text-white" />

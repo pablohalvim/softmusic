@@ -323,7 +323,7 @@ services:
       context: ../..
       dockerfile: infra/docker/Dockerfile.admin-web
       args:
-        VITE_API_URL: ${API_BASE_URL:-http://localhost:8080}
+        VITE_API_URL: ${VITE_ADMIN_API_URL:-${ADMIN_ORIGIN:-http://localhost:5174}/api}
     container_name: softmusic-admin-web
     restart: unless-stopped
     logging: *default-logging

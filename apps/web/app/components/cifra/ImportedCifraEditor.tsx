@@ -1,16 +1,22 @@
 import {
   buildChordRowChars,
   lineContentWidth,
+  lineFromNotasAndLetra,
   lineMaxChordOffset,
   newPlacementId,
   normalizeEditableSheet,
+  parseChordTokens,
+  placementsToChordList,
   sheetFromImportedSections,
+  updateLineNotasAndLetra,
   type ChordPlacement,
   type EditableCifraSheet,
 } from "@softmusic/shared/cifra-layout";
 import { transposeChord } from "@softmusic/shared/chords";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+
+import { CifraLineModal } from "./AddCifraLineModal";
 
 interface ImportedCifraEditorProps {
   songId: string;
@@ -22,6 +28,14 @@ interface ImportedCifraEditorProps {
   onSheetChange?: (sheet: EditableCifraSheet) => void;
   forcedSheet?: EditableCifraSheet | null;
   reloadToken?: number;
+}
+
+interface LineModalTarget {
+  mode: "add" | "edit";
+  sectionId?: string;
+  lineId?: string;
+  initialNotas: string;
+  initialLetra: string;
 }
 
 function placementKey(lineId: string, placementId: string): string {
@@ -40,6 +54,18 @@ interface ActiveChordMenu {
 const chordMenuClass =
   "flex min-w-[9rem] flex-col gap-1.5 rounded-lg border border-slate-600 bg-slate-900 p-2 shadow-xl";
 
+const pencilIcon = (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 20 20"
+    fill="currentColor"
+    className="h-4 w-4"
+    aria-hidden
+  >
+    <path d="m2.695 14.762-1.262 3.155a.5.5 0 0 0 .65.65l3.155-1.262a4 4 0 0 0 1.343-.886L17.5 5.501a2.121 2.121 0 0 0-3-3L3.58 13.42a4 4 0 0 0-.885 1.343Z" />
+  </svg>
+);
+
 export function ImportedCifraEditor({
   songId,
   baseSections,
@@ -56,6 +82,7 @@ export function ImportedCifraEditor({
 
   const [sheet, setSheet] = useState<EditableCifraSheet>(() => sheetFromImportedSections(baseSections));
   const [activeMenu, setActiveMenu] = useState<ActiveChordMenu | null>(null);
+  const [lineModal, setLineModal] = useState<LineModalTarget | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   const selectedKey = activeMenu?.key ?? null;
@@ -98,6 +125,7 @@ export function ImportedCifraEditor({
   useEffect(() => {
     if (!editable) {
       setActiveMenu(null);
+      setLineModal(null);
     }
   }, [editable]);
 
@@ -150,6 +178,12 @@ export function ImportedCifraEditor({
   const toDisplayChord = (chord: string) => transposeChord(chord, transposeSemitones);
   const toOriginalChord = (displayChord: string) =>
     transposeChord(displayChord, -transposeSemitones);
+
+  const lineToDisplayNotas = (
+    line: EditableCifraSheet["sections"][number]["lines"][number],
+  ): string => {
+    return placementsToChordList(line.placements).map(toDisplayChord).join(" ");
+  };
 
   const removePlacement = (sectionId: string, lineId: string, placementId: string) => {
     updateLine(sectionId, lineId, (placements) =>
@@ -326,9 +360,113 @@ export function ImportedCifraEditor({
     addPlacementAt(sectionId, lineId, nextChordOffset(line, sectionLabel));
   };
 
+  const removeLine = (sectionId: string, lineId: string) => {
+    setSheet((current) => ({
+      sections: current.sections
+        .map((section) =>
+          section.id !== sectionId
+            ? section
+            : { ...section, lines: section.lines.filter((line) => line.id !== lineId) },
+        )
+        .filter((section) => section.lines.length > 0),
+    }));
+    setActiveMenu(null);
+  };
+
+  const applyLineModal = (notasInput: string, letraInput: string) => {
+    const lyrics = letraInput;
+    const chords = parseChordTokens(notasInput).map((chord) => toOriginalChord(chord));
+    if (!lyrics.trim() && chords.length === 0) return;
+
+    if (lineModal?.mode === "edit" && lineModal.sectionId && lineModal.lineId) {
+      const { sectionId, lineId } = lineModal;
+      setSheet((current) => ({
+        sections: current.sections.map((section) =>
+          section.id !== sectionId
+            ? section
+            : {
+                ...section,
+                lines: section.lines.map((line) =>
+                  line.id !== lineId
+                    ? line
+                    : updateLineNotasAndLetra(line, { lyrics, chords }),
+                ),
+              },
+        ),
+      }));
+      return;
+    }
+
+    const newLine = lineFromNotasAndLetra({ lyrics, chords });
+
+    setSheet((current) => {
+      if (current.sections.length === 0) {
+        return {
+          sections: [
+            {
+              id: `section-extra-${Date.now()}`,
+              label: "Extra",
+              lines: [newLine],
+            },
+          ],
+        };
+      }
+
+      const sections = [...current.sections];
+      const lastIndex = sections.length - 1;
+      const lastSection = sections[lastIndex]!;
+      sections[lastIndex] = {
+        ...lastSection,
+        lines: [...lastSection.lines, newLine],
+      };
+      return { sections };
+    });
+  };
+
+  const openAddLineModal = () => {
+    setLineModal({ mode: "add", initialNotas: "", initialLetra: "" });
+  };
+
+  const openEditLineModal = (
+    sectionId: string,
+    line: EditableCifraSheet["sections"][number]["lines"][number],
+  ) => {
+    setLineModal({
+      mode: "edit",
+      sectionId,
+      lineId: line.id,
+      initialNotas: lineToDisplayNotas(line),
+      initialLetra: line.lyrics,
+    });
+  };
+
   return (
     <div className="min-w-0 max-w-full space-y-10 font-mono text-[15px] leading-7">
       {renderChordMenu()}
+      <CifraLineModal
+        open={lineModal !== null}
+        mode={lineModal?.mode ?? "add"}
+        initialNotas={lineModal?.initialNotas ?? ""}
+        initialLetra={lineModal?.initialLetra ?? ""}
+        onClose={() => setLineModal(null)}
+        onSave={applyLineModal}
+      />
+
+      {editable ? (
+        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-lg border border-orange-500/30 bg-slate-950/95 px-3 py-2 backdrop-blur-sm">
+          <button
+            type="button"
+            className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-slate-950 transition hover:bg-orange-400"
+            onClick={openAddLineModal}
+          >
+            + Linha (notas + letra)
+          </button>
+          <span className="text-xs text-slate-500">
+            Use o lápis ao lado de cada linha para editar letra e acordes
+          </span>
+        </div>
+      ) : null}
+
       {sheet.sections.map((section) => (
         <section key={section.id}>
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -346,6 +484,18 @@ export function ImportedCifraEditor({
 
               return (
                 <div key={line.id} className="group/line max-w-full">
+                  <div className="mb-1 flex items-center justify-end gap-2">
+                    {editable ? (
+                      <button
+                        type="button"
+                        className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-red-500/50 hover:bg-red-950/30 hover:text-red-300"
+                        onClick={() => removeLine(section.id, line.id)}
+                        title="Remover linha (notas e letra)"
+                      >
+                        Remover linha
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="flex max-w-full items-end gap-2">
                     <div className="relative min-h-6 min-w-0 flex-1 overflow-x-auto overscroll-x-contain pr-3 whitespace-pre leading-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                       {line.placements.map((placement) => {
@@ -372,7 +522,7 @@ export function ImportedCifraEditor({
                                   event.stopPropagation();
                                   openChordMenu(event, section.id, line.id, placement, section.label);
                                 }}
-                                title="Clique para editar"
+                                title="Clique para editar acorde"
                               >
                                 {displayChord}
                               </button>
@@ -400,41 +550,71 @@ export function ImportedCifraEditor({
                     ) : null}
                   </div>
 
-                  {hasLyrics ? (
-                    <p
-                      className={`overflow-x-auto overscroll-x-contain pr-3 whitespace-pre text-left leading-7 text-slate-200 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
-                        editable ? "cursor-text" : "cursor-default"
-                      }`}
-                      onClick={
-                        editable
-                          ? (event) => {
-                              const target = event.currentTarget;
-                              const rect = target.getBoundingClientRect();
-                              const style = window.getComputedStyle(target);
-                              const charWidth = Number.parseFloat(style.fontSize) * 0.6 || 9;
-                              const offset = Math.min(
-                                maxOffset,
-                                Math.max(0, Math.round((event.clientX - rect.left) / charWidth)),
-                              );
-                              addPlacementAt(section.id, line.id, offset);
-                            }
-                          : undefined
-                      }
-                      title={
-                        editable ? "Clique na letra para adicionar acorde nessa posição" : undefined
-                      }
-                    >
-                      {line.lyrics}
-                    </p>
-                  ) : line.placements.length > 0 ? (
-                    <p className="text-xs text-slate-500">Somente acordes</p>
-                  ) : null}
+                  <div className="flex max-w-full items-start gap-2">
+                    {hasLyrics ? (
+                      <p
+                        className={`min-w-0 flex-1 overflow-x-auto overscroll-x-contain pr-1 whitespace-pre text-left leading-7 text-slate-200 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+                          editable ? "cursor-text" : "cursor-default"
+                        }`}
+                        onClick={
+                          editable
+                            ? (event) => {
+                                const target = event.currentTarget;
+                                const rect = target.getBoundingClientRect();
+                                const style = window.getComputedStyle(target);
+                                const charWidth = Number.parseFloat(style.fontSize) * 0.6 || 9;
+                                const offset = Math.min(
+                                  maxOffset,
+                                  Math.max(0, Math.round((event.clientX - rect.left) / charWidth)),
+                                );
+                                addPlacementAt(section.id, line.id, offset);
+                              }
+                            : undefined
+                        }
+                        title={
+                          editable
+                            ? "Clique na letra para posicionar acorde · use o lápis para editar a linha"
+                            : undefined
+                        }
+                      >
+                        {line.lyrics}
+                      </p>
+                    ) : line.placements.length > 0 ? (
+                      <p className="flex-1 text-xs text-slate-500">Somente acordes</p>
+                    ) : (
+                      <p className="flex-1 text-xs italic text-slate-600">Linha vazia</p>
+                    )}
+
+                    {editable ? (
+                      <button
+                        type="button"
+                        className="mt-0.5 shrink-0 rounded-lg border border-slate-600 bg-slate-900 p-1.5 text-slate-400 transition hover:border-orange-500/60 hover:bg-orange-950/30 hover:text-orange-300"
+                        onClick={() => openEditLineModal(section.id, line)}
+                        title="Editar letra e notas desta linha"
+                        aria-label="Editar linha"
+                      >
+                        {pencilIcon}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               );
             })}
           </div>
         </section>
       ))}
+
+      {editable ? (
+        <div className="flex justify-center border-t border-dashed border-slate-800 pt-6">
+          <button
+            type="button"
+            className="rounded-full border border-dashed border-slate-600 px-4 py-2 text-sm text-slate-400 transition hover:border-orange-500/60 hover:bg-orange-500/5 hover:text-orange-400"
+            onClick={openAddLineModal}
+          >
+            + Linha (notas + letra)
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

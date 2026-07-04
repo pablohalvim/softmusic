@@ -5,7 +5,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.billing_service import BillingService
@@ -18,6 +18,7 @@ from app.infrastructure.database.models import (
     BillingAccount,
     PLAN_LIMITS,
     Song,
+    SongStatus,
     User,
 )
 
@@ -175,6 +176,69 @@ class BandService:
             .join(BandSong, BandSong.song_id == Song.id)
             .where(BandSong.band_id == band_id, Song.deleted_at.is_(None))
             .order_by(Song.created_at.desc())
+            .offset(safe_offset)
+            .limit(safe_limit)
+        )
+        return list(result.scalars().all()), total
+
+    async def _user_band_ids(self, user_id: str) -> list[str]:
+        result = await self.session.execute(
+            select(BandMember.band_id).where(
+                BandMember.user_id == user_id,
+                BandMember.status == "active",
+            )
+        )
+        return [row[0] for row in result.all()]
+
+    async def user_can_access_song(self, user_id: str, song_id: str) -> bool:
+        user_band_ids = await self._user_band_ids(user_id)
+        if not user_band_ids:
+            return False
+        result = await self.session.execute(
+            select(BandSong.id)
+            .where(
+                BandSong.band_id.in_(user_band_ids),
+                BandSong.song_id == song_id,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def list_global_library_songs(
+        self, user_id: str, exclude_band_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[Song], int]:
+        user_band_ids = await self._user_band_ids(user_id)
+        if not user_band_ids:
+            return [], 0
+
+        safe_limit = max(1, min(limit, 100))
+        safe_offset = max(0, offset)
+        accessible_songs = (
+            select(BandSong.song_id)
+            .where(BandSong.band_id.in_(user_band_ids))
+            .distinct()
+            .scalar_subquery()
+        )
+        in_current_band = exists(
+            select(BandSong.id).where(
+                BandSong.band_id == exclude_band_id,
+                BandSong.song_id == Song.id,
+            )
+        )
+        filters = (
+            Song.id.in_(accessible_songs),
+            Song.status == SongStatus.COMPLETED.value,
+            Song.deleted_at.is_(None),
+            Song.moderation_status != "blocked",
+            ~in_current_band,
+        )
+
+        count_result = await self.session.execute(select(func.count()).select_from(Song).where(*filters))
+        total = int(count_result.scalar_one())
+        result = await self.session.execute(
+            select(Song)
+            .where(*filters)
+            .order_by(Song.updated_at.desc())
             .offset(safe_offset)
             .limit(safe_limit)
         )

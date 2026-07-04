@@ -33,12 +33,9 @@ fi
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
   --profile infra --profile app up -d --no-deps --force-recreate "${SERVICES[@]}"
 
-# NGINX depende de certificados TLS. Se ainda não emitidos, o container falha —
-# não é fatal para o deploy do front (ver seção TLS do tutorial).
-docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
-  --profile infra --profile app up -d --no-deps nginx \
-  || echo ">> AVISO: nginx não subiu (certificados TLS ainda não emitidos?)."
+# NGINX depende de certificados TLS para HTTPS. Bootstrap HTTP funciona antes dos certs.
+deploy_nginx
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps web
 
-wait_http "http://127.0.0.1:${WEB_PORT:-5173}/"
+wait_http "http://127.0.0.1:80/" || wait_http "http://127.0.0.1:${WEB_PORT:-5173}/"

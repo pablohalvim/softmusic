@@ -4,11 +4,15 @@ import {
   buildChordRowChars,
   collectUniqueDisplayChords,
   legacyLineToPlacements,
+  lineFromNotasAndLetra,
   lineDisplayWidth,
   lineMaxChordOffset,
   normalizeEditableSheet,
+  placementsToChordList,
+  parseChordTokens,
   replaceChordInSheetByDisplay,
   sheetFromImportedSections,
+  updateLineNotasAndLetra,
 } from "./cifra-layout.js";
 
 describe("cifra-layout", () => {
@@ -119,6 +123,36 @@ describe("cifra-layout", () => {
       (stored) => stored,
     );
     expect(next.sections[0]?.lines[0]?.placements.map((p) => p.chord)).toEqual(["G", "F#m", "G"]);
+  });
+
+  it("parses chord tokens from notas field", () => {
+    expect(parseChordTokens("Am G F#m  C")).toEqual(["Am", "G", "F#m", "C"]);
+    expect(parseChordTokens("   ")).toEqual([]);
+  });
+
+  it("builds a line from notas and letra", () => {
+    const line = lineFromNotasAndLetra({
+      chords: ["A", "F#m"],
+      lyrics: "Há uma canção",
+    });
+    expect(line.lyrics).toBe("Há uma canção");
+    expect(line.placements).toHaveLength(2);
+    expect(line.id).toMatch(/^line-/);
+  });
+
+  it("preserves line id when updating notas and letra", () => {
+    const original = lineFromNotasAndLetra({
+      lineId: "line-fixed",
+      chords: ["A"],
+      lyrics: "Antiga",
+    });
+    const updated = updateLineNotasAndLetra(original, {
+      chords: ["G", "D"],
+      lyrics: "Nova letra",
+    });
+    expect(updated.id).toBe("line-fixed");
+    expect(updated.lyrics).toBe("Nova letra");
+    expect(placementsToChordList(updated.placements)).toEqual(["G", "D"]);
   });
 
   it("normalizes sheets missing placements on lines", () => {

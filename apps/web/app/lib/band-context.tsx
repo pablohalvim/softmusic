@@ -20,11 +20,12 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
   const { user, getAccessToken } = useAuth();
   const [bands, setBands] = useState<BandSummary[]>([]);
   const [activeBandId, setActiveBandIdState] = useState<string | null>(loadActiveBandId);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const refreshBands = useCallback(async () => {
     if (!getAccessToken()) {
       setBands([]);
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -57,6 +58,7 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
     } else {
       setBands([]);
       setActiveBandIdState(null);
+      setLoading(false);
     }
   }, [user, refreshBands]);
 

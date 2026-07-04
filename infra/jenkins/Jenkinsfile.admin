@@ -18,7 +18,7 @@ pipeline {
     DEPLOY_DIR_HOST    = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
     IMAGE_TAG          = "${env.BUILD_NUMBER ?: 'latest'}"
     IMAGE_PREFIX       = 'softmusic'
-    ADMIN_VITE_API_URL = "${env.ADMIN_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
+    ADMIN_VITE_API_URL = "${env.ADMIN_VITE_API_URL ?: 'https://admin.softmusic.com.br/api'}"
   }
 
   stages {

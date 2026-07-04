@@ -24,6 +24,44 @@ export function newPlacementId(chord: string, offset: number): string {
   return `p-${offset}-${chord}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+export function newLineId(): string {
+  return `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Acordes separados por espaço (ex.: "Am G F C"). */
+export function parseChordTokens(notas: string): string[] {
+  return notas.trim().split(/\s+/).filter(Boolean);
+}
+
+export function lineFromNotasAndLetra(input: {
+  lyrics: string;
+  chords: string[];
+  lineId?: string;
+}): CifraLineWithPlacements {
+  const lyrics = input.lyrics;
+  return {
+    id: input.lineId ?? newLineId(),
+    lyrics,
+    placements: legacyLineToPlacements(input.chords, lyrics),
+  };
+}
+
+/** Ordem visual dos acordes da linha (por offset). */
+export function placementsToChordList(placements: ChordPlacement[]): string[] {
+  return [...placements].sort((a, b) => a.offset - b.offset).map((p) => p.chord);
+}
+
+export function updateLineNotasAndLetra(
+  line: CifraLineWithPlacements,
+  input: { lyrics: string; chords: string[] },
+): CifraLineWithPlacements {
+  return lineFromNotasAndLetra({
+    lineId: line.id,
+    lyrics: input.lyrics,
+    chords: input.chords,
+  });
+}
+
 export function legacyLineToPlacements(chords: string[], lyrics: string): ChordPlacement[] {
   if (chords.length === 0) return [];
   if (!lyrics.trim()) {

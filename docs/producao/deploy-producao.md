@@ -82,9 +82,10 @@ Se o `jenkins_home` estiver montado de outro caminho no host, ajuste
 
 ### 3. DNS + TLS
 
-Aponte `softmusic.com.br`, `app.softmusic.com.br` e `admin.softmusic.com.br`
-para o IP da VPS. O `nginx`/`certbot` do overlay de produção cuidam do HTTPS
-(ver seção TLS).
+Aponte `softmusic.com.br`, `app.softmusic.com.br`, `admin.softmusic.com.br` e
+`grafana.softmusic.com.br` para o IP da VPS. O `nginx`/`certbot` do overlay de
+produção cuidam do HTTPS (ver seção TLS e
+[Portas, firewall e reverse proxy](./portas-firewall-reverse-proxy.md)).
 
 ## Passo 1 — Credenciais no Jenkins (Secret text)
 
@@ -261,20 +262,27 @@ contrário os e-mails são ignorados (útil em dev).
 ## TLS / NGINX
 
 O overlay `docker-compose.prod.yml` inclui `nginx` (portas 80/443) e um
-`certbot` sidecar. Na primeira vez, emita os certificados (DNS já apontando para
-a VPS):
+`certbot` sidecar. Tutorial completo de firewall, DNS e roteamento:
+[Portas, firewall e reverse proxy](./portas-firewall-reverse-proxy.md).
+
+Na primeira vez, emita os certificados (DNS já apontando para a VPS):
 
 ```bash
 docker run --rm \
   -v softmusic_certbot_certs:/etc/letsencrypt \
   -v softmusic_certbot_www:/var/www/certbot \
   certbot/certbot certonly --webroot -w /var/www/certbot \
-  -d softmusic.com.br -d app.softmusic.com.br -d admin.softmusic.com.br \
+  -d softmusic.com.br -d www.softmusic.com.br \
+  -d app.softmusic.com.br -d admin.softmusic.com.br \
+  -d grafana.softmusic.com.br \
   --email voce@dominio.com --agree-tos --no-eff-email
 ```
 
-O `softmusic-web` sobe o nginx usando esses certificados. Enquanto não houver
-certificado, o `deploy-web.sh` apenas avisa (não falha) que o nginx não subiu.
+Depois re-rode o job **`softmusic-web`** (ou `deploy-web.sh`) para ativar
+`production-ssl.conf` automaticamente via `prepare_nginx_tls()`.
+
+Enquanto não houver certificado, o nginx serve HTTP via `production-http.conf`
+(bootstrap). O deploy não falha se o nginx ainda não tiver TLS.
 
 ## Smoke test manual (opcional)
 
@@ -283,7 +291,7 @@ certificado, o `deploy-web.sh` apenas avisa (não falha) que o nginx não subiu.
 docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
 docker inspect -f '{{.State.Health.Status}}' softmusic-python-ai
 docker inspect -f '{{.State.Health.Status}}' softmusic-api
-curl -sf http://127.0.0.1:5173/ >/dev/null && echo " web OK"
+curl -sf http://127.0.0.1/health/live >/dev/null && echo " nginx/API OK"
 
 cd /dados/jenkins_home/deploy/softmusic
 docker compose -f docker-compose.yml -f docker-compose.prod.yml \
@@ -312,6 +320,7 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 
 ## Referências
 
+- [Portas, firewall e reverse proxy](./portas-firewall-reverse-proxy.md)
 - [Credenciais e jobs do Jenkins](../../infra/jenkins/credentials.md)
 - [Variáveis de ambiente](./variaveis-ambiente.md)
 - [Monitoramento e observabilidade](./monitoramento.md)

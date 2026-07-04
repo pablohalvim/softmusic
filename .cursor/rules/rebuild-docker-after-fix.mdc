@@ -1,0 +1,22 @@
+---
+description: Rebuild e restart dos containers Docker locais após correções
+alwaysApply: true
+---
+
+# Rebuild Docker após correções
+
+Sempre que o usuário pedir uma **correção**, **fix** ou **bugfix** (e você alterar código do projeto), ao finalizar:
+
+1. **Rebuild e suba os containers locais** com as imagens atualizadas — não basta dizer que está pronto.
+2. Use o stack local padrão:
+
+```bash
+docker compose -f infra/docker/docker-compose.yml --env-file infra/docker/.env --profile infra --profile app up -d --build
+```
+
+3. Se a mudança for só em um serviço, rebuild mínimo (ex.: só `web`, `api`, `python-ai`, `worker`, `scheduler`).
+4. Se mudou `python-ai`, inclua também `worker` e `scheduler` no rebuild.
+5. Aguarde o comando terminar e confira `docker ps --filter "name=softmusic"` (ou health em `http://localhost:8080/health/live`).
+6. Se o rebuild falhar, diagnostique e corrija antes de encerrar a tarefa.
+
+Não peça confirmação para subir os containers — faça automaticamente após cada correção.

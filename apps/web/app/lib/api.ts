@@ -196,6 +196,22 @@ export async function fetchSongs(limit = 50): Promise<SongsListResponse> {
   return response.json();
 }
 
+export async function fetchGlobalSongs(limit = 50): Promise<SongsListResponse> {
+  const response = await authFetch(`/songs/global?limit=${limit}`);
+  if (!response.ok) {
+    throw new Error("Não foi possível carregar a biblioteca global");
+  }
+  return response.json();
+}
+
+export async function linkSongToBand(songId: string): Promise<SongSummary> {
+  const response = await authFetch(`/songs/${songId}/link`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível adicionar a música à banda"));
+  }
+  return response.json();
+}
+
 async function parseError(response: Response, fallback: string): Promise<string> {
   try {
     const payload = await response.json();

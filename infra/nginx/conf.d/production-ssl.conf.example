@@ -1,0 +1,164 @@
+# HTTPS — copie para production-ssl.conf após emitir certificados Let's Encrypt:
+#   cp production-ssl.conf.example production-ssl.conf
+# Ou deixe o deploy-web.sh / deploy-admin.sh ativar automaticamente.
+#
+# Certificado multi-domínio (primeiro -d vira o diretório em live/):
+#   /etc/letsencrypt/live/softmusic.com.br/fullchain.pem
+
+ssl_session_cache shared:SSL:10m;
+ssl_session_timeout 1d;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_prefer_server_ciphers off;
+
+# Landing — softmusic.com.br
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name softmusic.com.br www.softmusic.com.br;
+
+    ssl_certificate /etc/letsencrypt/live/softmusic.com.br/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/softmusic.com.br/privkey.pem;
+
+    location / {
+        proxy_pass http://softmusic_lp;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+
+server {
+    listen 80;
+    server_name softmusic.com.br www.softmusic.com.br;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# App — app.softmusic.com.br
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name app.softmusic.com.br;
+
+    ssl_certificate /etc/letsencrypt/live/softmusic.com.br/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/softmusic.com.br/privkey.pem;
+
+    location /api/ {
+        proxy_pass http://softmusic_api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_read_timeout 300s;
+        client_max_body_size 100m;
+    }
+
+    location / {
+        proxy_pass http://softmusic_web;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+
+server {
+    listen 80;
+    server_name app.softmusic.com.br;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# Admin — admin.softmusic.com.br
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name admin.softmusic.com.br;
+
+    ssl_certificate /etc/letsencrypt/live/softmusic.com.br/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/softmusic.com.br/privkey.pem;
+
+    location /api/ {
+        proxy_pass http://softmusic_api/admin/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Connection "";
+        proxy_read_timeout 300s;
+    }
+
+    location / {
+        proxy_pass http://softmusic_admin;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+
+server {
+    listen 80;
+    server_name admin.softmusic.com.br;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# Grafana — grafana.softmusic.com.br
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name grafana.softmusic.com.br;
+
+    ssl_certificate /etc/letsencrypt/live/softmusic.com.br/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/softmusic.com.br/privkey.pem;
+
+    location / {
+        proxy_pass http://softmusic_grafana;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+server {
+    listen 80;
+    server_name grafana.softmusic.com.br;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}

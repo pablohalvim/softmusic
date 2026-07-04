@@ -295,6 +295,66 @@ async def list_songs(
     }
 
 
+@router.get("/songs/global")
+async def list_global_songs(
+    limit: int = 50,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    if not band_id:
+        raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
+    band_service = BandService(session)
+    try:
+        await band_service.require_view_access(band_id, user.id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    songs, total = await band_service.list_global_library_songs(
+        user.id, band_id, limit=limit, offset=offset
+    )
+    return {
+        "items": [_serialize_song(song) for song in songs],
+        "total": total,
+        "limit": max(1, min(limit, 100)),
+        "offset": max(0, offset),
+    }
+
+
+@router.post("/songs/{song_id}/link")
+async def link_song_to_band(
+    song_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    if not band_id:
+        raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
+    band_service = BandService(session)
+    try:
+        await band_service.require_view_access(band_id, user.id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    if not await band_service.user_can_access_song(user.id, song_id):
+        raise HTTPException(status_code=404, detail="Música não encontrada na sua biblioteca global")
+
+    song_result = await session.execute(
+        select(Song).where(Song.id == song_id, Song.deleted_at.is_(None))
+    )
+    song = song_result.scalar_one_or_none()
+    if song is None:
+        raise HTTPException(status_code=404, detail="Música não encontrada")
+    if song.status != SongStatus.COMPLETED.value:
+        raise HTTPException(status_code=400, detail="Apenas músicas analisadas podem ser adicionadas")
+    if song.moderation_status == "blocked":
+        raise HTTPException(status_code=403, detail="Esta música foi bloqueada pela moderação")
+
+    await band_service.link_song(band_id, song_id, user.id)
+    return _serialize_song(song)
+
+
 @router.get("/jobs/{job_id}")
 async def get_job(
     job_id: str,

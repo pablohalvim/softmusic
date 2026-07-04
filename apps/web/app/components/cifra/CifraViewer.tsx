@@ -593,7 +593,9 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                 )
               </>
             ) : null}
-            . Clique nos acordes para editar, use ◀ ▶ para reposicionar, × para remover, ou clique na letra para adicionar.
+            . Clique nos acordes para editar, use ◀ ▶ para reposicionar, × para remover, clique na letra para posicionar acorde, o{" "}
+            <strong className="text-emerald-200">lápis</strong> para editar letra/notas da linha, ou{" "}
+            <strong className="text-emerald-200">+ Linha</strong> para adicionar uma nova.
           </p>
         ) : (
           <p>

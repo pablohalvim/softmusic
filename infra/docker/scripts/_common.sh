@@ -51,7 +51,49 @@ stage_assets() {
   cp -r "${SRC_INFRA}/monitoring"   "${DEPLOY_DIR}/monitoring"
   cp -r "${SRC_INFRA}/nginx"        "${DEPLOY_DIR}/nginx"
 
+  # Configs só para dev local — não publicar na VPS.
+  rm -f "${DEPLOY_DIR}/nginx/conf.d/softmusic.conf"
+
   echo ">> Assets de deploy em ${DEPLOY_DIR} (host: ${DEPLOY_DIR_HOST})"
+}
+
+# -----------------------------------------------------------------------------
+# prepare_nginx_tls: ativa HTTPS quando certificados existem no volume certbot.
+# Remove o bootstrap HTTP (production-http.conf) para evitar conflito de :80.
+# -----------------------------------------------------------------------------
+prepare_nginx_tls() {
+  local nginx_conf="${DEPLOY_DIR}/nginx/conf.d"
+  local ssl_example="${nginx_conf}/production-ssl.conf.example"
+  local ssl_active="${nginx_conf}/production-ssl.conf"
+  local http_bootstrap="${nginx_conf}/production-http.conf"
+  local cert_path="/etc/letsencrypt/live/softmusic.com.br/fullchain.pem"
+
+  if docker run --rm -v softmusic_certbot_certs:/etc/letsencrypt:ro alpine \
+      test -f "${cert_path}" 2>/dev/null; then
+    if [[ ! -f "${ssl_active}" && -f "${ssl_example}" ]]; then
+      cp "${ssl_example}" "${ssl_active}"
+      echo ">> TLS: production-ssl.conf ativado"
+    fi
+    if [[ -f "${http_bootstrap}" ]]; then
+      rm -f "${http_bootstrap}"
+      echo ">> TLS: production-http.conf removido (bootstrap HTTP)"
+    fi
+  else
+    if [[ -f "${ssl_active}" ]]; then
+      echo ">> AVISO: production-ssl.conf presente mas certificado não encontrado — nginx pode falhar" >&2
+    fi
+  fi
+}
+
+# -----------------------------------------------------------------------------
+# deploy_nginx: sobe/recarrega o edge nginx de produção.
+# -----------------------------------------------------------------------------
+deploy_nginx() {
+  local compose_files=(-f docker-compose.yml -f docker-compose.prod.yml)
+  prepare_nginx_tls
+  docker compose "${compose_files[@]}" --env-file "${ENV_FILE}" \
+    --profile infra --profile app up -d --no-deps nginx \
+    || echo ">> AVISO: nginx não subiu (certificados TLS ainda não emitidos?)."
 }
 
 # -----------------------------------------------------------------------------

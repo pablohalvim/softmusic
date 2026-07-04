@@ -20,12 +20,9 @@ COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
   --profile infra --profile app up -d --no-deps --force-recreate admin-web
 
-# NGINX roteia admin.softmusic.com.br -> admin-web. Sobe/recarrega se já houver
-# certificados; não é fatal para o deploy do painel (ver seção TLS do tutorial).
-docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
-  --profile infra --profile app up -d --no-deps nginx \
-  || echo ">> AVISO: nginx não subiu (certificados TLS ainda não emitidos?)."
+# NGINX roteia admin.softmusic.com.br -> admin-web.
+deploy_nginx
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps admin-web
 
-wait_http "http://127.0.0.1:${ADMIN_PORT:-5174}/"
+wait_http "http://127.0.0.1:80/" || wait_http "http://127.0.0.1:${ADMIN_PORT:-5174}/"
