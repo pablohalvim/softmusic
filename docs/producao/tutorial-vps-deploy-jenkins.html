@@ -687,7 +687,7 @@ docker exec -u jenkins jenkins docker compose version</code></pre>
 
     <section id="pipelines">
       <h2>Passo 2 — Criar as pipelines</h2>
-      <p>Crie <strong>5 jobs</strong> do tipo <em>Pipeline</em>, todos com <strong>"Pipeline script from SCM"</strong> apontando para este repositório e o respectivo caminho.</p>
+      <p>Crie <strong>6 jobs</strong> do tipo <em>Pipeline</em>, todos com <strong>"Pipeline script from SCM"</strong> apontando para este repositório e o respectivo caminho.</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -699,10 +699,11 @@ docker exec -u jenkins jenkins docker compose version</code></pre>
             <tr><td><code>softmusic-api</code></td><td><code>infra/jenkins/Jenkinsfile.api</code></td><td>Builda e sobe a API</td></tr>
             <tr><td><code>softmusic-ia</code></td><td><code>infra/jenkins/Jenkinsfile.ia</code></td><td>Builda e sobe IA (<strong>aplica migrations</strong>)</td></tr>
             <tr><td><code>softmusic-web</code></td><td><code>infra/jenkins/Jenkinsfile.web</code></td><td>Builda e sobe web + landing page</td></tr>
+            <tr><td><code>softmusic-admin</code></td><td><code>infra/jenkins/Jenkinsfile.admin</code></td><td>Builda e sobe o painel <strong>admin-web</strong> (opcional)</td></tr>
           </tbody>
         </table>
       </div>
-      <div class="callout callout-info">Crie <strong>infra OU infra-legacy</strong> — não os dois.</div>
+      <div class="callout callout-info">Crie <strong>infra OU infra-legacy</strong> — não os dois. O <code>softmusic-admin</code> é opcional.</div>
 
       <h3>Como os pipelines usam as credenciais</h3>
       <div class="code-wrap">
@@ -767,12 +768,15 @@ stage('Gerar .env de produção') {
         <span class="order-step">3. api</span>
         <span class="order-arrow">→</span>
         <span class="order-step">4. web</span>
+        <span class="order-arrow">→</span>
+        <span class="order-step">5. admin <em>(opcional)</em></span>
       </div>
       <ol class="steps">
         <li><strong>softmusic-infra</strong> (ou <code>-legacy</code>) — provisiona MySQL + Redis + RabbitMQ + toda a observabilidade.</li>
         <li><strong>softmusic-ia</strong> — builda a imagem, sobe python-ai + worker e <strong>aplica as migrations</strong> (<code>alembic upgrade head</code> no entrypoint).</li>
         <li><strong>softmusic-api</strong> — builda e sobe a API.</li>
         <li><strong>softmusic-web</strong> — builda e sobe web + landing page (+ nginx).</li>
+        <li><strong>softmusic-admin</strong> <em>(opcional)</em> — builda e sobe o painel <code>admin-web</code> (+ nginx). Isolado: não recria web/lp.</li>
       </ol>
       <div class="callout callout-danger">
         <strong>Regra de ouro sobre migrations</strong>
@@ -791,8 +795,8 @@ stage('Gerar .env de produção') {
       </ol>
       <div class="callout callout-tip">
         <strong>admin-web</strong>
-        Não é deployado pelas pipelines atuais. Para publicá-lo, crie um <code>Jenkinsfile.admin</code> no mesmo molde
-        e rode o <code>deploy-web.sh</code> com <code>DEPLOY_ADMIN_WEB=1</code>.
+        Tem job próprio: <code>softmusic-admin</code> (<code>infra/jenkins/Jenkinsfile.admin</code>), que builda a imagem
+        e roda <code>deploy-admin.sh</code> — sobe <em>apenas</em> o <code>admin-web</code> (+ nginx), sem recriar web/lp.
       </div>
     </section>
 
@@ -918,8 +922,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml \
           <li><label><input type="checkbox" /> <code>docker exec -u jenkins jenkins docker ps</code> funciona</label></li>
           <li><label><input type="checkbox" /> <code>DEPLOY_DIR_HOST</code> confere com o caminho do <code>jenkins_home</code> no host</label></li>
           <li><label><input type="checkbox" /> Credenciais Secret text cadastradas (IDs exatos)</label></li>
-          <li><label><input type="checkbox" /> 5 jobs (Pipeline from SCM) apontando para <code>infra/jenkins/Jenkinsfile.*</code></label></li>
-          <li><label><input type="checkbox" /> Deploy: infra (8.4 ou legacy) → ia → api → web</label></li>
+          <li><label><input type="checkbox" /> 6 jobs (Pipeline from SCM) apontando para <code>infra/jenkins/Jenkinsfile.*</code></label></li>
+          <li><label><input type="checkbox" /> Deploy: infra (8.4 ou legacy) → ia → api → web → admin <em>(opcional)</em></label></li>
           <li><label><input type="checkbox" /> Observabilidade: 5 containers no ar</label></li>
           <li><label><input type="checkbox" /> TLS: certificados emitidos; nginx servindo os 3 domínios</label></li>
           <li><label><input type="checkbox" /> Smoke: health de python-ai, api e web retornam OK</label></li>

@@ -96,6 +96,7 @@ respectivo caminho. **Não há credencial de registry** (build é local).
 | `softmusic-api` | `infra/jenkins/Jenkinsfile.api` | Builda e sobe a API (BFF) |
 | `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | Builda e sobe python-ai + worker (**aplica migrations**) |
 | `softmusic-web` | `infra/jenkins/Jenkinsfile.web` | Builda e sobe web + landing page (+ nginx) |
+| `softmusic-admin` | `infra/jenkins/Jenkinsfile.admin` | Builda e sobe o painel admin-web (+ nginx) |
 
 ## Ordem do primeiro deploy
 
@@ -105,6 +106,7 @@ respectivo caminho. **Não há credencial de registry** (build é local).
 4. `softmusic-ia` (sobe a IA e **aplica as migrations**)
 5. `softmusic-api`
 6. `softmusic-web`
-7. Emitir certificados TLS e configurar DNS dos domínios
+7. `softmusic-admin` (opcional — painel administrativo)
+8. Emitir certificados TLS e configurar DNS dos domínios
 
 Guia completo: [docs/producao/deploy-producao.md](../../docs/producao/deploy-producao.md).

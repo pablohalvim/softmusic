@@ -1,10 +1,9 @@
 /**
- * SoftMusic — Deploy do Front (web + landing page) + NGINX
+ * SoftMusic — Deploy do painel administrativo (admin-web)
  *
- * Jenkins em container: builda as imagens LOCALMENTE no daemon do host (sem
- * push) e sobe web + lp + nginx. O admin-web NÃO é deployado aqui
- * (DEPLOY_ADMIN_WEB=0) — ele tem job próprio (Jenkinsfile.admin).
- * Segredos: credenciais "Secret text".
+ * Jenkins em container: builda a imagem LOCALMENTE no daemon do host (sem push)
+ * e sobe apenas o admin-web (não toca em web/lp). O nginx é recarregado para
+ * publicar admin.softmusic.com.br. Segredos: credenciais "Secret text".
  */
 pipeline {
   agent any
@@ -15,13 +14,11 @@ pipeline {
   }
 
   environment {
-    DEPLOY_DIR       = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
-    DEPLOY_DIR_HOST  = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
-    IMAGE_TAG        = "${env.BUILD_NUMBER ?: 'latest'}"
-    IMAGE_PREFIX     = 'softmusic'
-    WEB_VITE_API_URL = "${env.WEB_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
-    LP_VITE_APP_URL  = "${env.LP_VITE_APP_URL ?: 'https://app.softmusic.com.br'}"
-    DEPLOY_ADMIN_WEB = '0'
+    DEPLOY_DIR         = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
+    DEPLOY_DIR_HOST    = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
+    IMAGE_TAG          = "${env.BUILD_NUMBER ?: 'latest'}"
+    IMAGE_PREFIX       = 'softmusic'
+    ADMIN_VITE_API_URL = "${env.ADMIN_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
   }
 
   stages {
@@ -29,20 +26,13 @@ pipeline {
       steps { checkout scm }
     }
 
-    stage('Build imagens (local)') {
+    stage('Build imagem (local)') {
       steps {
         sh '''
-          docker build -f infra/docker/Dockerfile.web \
-            --build-arg VITE_API_URL="${WEB_VITE_API_URL}" \
-            --build-arg VITE_PWA_ENABLED=true \
-            -t ${IMAGE_PREFIX}/web:${IMAGE_TAG} \
-            -t ${IMAGE_PREFIX}/web:latest \
-            .
-
-          docker build -f infra/docker/Dockerfile.lp \
-            --build-arg VITE_APP_URL="${LP_VITE_APP_URL}" \
-            -t ${IMAGE_PREFIX}/lp:${IMAGE_TAG} \
-            -t ${IMAGE_PREFIX}/lp:latest \
+          docker build -f infra/docker/Dockerfile.admin-web \
+            --build-arg VITE_API_URL="${ADMIN_VITE_API_URL}" \
+            -t ${IMAGE_PREFIX}/admin-web:${IMAGE_TAG} \
+            -t ${IMAGE_PREFIX}/admin-web:latest \
             .
         '''
       }
@@ -67,16 +57,16 @@ pipeline {
       }
     }
 
-    stage('Deploy Web + LP') {
+    stage('Deploy admin-web') {
       steps {
-        sh 'bash infra/docker/scripts/deploy-web.sh'
+        sh 'bash infra/docker/scripts/deploy-admin.sh'
       }
     }
   }
 
   post {
     always  { sh 'docker image prune -f || true' }
-    success { echo 'Front SoftMusic (web + LP) deployado com sucesso.' }
-    failure { echo 'Falha no deploy do front. Verifique os logs acima.' }
+    success { echo 'Admin SoftMusic (admin-web) deployado com sucesso.' }
+    failure { echo 'Falha no deploy do admin-web. Verifique os logs acima.' }
   }
 }

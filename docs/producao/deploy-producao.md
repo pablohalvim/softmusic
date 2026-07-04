@@ -112,7 +112,7 @@ Detalhes: [Credenciais e jobs do Jenkins](../../infra/jenkins/credentials.md).
 
 ## Passo 2 — Criar os pipelines
 
-Crie **5 jobs** do tipo *Pipeline* (um por Jenkinsfile), todos com
+Crie **6 jobs** do tipo *Pipeline* (um por Jenkinsfile), todos com
 **"Pipeline script from SCM"**:
 
 | Job Jenkins | Script Path | Quando usar |
@@ -122,8 +122,9 @@ Crie **5 jobs** do tipo *Pipeline* (um por Jenkinsfile), todos com
 | `softmusic-api` | `infra/jenkins/Jenkinsfile.api` | API (BFF) |
 | `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | python-ai + worker (**aplica migrations**) |
 | `softmusic-web` | `infra/jenkins/Jenkinsfile.web` | web + landing page |
+| `softmusic-admin` | `infra/jenkins/Jenkinsfile.admin` | painel administrativo (admin-web) |
 
-Crie **infra OU infra-legacy** — não os dois.
+Crie **infra OU infra-legacy** — não os dois. O `softmusic-admin` é opcional.
 
 ## Passo 3 — Deploy (ordem para subir a versão)
 
@@ -134,6 +135,8 @@ Crie **infra OU infra-legacy** — não os dois.
    entra aqui.
 3. **`softmusic-api`** — builda e sobe a API.
 4. **`softmusic-web`** — builda e sobe web + landing page (+ nginx).
+5. **`softmusic-admin`** *(opcional)* — builda e sobe o painel `admin-web`
+   (+ nginx). Isolado: não recria web/lp.
 
 > **Regra de ouro sobre migrations:** o banco só é migrado pelo job
 > **`softmusic-ia`**. A API não aplica migrations. Se um deploy depende de
@@ -149,9 +152,9 @@ O que cada job faz (local, sem SSH nem registry):
 4. `deploy-*.sh` copia compose + configs para `DEPLOY_DIR` e roda
    `docker compose up -d --no-deps --force-recreate <serviço>` + health check.
 
-> O `admin-web` **não** é deployado pelas pipelines atuais (nenhuma builda a
-> imagem). Para publicá-lo, crie um `Jenkinsfile.admin` no mesmo molde e rode o
-> `deploy-web.sh` com `DEPLOY_ADMIN_WEB=1`.
+> O `admin-web` tem job próprio (**`softmusic-admin`** →
+> `infra/jenkins/Jenkinsfile.admin` → `deploy-admin.sh`), que builda a imagem e
+> sobe **apenas** o `admin-web` (+ nginx), sem recriar web/lp.
 
 ## Observabilidade
 

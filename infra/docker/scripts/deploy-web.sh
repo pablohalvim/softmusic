@@ -7,7 +7,9 @@ set -euo pipefail
 #
 # Toggles:
 #   DEPLOY_LP=1         (default) também sobe a landing page
-#   DEPLOY_ADMIN_WEB=0  (default) NÃO sobe o admin-web (nenhum pipeline builda)
+#   DEPLOY_ADMIN_WEB=0  (default) NÃO sobe o admin-web aqui — ele tem job próprio
+#                       (Jenkinsfile.admin -> deploy-admin.sh). Deixe em 1 apenas
+#                       se quiser subir tudo pelo mesmo job.
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
