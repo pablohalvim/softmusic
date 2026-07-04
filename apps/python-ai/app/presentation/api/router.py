@@ -5,7 +5,7 @@ import mimetypes
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -460,7 +460,7 @@ async def get_chords(
     analysis = await get_analysis(song_id, session, user, band_id)
     service = AnalysisService(session)
     song = await service.get_song(song_id)
-    imported = service.get_cifra_club_sheet(song_id)
+    imported = await service.get_cifra_club_sheet(song_id)
     if imported:
         key = imported.get("key") or analysis["harmony"]["key"]
         mode = imported.get("mode") or analysis["harmony"]["mode"]
@@ -513,15 +513,16 @@ async def get_waveform(
     band_id: str | None = Depends(get_band_id),
 ) -> dict[str, Any]:
     await _ensure_song_access(session, band_id, user.id, song_id)
-    from pathlib import Path
-
     from app.application.services.audio_pipeline import write_waveform_peaks
 
     service = AnalysisService(session)
     song = await service.get_song(song_id)
     if song is None or not song.file_path:
         raise HTTPException(status_code=404, detail="Song audio not found")
-    peaks = write_waveform_peaks(Path(song.file_path))
+    source_path = await service.ensure_source_local(song)
+    if source_path is None:
+        raise HTTPException(status_code=404, detail="Song audio not found")
+    peaks = write_waveform_peaks(source_path)
     return {"song_id": song_id, "peaks": peaks}
 
 
@@ -531,17 +532,21 @@ async def get_audio(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
     band_id: str | None = Depends(get_band_id),
-) -> FileResponse:
+):
     await _ensure_song_access(session, band_id, user.id, song_id)
     service = AnalysisService(session)
     song = await service.get_song(song_id)
     if song is None:
         raise HTTPException(status_code=404, detail="Song not found")
 
-    audio_path = service.resolve_playback_path(song_id, song)
-    if audio_path is None:
+    target = await service.get_playback_target(song_id, song)
+    if target is None:
         raise HTTPException(status_code=404, detail="Song audio not found")
+    if target.kind == "remote" and target.url:
+        # Redireciona para URL pré-assinada do R2 (offload de banda da VPS).
+        return RedirectResponse(url=target.url, status_code=302)
 
+    audio_path = target.path
     media_type, _ = mimetypes.guess_type(str(audio_path))
     if not media_type:
         media_type = "audio/wav" if audio_path.suffix.lower() == ".wav" else "application/octet-stream"
@@ -567,7 +572,7 @@ async def get_stems(
     if song is None:
         raise HTTPException(status_code=404, detail="Song not found")
 
-    manifest = service.get_stems_manifest(song_id)
+    manifest = await service.get_stems_manifest(song_id)
     if manifest is None:
         return {
             "song_id": song_id,
@@ -585,17 +590,20 @@ async def get_stem_audio(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
     band_id: str | None = Depends(get_band_id),
-) -> FileResponse:
+):
     await _ensure_song_access(session, band_id, user.id, song_id)
     service = AnalysisService(session)
     song = await service.get_song(song_id)
     if song is None:
         raise HTTPException(status_code=404, detail="Song not found")
 
-    stem_path = service.resolve_stem_path(song_id, stem_name)
-    if stem_path is None:
+    target = await service.get_stem_target(song_id, stem_name)
+    if target is None:
         raise HTTPException(status_code=404, detail="Stem audio not found")
+    if target.kind == "remote" and target.url:
+        return RedirectResponse(url=target.url, status_code=302)
 
+    stem_path = target.path
     media_type, _ = mimetypes.guess_type(str(stem_path))
     if media_type is None:
         media_type = "audio/wav" if stem_path.suffix.lower() == ".wav" else "application/octet-stream"

@@ -19,6 +19,9 @@ pipeline {
     DEPLOY_DIR_HOST = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
     IMAGE_TAG       = "${env.BUILD_NUMBER ?: 'latest'}"
     IMAGE_PREFIX    = 'softmusic'
+    // Object storage (Cloudflare R2). Endpoint = https://<account_id>.r2.cloudflarestorage.com
+    S3_ENDPOINT_URL = "${env.S3_ENDPOINT_URL ?: 'https://9939081e6ba254ac6535099e21fbab2a.r2.cloudflarestorage.com'}"
+    STORAGE_BUCKET  = "${env.STORAGE_BUCKET ?: 'softmusic'}"
   }
 
   stages {
@@ -50,6 +53,9 @@ pipeline {
           string(credentialsId: 'softmusic-asaas-api-key',            variable: 'ASAAS_API_KEY'),
           string(credentialsId: 'softmusic-asaas-webhook-token',      variable: 'ASAAS_WEBHOOK_TOKEN'),
           string(credentialsId: 'softmusic-grafana-admin-password',   variable: 'GRAFANA_ADMIN_PASSWORD'),
+          string(credentialsId: 'softmusic-r2-access-key-id',         variable: 'S3_ACCESS_KEY_ID'),
+          string(credentialsId: 'softmusic-r2-secret-access-key',     variable: 'S3_SECRET_ACCESS_KEY'),
+          string(credentialsId: 'softmusic-resend-api-key',          variable: 'RESEND_API_KEY'),
         ]) {
           sh 'bash infra/docker/scripts/render-env.sh'
         }

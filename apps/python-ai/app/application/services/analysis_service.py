@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import secrets
-import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -31,7 +30,7 @@ from app.infrastructure.cifra.cifraclub_importer import CifraClubImporter, is_ci
 from app.infrastructure.ml.demucs_separator import DemucsSeparator
 from app.infrastructure.download.resolver import SourceDownloadResolver
 from app.infrastructure.jobs.cancellation import clear_cancel, is_cancelled, request_cancel
-from app.infrastructure.storage.factory import get_storage
+from app.infrastructure.storage.service import PlaybackTarget, StorageService
 from app.logging import logger
 
 
@@ -42,7 +41,7 @@ def _new_id(prefix: str) -> str:
 class AnalysisService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
-        self.storage = get_storage()
+        self.storage = StorageService()
         self.pipeline = AudioPipeline()
         self.downloader = SourceDownloadResolver()
 
@@ -385,9 +384,7 @@ class AnalysisService:
             if song is None:
                 return
 
-        song_dir = Path(self.storage.base_path) / song_id  # type: ignore[attr-defined]
-        if song_dir.exists():
-            shutil.rmtree(song_dir, ignore_errors=True)
+        await self.storage.delete_song(song_id)
 
         song.deleted_at = datetime.now(UTC)
         await self.session.commit()
@@ -453,7 +450,12 @@ class AnalysisService:
             )
             await self._raise_if_cancelled(job_id)
         elif not source_path.exists():
-            raise FileNotFoundError(f"Arquivo de áudio não encontrado: {source_path}")
+            # Origem local ausente (ex.: offload para o R2): tenta restaurar.
+            restored = await self.storage.ensure_source_local(song.id, song.file_path)
+            if restored is not None:
+                source_path = restored
+            else:
+                raise FileNotFoundError(f"Arquivo de áudio não encontrado: {source_path}")
 
         job.stage = "separate_stems"
         job.progress = 25
@@ -522,19 +524,53 @@ class AnalysisService:
         await self.session.commit()
         clear_cancel(job.id)
 
+        # Sobe os artefatos (áudio, stems, cifra) para o storage durável (R2).
+        # Falha aqui não invalida a análise já persistida — apenas loga.
+        try:
+            await self.storage.persist_song_artifacts(song.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("storage_persist_failed", song_id=song.id, error=str(exc))
+
         logger.info("analysis_completed", song_id=song.id, job_id=job.id)
         return payload
 
-    def get_stems_manifest(self, song_id: str) -> dict[str, Any] | None:
-        stems_dir = Path(self.storage.base_path) / song_id / "stems"  # type: ignore[attr-defined]
-        manifest = DemucsSeparator.load_manifest(stems_dir)
-        if manifest is None:
-            return None
-        return {
-            "song_id": song_id,
-            "separated": True,
-            **manifest,
-        }
+    async def get_stems_manifest(self, song_id: str) -> dict[str, Any] | None:
+        # Restaura o manifest do R2 se ausente localmente (após offload).
+        manifest_path = await self.storage.ensure_local_file(song_id, "stems/manifest.json")
+        if manifest_path is None:
+            # Fallback: manifest só existe localmente (modo local puro).
+            stems_dir = Path(self.storage.base_path) / song_id / "stems"
+            manifest = DemucsSeparator.load_manifest(stems_dir)
+            if manifest is None:
+                return None
+            return {"song_id": song_id, "separated": True, **manifest}
+
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        stems = []
+        for item in payload.get("stems", []):
+            file = str(item.get("file", ""))
+            stems.append({**item, "available": await self.storage.stem_available(song_id, file)})
+        payload["stems"] = stems
+        return {"song_id": song_id, "separated": True, **payload}
+
+    async def get_playback_target(self, song_id: str, song: Song) -> PlaybackTarget | None:
+        return await self.storage.playback_target(song_id, song.file_path)
+
+    async def get_stem_target(self, song_id: str, stem_name: str) -> PlaybackTarget | None:
+        manifest_path = await self.storage.ensure_local_file(song_id, "stems/manifest.json")
+        if manifest_path is None:
+            stem_path = self.resolve_stem_path(song_id, stem_name)
+            return PlaybackTarget(kind="local", path=stem_path) if stem_path else None
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for item in payload.get("stems", []):
+            if item.get("name") != stem_name:
+                continue
+            file = str(item.get("file", ""))
+            return await self.storage.stem_target(song_id, file) if file else None
+        return None
+
+    async def ensure_source_local(self, song: Song) -> Path | None:
+        return await self.storage.ensure_source_local(song.id, song.file_path)
 
     def resolve_stem_path(self, song_id: str, stem_name: str) -> Path | None:
         stems_dir = Path(self.storage.base_path) / song_id / "stems"  # type: ignore[attr-defined]
@@ -593,6 +629,9 @@ class AnalysisService:
             logger.warning("cifra_club_import_failed", song_id=song_id, url=url, error=str(exc))
             return None
 
-    def get_cifra_club_sheet(self, song_id: str) -> dict[str, Any] | None:
-        path = Path(self.storage.base_path) / song_id / "cifra_club.json"  # type: ignore[attr-defined]
+    async def get_cifra_club_sheet(self, song_id: str) -> dict[str, Any] | None:
+        # Restaura do R2 se ausente localmente (após offload).
+        path = await self.storage.ensure_local_file(song_id, "cifra_club.json")
+        if path is None:
+            path = Path(self.storage.base_path) / song_id / "cifra_club.json"
         return CifraClubImporter.load(path)

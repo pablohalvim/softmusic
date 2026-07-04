@@ -161,7 +161,13 @@ export async function proxyBinary(path: string, request?: Request): Promise<Resp
     headers.set("Range", range);
   }
 
-  const response = await fetch(`${pythonAiUrl}/internal${path}`, { headers });
+  // redirect:"manual" para NÃO seguir o 302 do python-ai internamente. Assim o
+  // browser é redirecionado direto para a URL pré-assinada do R2 (offload de
+  // banda da VPS). Em modo local o python-ai responde 200 e seguimos normal.
+  const response = await fetch(`${pythonAiUrl}/internal${path}`, {
+    headers,
+    redirect: "manual",
+  });
   const responseHeaders = new Headers();
   const origin = request?.headers.get("Origin");
   const allowed = allowedOrigins();
@@ -169,6 +175,14 @@ export async function proxyBinary(path: string, request?: Request): Promise<Resp
     "Access-Control-Allow-Origin",
     origin && allowed.includes(origin) ? origin : allowed[0],
   );
+
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get("Location");
+    if (location) {
+      responseHeaders.set("Location", location);
+      return new Response(null, { status: response.status, headers: responseHeaders });
+    }
+  }
 
   for (const name of BINARY_FORWARD_HEADERS) {
     const value = response.headers.get(name);

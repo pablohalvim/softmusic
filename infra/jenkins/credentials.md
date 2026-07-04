@@ -71,6 +71,9 @@ como **Secret text** (evita o problema de upload de "Secret file"). O
 | `softmusic-admin-bootstrap-password` | Recomendada | Senha do admin inicial |
 | `softmusic-asaas-api-key` | Se usar Asaas | API key do Asaas |
 | `softmusic-asaas-webhook-token` | Se usar Asaas | Token do webhook Asaas |
+| `softmusic-r2-access-key-id` | Se usar R2 | Access Key ID do token S3 do Cloudflare R2 |
+| `softmusic-r2-secret-access-key` | Se usar R2 | Secret Access Key do token S3 do Cloudflare R2 |
+| `softmusic-resend-api-key` | Recomendada | API key do Resend (e-mail transacional) |
 
 Gerar senha/chave forte:
 
@@ -97,6 +100,14 @@ jobs pedem apenas o que precisam:
   `asaas-webhook-token`. Se ainda não usa Asaas, cadastre esses dois IDs com um
   valor placeholder (ex.: `disabled`) — o pagamento só é ativado quando a chave
   real for informada.
+- **`softmusic-ia`** exige **também** `r2-access-key-id` e
+  `r2-secret-access-key` (storage das músicas no Cloudflare R2). O endpoint do R2
+  (`S3_ENDPOINT_URL`) e o bucket (`STORAGE_BUCKET`) ficam no `Jenkinsfile.ia`
+  como *Environment* (não são segredos). Só o job da IA sobe `python-ai`/`worker`
+  — os únicos serviços que falam com o R2.
+- **`softmusic-api` / `-ia` / `-web` / `-admin`** também pedem
+  `resend-api-key` para o `.env` de produção (o `python-ai` envia convites e
+  cobrança). Sem ela, os e-mails são ignorados silenciosamente.
 
 ## Jobs e Jenkinsfiles
 

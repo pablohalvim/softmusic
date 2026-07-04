@@ -49,6 +49,7 @@ pipeline {
           string(credentialsId: 'softmusic-asaas-api-key',            variable: 'ASAAS_API_KEY'),
           string(credentialsId: 'softmusic-asaas-webhook-token',      variable: 'ASAAS_WEBHOOK_TOKEN'),
           string(credentialsId: 'softmusic-grafana-admin-password',   variable: 'GRAFANA_ADMIN_PASSWORD'),
+          string(credentialsId: 'softmusic-resend-api-key',          variable: 'RESEND_API_KEY'),
         ]) {
           sh 'bash infra/docker/scripts/render-env.sh'
         }

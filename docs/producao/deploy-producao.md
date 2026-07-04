@@ -165,6 +165,69 @@ verifica no fim se todos os containers subiram. Detalhes em
 
 Grafana atende em `GRAFANA_ROOT_URL` (ex.: `https://grafana.softmusic.com.br`).
 
+## Storage das músicas (Cloudflare R2)
+
+As músicas (upload/áudio baixado, stems do Demucs, cifra) são processadas em
+disco local (o Demucs precisa de filesystem) e, ao concluir a análise, os
+artefatos sobem para um bucket **S3-compatível** (Cloudflare R2) em
+`<song_id>/...`. O serving usa **URLs pré-assinadas** (redirect 302), tirando
+banda/disco da VPS; com `STORAGE_DELETE_LOCAL_AFTER_UPLOAD=true`, a cópia local
+é apagada após o upload e restaurada sob demanda quando necessário. Se as
+credenciais S3 não estiverem presentes, o sistema continua 100% em disco local
+(`STORAGE_PROVIDER=local`) — o R2 é **opt-in**.
+
+Passos (uma vez):
+
+1. **Bucket dedicado**: no dashboard Cloudflare → R2 → *Create bucket* → nome
+   `softmusic`. (Pode reusar outro bucket com `STORAGE_PREFIX=softmusic`, mas o
+   dedicado é mais limpo e não custa nada a mais.)
+2. **Token S3**: R2 → *Manage R2 API Tokens* → *Create API token* com permissão
+   *Object Read & Write* no bucket `softmusic`. Guarde o **Access Key ID** e o
+   **Secret Access Key**. O endpoint S3 é
+   `https://<account_id>.r2.cloudflarestorage.com`.
+3. **Credenciais no Jenkins** (Secret text): `softmusic-r2-access-key-id` e
+   `softmusic-r2-secret-access-key`. O endpoint/bucket ficam no `Jenkinsfile.ia`
+   (Environment). Só o job **`softmusic-ia`** precisa deles (é quem sobe
+   `python-ai`/`worker`).
+4. **CORS do bucket** (crítico p/ tocar no navegador): o front baixa o áudio via
+   `fetch` autenticado e segue o redirect 302 para o R2, então o bucket precisa
+   liberar a origem do app. Em R2 → bucket `softmusic` → *Settings* → *CORS
+   policy*:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://app.softmusic.com.br"],
+    "AllowedMethods": ["GET"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["Content-Length", "Content-Range", "Accept-Ranges"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+> Sem o CORS, o download do áudio falha no navegador (o back-end e o deploy
+> funcionam, mas o player não carrega). O acesso continua protegido: a permissão
+> da música é checada no `python-ai` **antes** de gerar a URL pré-assinada, que
+> expira em `STORAGE_PRESIGN_EXPIRES` segundos.
+
+## E-mail (Resend)
+
+Convites de banda, avisos de cobrança e campanhas do admin usam o
+`EmailService` do `python-ai`. Em produção o provedor preferido é o
+[Resend](https://resend.com) (API HTTP — não precisa abrir porta SMTP na VPS).
+
+1. Crie uma API key em [resend.com/api-keys](https://resend.com/api-keys).
+2. Adicione e verifique o domínio de envio (ex.: `softmusic.com.br` ou subdomínio
+   `notify.softmusic.com.br`) — copie os registros DNS (SPF/DKIM) para o
+   Cloudflare.
+3. Cadastre no Jenkins: `softmusic-resend-api-key` (Secret text).
+4. Ajuste `EMAIL_FROM` no `render-env.sh` / `.env.production` se necessário
+   (ex.: `SoftMusic <noreply@softmusic.com.br>`).
+
+Sem `RESEND_API_KEY`, o sistema tenta SMTP (`SMTP_HOST`…) se configurado; caso
+contrário os e-mails são ignorados (útil em dev).
+
 ## TLS / NGINX
 
 O overlay `docker-compose.prod.yml` inclui `nginx` (portas 80/443) e um

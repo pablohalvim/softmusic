@@ -60,13 +60,15 @@ Referência completa de configuração por serviço. Copie `infra/docker/.env.ex
 | `CELERY_CONCURRENCY` | Não | `2` | Workers Celery por processo |
 | `CELERY_TASK_SOFT_TIME_LIMIT` | Não | `3600` | Soft limit em segundos |
 | `CELERY_TASK_TIME_LIMIT` | Não | `3900` | Hard limit em segundos |
-| `STORAGE_PROVIDER` | Sim | `local` | `local`, `s3`, `gcs`, `azure` |
-| `STORAGE_BUCKET` | Sim (cloud) | `softmusic-uploads` | Nome do bucket |
-| `STORAGE_REGION` | Sim (S3) | — | Região AWS/GCP |
-| `STORAGE_ENDPOINT` | Não | — | Endpoint custom (R2, MinIO) |
-| `STORAGE_ACCESS_KEY` | Sim (cloud) | — | Access key |
-| `STORAGE_SECRET_KEY` | Sim (cloud) | — | Secret key |
-| `STORAGE_PUBLIC_URL` | Não | — | CDN base URL para assets |
+| `STORAGE_PROVIDER` | Sim | `local` | `local` (disco/volume) ou `s3` (S3-compatível/R2) |
+| `STORAGE_BUCKET` | Sim (cloud) | `softmusic` | Nome do bucket |
+| `STORAGE_PREFIX` | Não | — | Prefixo das chaves (só se compartilhar bucket) |
+| `STORAGE_PRESIGN_EXPIRES` | Não | `3600` | Validade (s) das URLs pré-assinadas |
+| `STORAGE_DELETE_LOCAL_AFTER_UPLOAD` | Não | `false` | Apaga cópia local após subir p/ o R2 (offload) |
+| `S3_ENDPOINT_URL` | Sim (S3/R2) | — | `https://<account_id>.r2.cloudflarestorage.com` |
+| `S3_REGION` | Não | `auto` | Região (R2 usa `auto`) |
+| `S3_ACCESS_KEY_ID` | Sim (S3/R2) | — | Access Key ID do token S3 do R2 |
+| `S3_SECRET_ACCESS_KEY` | Sim (S3/R2) | — | Secret Access Key do token S3 do R2 |
 | `MODELS_CACHE_DIR` | Não | `/models` | Cache local de modelos |
 | `DEMUCS_MODEL` | Não | `htdemucs` | Modelo Demucs v4 |
 | `WHISPER_MODEL` | Não | `large-v3` | Modelo Whisper (lyrics only) |
@@ -175,7 +177,7 @@ JWT_REFRESH_EXPIRES_IN=7d
 # Python AI
 PYTHON_AI_PORT=8000
 STORAGE_PROVIDER=local
-STORAGE_BUCKET=softmusic-uploads
+STORAGE_BUCKET=softmusic
 MODELS_CACHE_DIR=/models
 CELERY_CONCURRENCY=2
 ANALYSIS_JSON_VERSION=1.0.0
@@ -203,8 +205,12 @@ JWT_ALGORITHM=RS256
 # JWT_PRIVATE_KEY e JWT_PUBLIC_KEY via secret manager
 
 STORAGE_PROVIDER=s3
-STORAGE_BUCKET=softmusic-prod
-STORAGE_REGION=us-east-1
+STORAGE_BUCKET=softmusic
+S3_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_ACCESS_KEY_ID=<r2-access-key-id>
+S3_SECRET_ACCESS_KEY=<r2-secret-access-key>
+STORAGE_DELETE_LOCAL_AFTER_UPLOAD=true
 
 REDIS_PASSWORD=<strong-password>
 MYSQL_ROOT_PASSWORD=<strong-password>

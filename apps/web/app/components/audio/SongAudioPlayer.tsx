@@ -196,7 +196,7 @@ export function SongAudioPlayer({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium text-slate-100">Áudio</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-500">Salvo no storage local</span>
+          <span className="text-xs text-slate-500">Áudio protegido</span>
           {isFixedFooter ? (
             <button
               type="button"
