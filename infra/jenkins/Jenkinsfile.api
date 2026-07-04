@@ -28,8 +28,7 @@ pipeline {
     stage('Build imagem (local)') {
       steps {
         sh '''
-          . infra/docker/scripts/enable-docker-buildkit.sh
-          docker build -f infra/docker/Dockerfile.api \
+          bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.api \
             -t ${IMAGE_PREFIX}/api:${IMAGE_TAG} \
             -t ${IMAGE_PREFIX}/api:latest \
             .
@@ -65,8 +64,10 @@ pipeline {
   }
 
   post {
-    always  { sh 'docker image prune -f || true' }
-    success { echo 'API SoftMusic deployada com sucesso.' }
+    success {
+      sh 'docker image prune -f || true'
+      echo 'API SoftMusic deployada com sucesso.'
+    }
     failure { echo 'Falha no deploy da API. Verifique os logs acima.' }
   }
 }

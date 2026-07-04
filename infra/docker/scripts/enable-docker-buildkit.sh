@@ -7,8 +7,8 @@ if docker buildx version >/dev/null 2>&1; then
   export COMPOSE_DOCKER_CLI_BUILD=1
   echo ">> Docker BuildKit ativado (buildx OK)"
 else
-  unset DOCKER_BUILDKIT
+  export DOCKER_BUILDKIT=0
   unset COMPOSE_DOCKER_CLI_BUILD
-  echo ">> AVISO: buildx indisponível — usando legacy builder."
+  echo ">> Legacy builder (DOCKER_BUILDKIT=0) — buildx indisponível."
   echo ">> Se falhar com 'lease does not exist', rode na VPS: sudo systemctl restart docker"
 fi

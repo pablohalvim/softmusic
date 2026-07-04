@@ -32,16 +32,14 @@ pipeline {
     stage('Build imagens (local)') {
       steps {
         sh '''
-          . infra/docker/scripts/enable-docker-buildkit.sh
-
-          docker build -f infra/docker/Dockerfile.web \
+          bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.web \
             --build-arg VITE_API_URL="${WEB_VITE_API_URL}" \
             --build-arg VITE_PWA_ENABLED=true \
             -t ${IMAGE_PREFIX}/web:${IMAGE_TAG} \
             -t ${IMAGE_PREFIX}/web:latest \
             .
 
-          docker build -f infra/docker/Dockerfile.lp \
+          bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.lp \
             --build-arg VITE_APP_URL="${LP_VITE_APP_URL}" \
             -t ${IMAGE_PREFIX}/lp:${IMAGE_TAG} \
             -t ${IMAGE_PREFIX}/lp:latest \
