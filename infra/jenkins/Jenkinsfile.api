@@ -28,7 +28,7 @@ pipeline {
     stage('Build imagem (local)') {
       steps {
         sh '''
-          export DOCKER_BUILDKIT=1
+          . infra/docker/scripts/enable-docker-buildkit.sh
           docker build -f infra/docker/Dockerfile.api \
             -t ${IMAGE_PREFIX}/api:${IMAGE_TAG} \
             -t ${IMAGE_PREFIX}/api:latest \

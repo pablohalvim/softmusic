@@ -32,8 +32,7 @@ pipeline {
     stage('Build imagens (local)') {
       steps {
         sh '''
-          export DOCKER_BUILDKIT=1
-          export COMPOSE_DOCKER_CLI_BUILD=1
+          . infra/docker/scripts/enable-docker-buildkit.sh
 
           docker build -f infra/docker/Dockerfile.web \
             --build-arg VITE_API_URL="${WEB_VITE_API_URL}" \

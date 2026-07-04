@@ -41,7 +41,7 @@ pipeline {
     stage('Build imagem (local)') {
       steps {
         sh '''
-          export DOCKER_BUILDKIT=1
+          . infra/docker/scripts/enable-docker-buildkit.sh
           docker build -f infra/docker/Dockerfile.python-ai \
             -t ${IMAGE_PREFIX}/python-ai:${IMAGE_TAG} \
             -t ${IMAGE_PREFIX}/python-ai:latest \
