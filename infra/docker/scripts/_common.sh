@@ -80,3 +80,20 @@ wait_http() {
   echo ">> AVISO: ${url} não respondeu a tempo. Verifique 'docker logs'."
   return 0
 }
+
+# -----------------------------------------------------------------------------
+# wait_container_healthy NAME [tentativas]: aguarda healthcheck do container.
+# -----------------------------------------------------------------------------
+wait_container_healthy() {
+  local name="$1" tries="${2:-30}" i status
+  for (( i = 0; i < tries; i++ )); do
+    status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$name" 2>/dev/null || true)"
+    if [[ "$status" == "healthy" ]]; then
+      echo ">> OK: ${name} healthy"
+      return 0
+    fi
+    sleep 2
+  done
+  echo ">> AVISO: ${name} não ficou healthy a tempo. Verifique 'docker logs ${name}'."
+  return 0
+}

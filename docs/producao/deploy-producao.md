@@ -281,8 +281,8 @@ certificado, o `deploy-web.sh` apenas avisa (não falha) que o nginx não subiu.
 ```bash
 # na VPS (host)
 docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
-curl -sf http://127.0.0.1:8000/health && echo " python-ai OK"
-curl -sf http://127.0.0.1:8080/health/live && echo " api OK"
+docker inspect -f '{{.State.Health.Status}}' softmusic-python-ai
+docker inspect -f '{{.State.Health.Status}}' softmusic-api
 curl -sf http://127.0.0.1:5173/ >/dev/null && echo " web OK"
 
 cd /dados/jenkins_home/deploy/softmusic
@@ -308,6 +308,7 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 | MySQL em restart loop | CPU incompatível com MySQL 8.4 | Usar `softmusic-infra-legacy` |
 | 502 nos domínios | nginx sem certificado / app não subiu | Emitir TLS; ver `docker logs softmusic-nginx` |
 | `failed to discover GPU vendor from CDI` | Toolkit NVIDIA / CDI não configurado no host | Seguir seção **GPU** acima; testar `docker run --runtime=nvidia … nvidia-smi` |
+| `Bind for 0.0.0.0:8080 failed: port is already allocated` | Jenkins usa :8080 no host; API tentou publicar a mesma porta | Overlay prod remove bind da API (`ports: !reset []`); re-rodar **`softmusic-api`** |
 
 ## Referências
 

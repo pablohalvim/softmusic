@@ -21,4 +21,4 @@ docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps api
 
-wait_http "http://127.0.0.1:${API_PORT:-8080}/health/live"
+wait_container_healthy softmusic-api
