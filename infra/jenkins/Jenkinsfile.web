@@ -20,7 +20,7 @@ pipeline {
     IMAGE_TAG        = "${env.BUILD_NUMBER ?: 'latest'}"
     IMAGE_PREFIX     = 'softmusic'
     WEB_VITE_API_URL = "${env.WEB_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
-    LP_VITE_APP_URL  = "${env.LP_VITE_APP_URL ?: 'https://app.softmusic.com.br'}"
+    LP_VITE_APP_URL  = "${env.LP_VITE_APP_URL ?: 'https://softmusic.com.br'}"
     DEPLOY_ADMIN_WEB = '0'
   }
 
@@ -32,6 +32,9 @@ pipeline {
     stage('Build imagens (local)') {
       steps {
         sh '''
+          export DOCKER_BUILDKIT=1
+          export COMPOSE_DOCKER_CLI_BUILD=1
+
           docker build -f infra/docker/Dockerfile.web \
             --build-arg VITE_API_URL="${WEB_VITE_API_URL}" \
             --build-arg VITE_PWA_ENABLED=true \
@@ -76,8 +79,10 @@ pipeline {
   }
 
   post {
-    always  { sh 'docker image prune -f || true' }
-    success { echo 'Front SoftMusic (web + LP) deployado com sucesso.' }
+    success {
+      sh 'docker image prune -f || true'
+      echo 'Front SoftMusic (web + LP) deployado com sucesso.'
+    }
     failure { echo 'Falha no deploy do front. Verifique os logs acima.' }
   }
 }

@@ -29,6 +29,7 @@ pipeline {
     stage('Build imagem (local)') {
       steps {
         sh '''
+          export DOCKER_BUILDKIT=1
           docker build -f infra/docker/Dockerfile.admin-web \
             --build-arg VITE_API_URL="${ADMIN_VITE_API_URL}" \
             -t ${IMAGE_PREFIX}/admin-web:${IMAGE_TAG} \
