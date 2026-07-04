@@ -49,7 +49,7 @@ docker compose -f infra/docker/docker-compose.yml --profile infra up -d
 
 Serviços disponíveis:
 
-- MySQL: `localhost:3306`
+- MySQL: `localhost:3307` (porta interna do container; ver `MYSQL_PORT` no `.env`)
 - Redis: `localhost:6379`
 - RabbitMQ Management: http://localhost:15672
 
@@ -58,6 +58,9 @@ Serviços disponíveis:
 ```bash
 docker compose -f infra/docker/docker-compose.yml --profile infra --profile app up -d --build
 ```
+
+> Após mudanças no `python-ai`, rebuild também **worker** e **scheduler** (imagens
+> separadas): `docker compose ... build python-ai worker scheduler`
 
 Serviços adicionais:
 
@@ -264,7 +267,7 @@ docker compose -f infra/docker/docker-compose.yml exec python-ai bash
 docker compose -f infra/docker/docker-compose.yml logs mysql
 ```
 
-Verifique se a porta 3306 não está em uso: `netstat -an | findstr 3306` (Windows) ou `ss -tlnp | grep 3306` (Linux).
+Verifique se a porta 3307 não está em uso: `netstat -an | findstr 3307` (Windows) ou `ss -tlnp | grep 3307` (Linux).
 
 ### Worker não processa jobs
 
