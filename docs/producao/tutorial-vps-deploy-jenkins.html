@@ -451,7 +451,7 @@
         <div class="nav-group-title">Passo a passo</div>
         <a href="#creds">1. Credenciais (Secret text)</a>
         <a href="#pipelines">2. Criar as pipelines</a>
-        <a href="#mysql-guia" class="sub">MySQL 8.4 vs 5.7</a>
+        <a href="#mysql-guia" class="sub">MySQL 8.4 vs MariaDB</a>
         <a href="#ordem">3. Ordem do deploy</a>
         <a href="#jobs" class="sub">O que cada job faz</a>
       </div>
@@ -695,7 +695,7 @@ docker exec -u jenkins jenkins docker compose version</code></pre>
           </thead>
           <tbody>
             <tr><td><code>softmusic-infra</code></td><td><code>infra/jenkins/Jenkinsfile.infra</code></td><td>MySQL <strong>8.4</strong> + Redis + RabbitMQ + observabilidade</td></tr>
-            <tr><td><code>softmusic-infra-legacy</code></td><td><code>infra/jenkins/Jenkinsfile.infra-legacy</code></td><td>Igual, com MySQL <strong>5.7</strong></td></tr>
+            <tr><td><code>softmusic-infra-legacy</code></td><td><code>infra/jenkins/Jenkinsfile.infra-legacy</code></td><td>Igual, com <strong>MariaDB 10.5.28</strong></td></tr>
             <tr><td><code>softmusic-api</code></td><td><code>infra/jenkins/Jenkinsfile.api</code></td><td>Builda e sobe a API</td></tr>
             <tr><td><code>softmusic-ia</code></td><td><code>infra/jenkins/Jenkinsfile.ia</code></td><td>Builda e sobe IA (<strong>aplica migrations</strong>)</td></tr>
             <tr><td><code>softmusic-web</code></td><td><code>infra/jenkins/Jenkinsfile.web</code></td><td>Builda e sobe web + landing page</td></tr>
@@ -739,21 +739,21 @@ stage('Gerar .env de produção') {
     </section>
 
     <section id="mysql-guia">
-      <h2>Guia de escolha — MySQL 8.4 vs 5.7 (legacy)</h2>
+      <h2>Guia de escolha — MySQL 8.4 vs MariaDB 10.5.28 (legacy)</h2>
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Cenário</th><th>Job</th><th>MySQL</th></tr>
+            <tr><th>Cenário</th><th>Job</th><th>Banco</th></tr>
           </thead>
           <tbody>
-            <tr><td>VPS nova, CPU x86_64 moderna (AVX2)</td><td><code>softmusic-infra</code></td><td><strong>8.4</strong> (padrão)</td></tr>
-            <tr><td>CPU antiga, erro ao subir MySQL 8.x</td><td><code>softmusic-infra-legacy</code></td><td><strong>5.7</strong> (LEGACY_MYSQL=1)</td></tr>
+            <tr><td>VPS nova, CPU x86_64 moderna (AVX2)</td><td><code>softmusic-infra</code></td><td><strong>MySQL 8.4</strong> (padrão)</td></tr>
+            <tr><td>CPU antiga, erro ao subir MySQL 8.x</td><td><code>softmusic-infra-legacy</code></td><td><strong>MariaDB 10.5.28</strong> (LEGACY_MYSQL=1)</td></tr>
           </tbody>
         </table>
       </div>
       <div class="callout callout-warn">
         <strong>Escolha uma vez</strong>
-        Rode <strong>apenas um</strong> dos jobs de infra. Não alterne entre 8.4 e 5.7 no mesmo volume de dados sem migração planejada.
+        Rode <strong>apenas um</strong> dos jobs de infra. Não alterne entre MySQL 8.4 e MariaDB no mesmo volume de dados sem migração planejada.
       </div>
     </section>
 

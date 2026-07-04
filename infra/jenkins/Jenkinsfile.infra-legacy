@@ -1,9 +1,10 @@
 /**
- * SoftMusic — Deploy INFRA LEGACY (MySQL 5.7 para CPUs antigas)
+ * SoftMusic — Deploy INFRA LEGACY (MariaDB 10.5.28 para CPUs antigas)
  *
- * Igual ao Jenkinsfile.infra, porém com MySQL 5.7. Sobe MySQL 5.7 + Redis +
- * RabbitMQ + toda a observabilidade. O Jenkins roda em container e faz o deploy
- * local (via socket do host). Segredos: credenciais "Secret text".
+ * Igual ao Jenkinsfile.infra, porém com MariaDB 10.5.28 (wire-compatible com o
+ * protocolo MySQL). Sobe MariaDB + Redis + RabbitMQ + toda a observabilidade.
+ * O Jenkins roda em container e faz o deploy local (via socket do host).
+ * Segredos: credenciais "Secret text".
  */
 pipeline {
   agent any
@@ -44,7 +45,7 @@ pipeline {
       }
     }
 
-    stage('Deploy infra (MySQL 5.7 LEGACY)') {
+    stage('Deploy infra (MariaDB 10.5.28 LEGACY)') {
       steps {
         sh 'bash infra/docker/scripts/deploy-infra.sh'
       }
@@ -52,7 +53,7 @@ pipeline {
   }
 
   post {
-    success { echo 'Infra SoftMusic LEGACY (MySQL 5.7) provisionada com sucesso.' }
-    failure { echo 'Falha no deploy LEGACY. Confirme compatibilidade da imagem mysql:5.7 no host.' }
+    success { echo 'Infra SoftMusic LEGACY (MariaDB 10.5.28) provisionada com sucesso.' }
+    failure { echo 'Falha no deploy LEGACY. Confirme compatibilidade da imagem mariadb:10.5.28 no host.' }
   }
 }

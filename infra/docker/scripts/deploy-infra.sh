@@ -13,7 +13,7 @@ set -euo pipefail
 # Variáveis:
 #   DEPLOY_DIR / DEPLOY_DIR_HOST  (ver _common.sh)
 #   ENV_FILE            (default ${DEPLOY_DIR}/.env.production)
-#   LEGACY_MYSQL=1      usa MySQL 5.7 (CPUs antigas)
+#   LEGACY_MYSQL=1      usa MariaDB 10.5.28 (CPUs antigas)
 #   WITH_OBSERVABILITY  (default 1) sobe toda a stack de observabilidade
 #   SKIP_PULL=1         pula o docker compose pull das imagens públicas
 # =============================================================================
@@ -52,7 +52,7 @@ cd "${DEPLOY_DIR}"
 COMPOSE_FILES=(-f docker-compose.infra.yml)
 if [[ "${LEGACY}" == "1" ]]; then
   COMPOSE_FILES+=(-f docker-compose.infra-legacy.yml)
-  echo ">> Modo LEGACY: MySQL 5.7"
+  echo ">> Modo LEGACY: MariaDB 10.5.28"
 else
   echo ">> Modo padrão: MySQL 8.4"
 fi

@@ -57,6 +57,10 @@ def run_analysis(self, job_id: str) -> dict:
         except AnalysisCancelledError:
             return {"cancelled": True, "job_id": job_id}
         except Exception as exc:
+            # A sessão pode estar em rollback pendente (ex.: erro no flush).
+            # Sem o rollback, o próprio handler falha e o job fica preso em
+            # "processing" em vez de ser marcado como FAILED.
+            await session.rollback()
             job = await service.get_job(job_id)
             if job and job.status != JobStatus.CANCELLED.value:
                 job.status = JobStatus.FAILED.value

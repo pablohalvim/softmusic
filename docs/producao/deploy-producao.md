@@ -118,7 +118,7 @@ Crie **5 jobs** do tipo *Pipeline* (um por Jenkinsfile), todos com
 | Job Jenkins | Script Path | Quando usar |
 |-------------|-------------|-------------|
 | `softmusic-infra` | `infra/jenkins/Jenkinsfile.infra` | Servidor com MySQL **8.4** |
-| `softmusic-infra-legacy` | `infra/jenkins/Jenkinsfile.infra-legacy` | CPU antiga → MySQL **5.7** |
+| `softmusic-infra-legacy` | `infra/jenkins/Jenkinsfile.infra-legacy` | CPU antiga → **MariaDB 10.5.28** |
 | `softmusic-api` | `infra/jenkins/Jenkinsfile.api` | API (BFF) |
 | `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | python-ai + worker (**aplica migrations**) |
 | `softmusic-web` | `infra/jenkins/Jenkinsfile.web` | web + landing page |
