@@ -145,7 +145,6 @@ services:
     container_name: softmusic-python-ai
     restart: unless-stopped
     logging: *default-logging
-    gpus: ${DOCKER_GPUS:-all}
     depends_on:
       mysql:
         condition: service_healthy
@@ -216,7 +215,6 @@ services:
     container_name: softmusic-worker
     restart: unless-stopped
     logging: *default-logging
-    gpus: ${DOCKER_GPUS:-all}
     command: ["celery", "-A", "app.worker", "worker", "--loglevel=info", "--concurrency=${CELERY_CONCURRENCY:-1}", "-Q", "analysis,billing"]
     depends_on:
       mysql:

@@ -211,6 +211,36 @@ Passos (uma vez):
 > da música é checada no `python-ai` **antes** de gerar a URL pré-assinada, que
 > expira em `STORAGE_PRESIGN_EXPIRES` segundos.
 
+## GPU (NVIDIA Container Toolkit)
+
+A VPS tem GPU, mas o Docker precisa do **NVIDIA Container Toolkit** no **host**
+(não dentro do Jenkins). O deploy da IA usa o overlay `docker-compose.gpu.yml`
+(`runtime: nvidia`) em vez de `gpus: all`, que no Docker 25+ falha com
+`failed to discover GPU vendor from CDI` quando os specs CDI não existem.
+
+**Uma vez na VPS (host):**
+
+```bash
+distribution=$(. /etc/os-release; echo "${ID}${VERSION_ID}")
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+  sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L "https://nvidia.github.io/libnvidia-container/${distribution}/libnvidia-container.list" | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo mkdir -p /etc/cdi
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+sudo systemctl restart docker
+
+nvidia-smi
+docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all \
+  nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+```
+
+Se o teste acima funcionar, re-rode o job **`softmusic-ia`**. Para subir sem GPU
+(emergência), defina `USE_GPU=0` no `.env.production` ou no Environment do job.
+
 ## E-mail (Resend)
 
 Convites de banda, avisos de cobrança e campanhas do admin usam o
@@ -277,6 +307,7 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 | `image not found` no compose up | Job de app não buildou antes | Rodar o job de app (ele builda e sobe) |
 | MySQL em restart loop | CPU incompatível com MySQL 8.4 | Usar `softmusic-infra-legacy` |
 | 502 nos domínios | nginx sem certificado / app não subiu | Emitir TLS; ver `docker logs softmusic-nginx` |
+| `failed to discover GPU vendor from CDI` | Toolkit NVIDIA / CDI não configurado no host | Seguir seção **GPU** acima; testar `docker run --runtime=nvidia … nvidia-smi` |
 
 ## Referências
 

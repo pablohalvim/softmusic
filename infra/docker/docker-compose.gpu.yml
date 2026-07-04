@@ -1,0 +1,8 @@
+# Overlay GPU — usa runtime nvidia (NVIDIA Container Toolkit no host).
+# Evita o erro CDI "failed to discover GPU vendor" do Docker 25+ com `gpus: all`.
+# Produção: deploy-ia.sh inclui este arquivo quando USE_GPU=1 (default).
+services:
+  python-ai:
+    runtime: nvidia
+  worker:
+    runtime: nvidia

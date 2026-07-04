@@ -16,7 +16,7 @@ Este guia descreve como executar o stack completo do SoftMusic na sua máquina u
 
 > **Worker duplicado (Windows):** se você subir `celery` localmente **e** o container `softmusic-worker`, os dois consomem a mesma fila. O worker local no Windows **não tem ffmpeg** por padrão e falha em downloads do YouTube. Use **apenas um**: ou Docker (`softmusic-worker`) ou local com ffmpeg instalado (`winget install Gyan.FFmpeg`).
 
-> **GPU (opcional):** acelera Demucs e inferência. Configure `NVIDIA Container Toolkit` e defina `CUDA_VISIBLE_DEVICES=0` no `.env`.
+> **GPU (opcional):** acelera Demucs e inferência. Configure `NVIDIA Container Toolkit` e defina `CUDA_VISIBLE_DEVICES=0` no `.env`. Inclua `-f infra/docker/docker-compose.gpu.yml` nos comandos `docker compose` (usa `runtime: nvidia` — evita erro CDI do Docker 25+).
 
 ## 1. Clonar e configurar
 

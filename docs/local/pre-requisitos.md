@@ -57,7 +57,13 @@ curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-
   sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
+sudo mkdir -p /etc/cdi
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
 sudo systemctl restart docker
+
+# Teste (host):
+nvidia-smi
+docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
 ```
 
 ## macOS

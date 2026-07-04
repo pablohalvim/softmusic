@@ -16,6 +16,12 @@ stage_assets
 cd "${DEPLOY_DIR}"
 
 COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+# shellcheck disable=SC1090
+set -a && source "${ENV_FILE}" && set +a
+if [[ "${USE_GPU:-1}" == "1" ]]; then
+  COMPOSE_FILES+=(-f docker-compose.gpu.yml)
+  echo ">> GPU: overlay runtime nvidia (USE_GPU=1)"
+fi
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
   --profile infra --profile app up -d --no-deps --force-recreate python-ai worker scheduler
