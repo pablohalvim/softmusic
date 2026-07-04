@@ -14,6 +14,13 @@ scrape_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
     relabel_configs:
+      # Coleta APENAS containers do SoftMusic. Sem este keep, o Promtail
+      # descobre todos os containers do host (jenkins, sportshub-*,
+      # mariadb-futsaude, etc.) e tenta enviar o histórico antigo deles,
+      # que o Loki rejeita com 400 "timestamp too old".
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/softmusic-.*"
+        action: keep
       - source_labels: ["__meta_docker_container_name"]
         regex: "/(.*)"
         target_label: container
