@@ -2,8 +2,11 @@
  * SoftMusic — Deploy do painel administrativo (admin-web)
  *
  * Jenkins em container: builda a imagem LOCALMENTE no daemon do host (sem push)
- * e sobe apenas o admin-web (não toca em web/lp). O nginx é recarregado para
- * publicar admin.softmusic.com.br. Segredos: credenciais "Secret text".
+ * e sobe apenas o admin-web (não toca em web/lp).
+ *
+ * Com EDGE_PROXY=easypanel (recomendado quando EasyPanel usa :80/:443), este job
+ * é o último da sequência e roda finalize-easypanel-edge.sh: publica rotas
+ * Traefik, conecta rede easypanel e reinicia o Traefik.
  */
 pipeline {
   agent any
@@ -14,11 +17,13 @@ pipeline {
   }
 
   environment {
-    DEPLOY_DIR         = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
-    DEPLOY_DIR_HOST    = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
-    IMAGE_TAG          = "${env.BUILD_NUMBER ?: 'latest'}"
-    IMAGE_PREFIX       = 'softmusic'
-    ADMIN_VITE_API_URL = "${env.ADMIN_VITE_API_URL ?: 'https://admin.softmusic.com.br/api'}"
+    DEPLOY_DIR                  = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
+    DEPLOY_DIR_HOST             = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
+    IMAGE_TAG                   = "${env.BUILD_NUMBER ?: 'latest'}"
+    IMAGE_PREFIX                = 'softmusic'
+    ADMIN_VITE_API_URL          = "${env.ADMIN_VITE_API_URL ?: 'https://admin.softmusic.com.br/api'}"
+    EDGE_PROXY                  = "${env.EDGE_PROXY ?: 'easypanel'}"
+    TRAEFIK_DOCKER_NETWORK      = "${env.TRAEFIK_DOCKER_NETWORK ?: 'easypanel'}"
   }
 
   stages {

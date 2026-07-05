@@ -32,6 +32,27 @@ flowchart LR
 
 ---
 
+## Modo automático (recomendado)
+
+O job **`softmusic-admin`** (último da sequência) executa
+`finalize-easypanel-edge.sh` ao final do deploy quando `EDGE_PROXY=easypanel`:
+
+1. Copia `easypanel-softmusic.yaml` → `/etc/easypanel/traefik/config/softmusic.yaml`
+2. Remove `softmusic-nginx` / `softmusic-certbot` se existirem
+3. Conecta todos os containers à rede `easypanel`
+4. Reinicia o Traefik do EasyPanel
+5. Smoke test HTTPS (best-effort)
+
+**Ordem dos jobs:** `softmusic-api` → `softmusic-web` → **`softmusic-admin`**
+
+Os três jobs já têm default `EDGE_PROXY=easypanel` no Jenkinsfile. Não é
+necessário SSH manual nem criar domínios na UI do EasyPanel (desde que o
+Traefik carregue arquivos `.yaml` do diretório `config/`).
+
+Passos manuais abaixo servem como fallback ou troubleshooting.
+
+---
+
 ## Pré-requisitos
 
 - [ ] DNS na Cloudflare apontando todos os domínios para o IP da VPS (**DNS only**)

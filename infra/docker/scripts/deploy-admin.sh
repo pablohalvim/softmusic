@@ -22,6 +22,8 @@ docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
 
 deploy_edge_proxy
 
+bash "${SCRIPT_DIR}/finalize-easypanel-edge.sh"
+
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps admin-web
 
 load_compose_env

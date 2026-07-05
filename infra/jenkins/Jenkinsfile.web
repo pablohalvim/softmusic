@@ -19,9 +19,11 @@ pipeline {
     DEPLOY_DIR_HOST  = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
     IMAGE_TAG        = "${env.BUILD_NUMBER ?: 'latest'}"
     IMAGE_PREFIX     = 'softmusic'
-    WEB_VITE_API_URL = "${env.WEB_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
-    LP_VITE_APP_URL  = "${env.LP_VITE_APP_URL ?: 'https://softmusic.com.br'}"
-    DEPLOY_ADMIN_WEB = '0'
+    WEB_VITE_API_URL        = "${env.WEB_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
+    LP_VITE_APP_URL         = "${env.LP_VITE_APP_URL ?: 'https://softmusic.com.br'}"
+    DEPLOY_ADMIN_WEB        = '0'
+    EDGE_PROXY              = "${env.EDGE_PROXY ?: 'easypanel'}"
+    TRAEFIK_DOCKER_NETWORK  = "${env.TRAEFIK_DOCKER_NETWORK ?: 'easypanel'}"
   }
 
   stages {
