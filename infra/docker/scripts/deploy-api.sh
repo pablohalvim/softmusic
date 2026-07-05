@@ -19,11 +19,11 @@ mapfile -t COMPOSE_FILES < <(compose_files)
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
   --profile infra --profile app up -d --no-deps --force-recreate api
 
+wait_container_healthy softmusic-api
+
 load_compose_env
 if [[ "${EDGE_PROXY}" == "easypanel" ]]; then
-  bash "${SCRIPT_DIR}/connect-traefik-network.sh"
+  bash "${SCRIPT_DIR}/connect-traefik-network.sh" || echo ">> AVISO: rede Traefik — finalize no job admin"
 fi
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps api
-
-wait_container_healthy softmusic-api

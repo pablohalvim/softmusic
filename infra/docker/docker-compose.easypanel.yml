@@ -1,13 +1,9 @@
 # =============================================================================
 # SoftMusic — overlay EasyPanel / Traefik (Opção B)
 # =============================================================================
-# Não publica nginx/certbot nas portas 80/443 — o Traefik do EasyPanel faz
-# TLS e roteamento. Conecta os serviços públicos à rede externa do Traefik.
-#
-# Uso (automático quando EDGE_PROXY=easypanel no .env.production):
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-#     -f docker-compose.easypanel.yml --env-file .env.production \
-#     --profile infra --profile app up -d
+# Desativa nginx/certbot do SoftMusic (Traefik do EasyPanel usa :80/:443).
+# A rede easypanel é conectada APÓS o container subir — via
+# connect-traefik-network.sh (evita "network sandbox not found" no recreate).
 # =============================================================================
 
 services:
@@ -18,33 +14,3 @@ services:
   certbot:
     profiles:
       - edge-nginx-disabled
-
-  lp:
-    networks:
-      - default
-      - easypanel
-
-  web:
-    networks:
-      - default
-      - easypanel
-
-  admin-web:
-    networks:
-      - default
-      - easypanel
-
-  api:
-    networks:
-      - default
-      - easypanel
-
-  grafana:
-    networks:
-      - default
-      - easypanel
-
-networks:
-  easypanel:
-    external: true
-    name: ${TRAEFIK_DOCKER_NETWORK:-easypanel}

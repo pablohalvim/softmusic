@@ -37,8 +37,8 @@ fi
 echo ">> EasyPanel: removendo nginx/certbot conflitantes (se existirem)"
 docker rm -f softmusic-nginx softmusic-certbot 2>/dev/null || true
 
-echo ">> EasyPanel: conectando containers à rede ${TRAEFIK_DOCKER_NETWORK}"
-bash "${SCRIPT_DIR}/connect-traefik-network.sh"
+echo ">> EasyPanel: conectando containers à rede Traefik"
+bash "${SCRIPT_DIR}/connect-traefik-network.sh" || echo ">> AVISO: alguns containers não conectaram — verifique logs acima"
 
 TRAEFIK_CID="$(docker ps -q -f name=easypanel-traefik | head -1 || true)"
 if [[ -n "${TRAEFIK_CID}" ]]; then
