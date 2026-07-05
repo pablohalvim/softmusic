@@ -11,8 +11,10 @@ ARG VITE_APP_URL=https://app.softmusic.com.br
 ENV VITE_APP_URL=$VITE_APP_URL
 RUN pnpm --filter @softmusic/lp build
 
-FROM nginx:1.27-alpine AS runner
+FROM deps AS runner
+RUN apk add --no-cache nginx
 COPY infra/nginx/conf.d/lp.conf /etc/nginx/conf.d/default.conf
-COPY --from=deps /app/apps/lp/dist /usr/share/nginx/html
+RUN mkdir -p /usr/share/nginx/html \
+  && cp -r /app/apps/lp/dist/. /usr/share/nginx/html/
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
