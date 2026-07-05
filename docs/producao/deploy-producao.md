@@ -270,6 +270,8 @@ O overlay `docker-compose.prod.yml` inclui `nginx` (portas 80/443) e um
 `certbot` sidecar. Tutorial completo de firewall, DNS e roteamento:
 [Portas, firewall e reverse proxy](./portas-firewall-reverse-proxy.md).
 
+### Modo padrão (nginx na VPS)
+
 Na primeira vez, emita os certificados (DNS já apontando para a VPS):
 
 ```bash
@@ -286,7 +288,18 @@ docker run --rm \
 Depois re-rode o job **`softmusic-web`** (ou `deploy-web.sh`) para ativar
 `production-ssl.conf` automaticamente via `prepare_nginx_tls()`.
 
-Enquanto não houver certificado, o nginx serve HTTP via `production-http.conf`
+### Modo EasyPanel (Traefik já usa 80/443)
+
+Se o **EasyPanel** já ocupa as portas 80/443, **não** suba `softmusic-nginx`
+nem rode certbot manual. Siga o tutorial dedicado:
+
+**[SoftMusic + EasyPanel (Traefik)](./easypanel-traefik.md)**
+
+Resumo: defina `EDGE_PROXY=easypanel` nos jobs Jenkins, copie
+`infra/traefik/easypanel-softmusic.yaml` para
+`/etc/easypanel/traefik/config/custom.yaml` e reinicie o Traefik.
+
+Enquanto não houver certificado (modo nginx), o nginx serve HTTP via `production-http.conf`
 (bootstrap). O deploy não falha se o nginx ainda não tiver TLS.
 
 ## Smoke test manual (opcional)
@@ -324,6 +337,7 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 | `Bind for 0.0.0.0:8080 failed: port is already allocated` | Jenkins usa :8080 no host; API tentou publicar a mesma porta | Overlay prod remove bind da API (`ports: !reset []`); re-rodar **`softmusic-api`** |
 | `failed to export image: lease does not exist` | Bug do **legacy builder** / estado do Docker no host | `sudo systemctl restart docker` na VPS; re-rodar o job |
 | `invalid from flag value deps: No such image` | Multi-stage no legacy builder perde stage intermediário | `docker-build.sh` faz pré-build `--target deps`; ou monte buildx no Jenkins (BuildKit) |
+| `Connection refused` no certbot / domínios | EasyPanel Traefik ocupa :80/:443 | Usar [modo EasyPanel](./easypanel-traefik.md); não subir `softmusic-nginx` |
 | `BuildKit is enabled but the buildx component is missing` | Jenkins sem plugin buildx | Pipelines detectam buildx automaticamente; ou instale buildx no host (ver abaixo) |
 
 ## Referências

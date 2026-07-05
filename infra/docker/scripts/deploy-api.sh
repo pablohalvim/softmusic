@@ -14,10 +14,15 @@ require_env_file
 stage_assets
 cd "${DEPLOY_DIR}"
 
-COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+mapfile -t COMPOSE_FILES < <(compose_files)
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
   --profile infra --profile app up -d --no-deps --force-recreate api
+
+load_compose_env
+if [[ "${EDGE_PROXY}" == "easypanel" ]]; then
+  bash "${SCRIPT_DIR}/connect-traefik-network.sh"
+fi
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps api
 

@@ -15,14 +15,18 @@ require_env_file
 stage_assets
 cd "${DEPLOY_DIR}"
 
-COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+mapfile -t COMPOSE_FILES < <(compose_files)
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
   --profile infra --profile app up -d --no-deps --force-recreate admin-web
 
-# NGINX roteia admin.softmusic.com.br -> admin-web.
-deploy_nginx
+deploy_edge_proxy
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps admin-web
 
-wait_http "http://127.0.0.1:80/" || wait_http "http://127.0.0.1:${ADMIN_PORT:-5174}/"
+load_compose_env
+if [[ "${EDGE_PROXY}" == "easypanel" ]]; then
+  wait_http "https://admin.softmusic.com.br/" || true
+else
+  wait_http "http://127.0.0.1:80/" || wait_http "http://127.0.0.1:${ADMIN_PORT:-5174}/"
+fi

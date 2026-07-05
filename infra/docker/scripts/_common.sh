@@ -45,6 +45,10 @@ stage_assets() {
   cp "${SRC_INFRA}/docker/docker-compose.infra-legacy.yml" "${DEPLOY_DIR}/"
   cp "${SRC_INFRA}/docker/docker-compose.prod.yml" "${DEPLOY_DIR}/"
   cp "${SRC_INFRA}/docker/docker-compose.gpu.yml" "${DEPLOY_DIR}/"
+  cp "${SRC_INFRA}/docker/docker-compose.easypanel.yml" "${DEPLOY_DIR}/"
+
+  mkdir -p "${DEPLOY_DIR}/traefik"
+  cp "${SRC_INFRA}/traefik/easypanel-softmusic.yaml" "${DEPLOY_DIR}/traefik/"
 
   rm -rf "${DEPLOY_DIR}/mysql" "${DEPLOY_DIR}/monitoring" "${DEPLOY_DIR}/nginx"
   cp -r "${SRC_INFRA}/docker/mysql" "${DEPLOY_DIR}/mysql"
@@ -55,6 +59,50 @@ stage_assets() {
   rm -f "${DEPLOY_DIR}/nginx/conf.d/softmusic.conf"
 
   echo ">> Assets de deploy em ${DEPLOY_DIR} (host: ${DEPLOY_DIR_HOST})"
+}
+
+# -----------------------------------------------------------------------------
+# load_compose_env: lê EDGE_PROXY e TRAEFIK_DOCKER_NETWORK do .env de produção.
+# -----------------------------------------------------------------------------
+load_compose_env() {
+  EDGE_PROXY="nginx"
+  TRAEFIK_DOCKER_NETWORK="easypanel"
+  if [[ -f "${ENV_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    EDGE_PROXY="$(grep -E '^EDGE_PROXY=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
+    TRAEFIK_DOCKER_NETWORK="$(grep -E '^TRAEFIK_DOCKER_NETWORK=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
+  fi
+  EDGE_PROXY="${EDGE_PROXY:-nginx}"
+  TRAEFIK_DOCKER_NETWORK="${TRAEFIK_DOCKER_NETWORK:-easypanel}"
+  export EDGE_PROXY TRAEFIK_DOCKER_NETWORK
+}
+
+# -----------------------------------------------------------------------------
+# compose_files: arquivos compose conforme EDGE_PROXY.
+# -----------------------------------------------------------------------------
+compose_files() {
+  local files=(-f docker-compose.yml -f docker-compose.prod.yml)
+  load_compose_env
+  if [[ "${EDGE_PROXY}" == "easypanel" ]]; then
+    files+=(-f docker-compose.easypanel.yml)
+  fi
+  printf '%s\n' "${files[@]}"
+}
+
+# -----------------------------------------------------------------------------
+# deploy_edge_proxy: nginx (padrão) ou rede Traefik (EasyPanel).
+# -----------------------------------------------------------------------------
+deploy_edge_proxy() {
+  local connect_script
+  connect_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/connect-traefik-network.sh"
+  load_compose_env
+  if [[ "${EDGE_PROXY}" == "easypanel" ]]; then
+    echo ">> EDGE_PROXY=easypanel — nginx/certbot do SoftMusic desativados"
+    docker rm -f softmusic-nginx softmusic-certbot 2>/dev/null || true
+    bash "${connect_script}"
+    return 0
+  fi
+  deploy_nginx
 }
 
 # -----------------------------------------------------------------------------

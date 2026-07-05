@@ -20,7 +20,7 @@ require_env_file
 stage_assets
 cd "${DEPLOY_DIR}"
 
-COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+mapfile -t COMPOSE_FILES < <(compose_files)
 
 SERVICES=(web)
 if [[ "${DEPLOY_LP:-1}" == "1" ]]; then
@@ -33,9 +33,13 @@ fi
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
   --profile infra --profile app up -d --no-deps --force-recreate "${SERVICES[@]}"
 
-# NGINX depende de certificados TLS para HTTPS. Bootstrap HTTP funciona antes dos certs.
-deploy_nginx
+deploy_edge_proxy
 
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps web
 
-wait_http "http://127.0.0.1:80/" || wait_http "http://127.0.0.1:${WEB_PORT:-5173}/"
+load_compose_env
+if [[ "${EDGE_PROXY}" == "easypanel" ]]; then
+  wait_http "https://app.softmusic.com.br/" || true
+else
+  wait_http "http://127.0.0.1:80/" || wait_http "http://127.0.0.1:${WEB_PORT:-5173}/"
+fi
