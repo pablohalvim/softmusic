@@ -323,6 +323,7 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 | `failed to discover GPU vendor from CDI` | Toolkit NVIDIA / CDI não configurado no host | Seguir seção **GPU** acima; testar `docker run --runtime=nvidia … nvidia-smi` |
 | `Bind for 0.0.0.0:8080 failed: port is already allocated` | Jenkins usa :8080 no host; API tentou publicar a mesma porta | Overlay prod remove bind da API (`ports: !reset []`); re-rodar **`softmusic-api`** |
 | `failed to export image: lease does not exist` | Bug do **legacy builder** / estado do Docker no host | `sudo systemctl restart docker` na VPS; re-rodar o job |
+| `invalid from flag value deps: No such image` | Multi-stage no legacy builder perde stage intermediário | `docker-build.sh` faz pré-build `--target deps`; ou monte buildx no Jenkins (BuildKit) |
 | `BuildKit is enabled but the buildx component is missing` | Jenkins sem plugin buildx | Pipelines detectam buildx automaticamente; ou instale buildx no host (ver abaixo) |
 
 ## Referências
