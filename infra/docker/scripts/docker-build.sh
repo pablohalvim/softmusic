@@ -5,12 +5,11 @@
 set -euo pipefail
 
 dockerfile=""
-for ((i = 1; i <= $#; i++)); do
-  arg="${!i}"
-  prev="${!((i - 1))}"
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  arg="${args[$i]}"
   if [[ "$arg" == "-f" || "$arg" == "--file" ]]; then
-    next=$((i + 1))
-    dockerfile="${!next}"
+    dockerfile="${args[$((i + 1))]:-}"
     break
   elif [[ "$arg" == -f* && ${#arg} -gt 2 ]]; then
     dockerfile="${arg#-f}"
