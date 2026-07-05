@@ -1,31 +1,7 @@
 #!/usr/bin/env bash
 # Wrapper para `docker build` nos pipelines Jenkins.
-# Sem buildx → legacy builder com pré-build do stage deps (multi-stage).
-# Com buildx → BuildKit normal.
+# Com buildx → BuildKit. Sem buildx → legacy builder com retry em lease errors.
 set -euo pipefail
-
-dockerfile=""
-args=("$@")
-for ((i = 0; i < ${#args[@]}; i++)); do
-  arg="${args[$i]}"
-  if [[ "$arg" == "-f" || "$arg" == "--file" ]]; then
-    dockerfile="${args[$((i + 1))]:-}"
-    break
-  elif [[ "$arg" == -f* && ${#arg} -gt 2 ]]; then
-    dockerfile="${arg#-f}"
-    break
-  fi
-done
-
-has_deps_stage() {
-  [[ -n "$dockerfile" && -f "$dockerfile" ]] && grep -qiE 'AS[[:space:]]+deps\b' "$dockerfile"
-}
-
-deps_cache_tag() {
-  local slug
-  slug="$(echo "$dockerfile" | tr '/\\' '-' | tr -cd '[:alnum:]-_.')"
-  echo "softmusic-build-deps:${slug}"
-}
 
 if docker buildx version >/dev/null 2>&1; then
   export DOCKER_BUILDKIT=1
@@ -37,14 +13,30 @@ fi
 export DOCKER_BUILDKIT=0
 unset COMPOSE_DOCKER_CLI_BUILD
 echo ">> Legacy builder (DOCKER_BUILDKIT=0) — buildx indisponível no Jenkins"
-echo ">> Se falhar com 'lease does not exist': sudo systemctl restart docker na VPS"
 
-if has_deps_stage; then
-  cache_tag="$(deps_cache_tag)"
-  echo ">> Legacy multi-stage: pré-build --target deps → ${cache_tag}"
-  docker build --target deps -t "${cache_tag}" "$@"
-  echo ">> Legacy multi-stage: build final (cache-from ${cache_tag})"
-  docker build --cache-from "${cache_tag}" "$@"
-else
-  docker build "$@"
-fi
+docker_build_retry() {
+  local attempt output code max=3
+  for attempt in $(seq 1 "$max"); do
+    set +e
+    output="$(docker build "$@" 2>&1)"
+    code=$?
+    set -e
+    printf '%s\n' "$output"
+    if [[ "$code" -eq 0 ]]; then
+      return 0
+    fi
+    if echo "$output" | grep -qiE 'lease does not exist|failed to prepare snapshot'; then
+      echo ">> Docker lease/snapshot error (tentativa ${attempt}/${max}) — limpando cache..."
+      docker builder prune -f 2>/dev/null || true
+      docker image prune -f 2>/dev/null || true
+      sleep "$((attempt * 3))"
+    else
+      return "$code"
+    fi
+  done
+  echo "ERRO: build falhou após ${max} tentativas (lease does not exist)." >&2
+  echo "      Na VPS: sudo systemctl restart docker && re-rodar o job" >&2
+  return 1
+}
+
+docker_build_retry "$@"
