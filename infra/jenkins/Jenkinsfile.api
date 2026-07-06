@@ -16,10 +16,9 @@ pipeline {
   environment {
     DEPLOY_DIR      = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
     DEPLOY_DIR_HOST = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
-    IMAGE_TAG               = "${env.BUILD_NUMBER ?: 'latest'}"
-    IMAGE_PREFIX            = 'softmusic'
-    EDGE_PROXY              = "${env.EDGE_PROXY ?: 'easypanel'}"
-    TRAEFIK_DOCKER_NETWORK  = "${env.TRAEFIK_DOCKER_NETWORK ?: 'easypanel'}"
+    IMAGE_TAG       = "${env.BUILD_NUMBER ?: 'latest'}"
+    IMAGE_PREFIX    = 'softmusic'
+    API_PORT        = "${env.API_PORT ?: '8081'}"
   }
 
   stages {

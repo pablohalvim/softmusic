@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# =============================================================================
-# SoftMusic — Deploy da API (BFF). Imagem buildada localmente pelo Jenkins
-# (sem registry); aqui só sobe/atualiza o serviço `api` no daemon do host.
-# =============================================================================
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
@@ -21,9 +16,7 @@ docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
 
 wait_container_healthy softmusic-api
 
-load_compose_env
-if [[ "${EDGE_PROXY}" == "easypanel" ]]; then
-  bash "${SCRIPT_DIR}/connect-traefik-network.sh" || echo ">> AVISO: rede Traefik — finalize no job admin"
-fi
-
 docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps api
+
+load_host_ports
+wait_http "http://127.0.0.1:${API_PORT}/health/live"

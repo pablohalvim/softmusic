@@ -85,10 +85,9 @@ Se o `jenkins_home` estiver montado de outro caminho no host, ajuste
 
 ### 3. DNS + TLS
 
-Aponte `softmusic.com.br`, `app.softmusic.com.br`, `admin.softmusic.com.br` e
-`grafana.softmusic.com.br` para o IP da VPS. O `nginx`/`certbot` do overlay de
-produção cuidam do HTTPS (ver seção TLS e
-[Portas, firewall e reverse proxy](./portas-firewall-reverse-proxy.md)).
+Aponte os domínios para o IP da VPS. O **EasyPanel** (ou Nginx no host) faz HTTPS
+e proxy para as portas publicadas pelos containers — ver
+[Reverse proxy na VPS](./reverse-proxy-vps.md).
 
 ## Passo 1 — Credenciais no Jenkins (Secret text)
 
@@ -138,9 +137,8 @@ Crie **infra OU infra-legacy** — não os dois. O `softmusic-admin` é opcional
    migrations** (`alembic upgrade head` no entrypoint). Toda mudança de schema
    entra aqui.
 3. **`softmusic-api`** — builda e sobe a API.
-4. **`softmusic-web`** — builda e sobe web + landing page (+ nginx).
-5. **`softmusic-admin`** *(opcional)* — builda e sobe o painel `admin-web`
-   (+ nginx). Isolado: não recria web/lp.
+4. **`softmusic-web`** — builda e sobe web + landing page (portas **4100**, **4101**).
+5. **`softmusic-admin`** *(opcional)* — builda e sobe o painel `admin-web` (porta **4102**).
 
 > **Regra de ouro sobre migrations:** o banco só é migrado pelo job
 > **`softmusic-ia`**. A API não aplica migrations. Se um deploy depende de
@@ -158,7 +156,7 @@ O que cada job faz (local, sem SSH nem registry):
 
 > O `admin-web` tem job próprio (**`softmusic-admin`** →
 > `infra/jenkins/Jenkinsfile.admin` → `deploy-admin.sh`), que builda a imagem e
-> sobe **apenas** o `admin-web` (+ nginx), sem recriar web/lp.
+> sobe **apenas** o `admin-web`, sem recriar web/lp.
 
 ## Observabilidade
 
@@ -264,43 +262,15 @@ Convites de banda, avisos de cobrança e campanhas do admin usam o
 Sem `RESEND_API_KEY`, o sistema tenta SMTP (`SMTP_HOST`…) se configurado; caso
 contrário os e-mails são ignorados (útil em dev).
 
-## TLS / NGINX
+## Reverse proxy / HTTPS na VPS
 
-O overlay `docker-compose.prod.yml` inclui `nginx` (portas 80/443) e um
-`certbot` sidecar. Tutorial completo de firewall, DNS e roteamento:
-[Portas, firewall e reverse proxy](./portas-firewall-reverse-proxy.md).
+Modelo **Sportshub**: cada app publica porta no host; EasyPanel (ou Nginx) faz HTTPS.
 
-### Modo padrão (nginx na VPS)
+Guia completo com portas e configuração no EasyPanel:
 
-Na primeira vez, emita os certificados (DNS já apontando para a VPS):
+**[Reverse proxy na VPS (portas + EasyPanel)](./reverse-proxy-vps.md)**
 
-```bash
-docker run --rm \
-  -v softmusic_certbot_certs:/etc/letsencrypt \
-  -v softmusic_certbot_www:/var/www/certbot \
-  certbot/certbot certonly --webroot -w /var/www/certbot \
-  -d softmusic.com.br -d www.softmusic.com.br \
-  -d app.softmusic.com.br -d admin.softmusic.com.br \
-  -d grafana.softmusic.com.br \
-  --email voce@dominio.com --agree-tos --no-eff-email
-```
-
-Depois re-rode o job **`softmusic-web`** (ou `deploy-web.sh`) para ativar
-`production-ssl.conf` automaticamente via `prepare_nginx_tls()`.
-
-### Modo EasyPanel (Traefik já usa 80/443)
-
-Se o **EasyPanel** já ocupa as portas 80/443, **não** suba `softmusic-nginx`
-nem rode certbot manual. Siga o tutorial dedicado:
-
-**[SoftMusic + EasyPanel (Traefik)](./easypanel-traefik.md)**
-
-Resumo: defina `EDGE_PROXY=easypanel` nos jobs Jenkins, copie
-`infra/traefik/easypanel-softmusic.yaml` para
-`/etc/easypanel/traefik/config/custom.yaml` e reinicie o Traefik.
-
-Enquanto não houver certificado (modo nginx), o nginx serve HTTP via `production-http.conf`
-(bootstrap). O deploy não falha se o nginx ainda não tiver TLS.
+Portas default: LP `4100`, Web `4101`, Admin `4102`, API `8081`, Grafana `4103`.
 
 ## Smoke test manual (opcional)
 
@@ -309,7 +279,8 @@ Enquanto não houver certificado (modo nginx), o nginx serve HTTP via `productio
 docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
 docker inspect -f '{{.State.Health.Status}}' softmusic-python-ai
 docker inspect -f '{{.State.Health.Status}}' softmusic-api
-curl -sf http://127.0.0.1/health/live >/dev/null && echo " nginx/API OK"
+curl -sf http://127.0.0.1:8081/health/live && echo " API OK"
+curl -I http://127.0.0.1:4101/
 
 cd /dados/jenkins_home/deploy/softmusic
 docker compose -f docker-compose.yml -f docker-compose.prod.yml \
@@ -332,17 +303,16 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 | Coluna/tabela nova não existe | Migration não aplicada | Rodar o job **`softmusic-ia`** |
 | `image not found` no compose up | Job de app não buildou antes | Rodar o job de app (ele builda e sobe) |
 | MySQL em restart loop | CPU incompatível com MySQL 8.4 | Usar `softmusic-infra-legacy` |
-| 502 nos domínios | nginx sem certificado / app não subiu | Emitir TLS; ver `docker logs softmusic-nginx` |
-| `failed to discover GPU vendor from CDI` | Toolkit NVIDIA / CDI não configurado no host | Seguir seção **GPU** acima; testar `docker run --runtime=nvidia … nvidia-smi` |
-| `Bind for 0.0.0.0:8080 failed: port is already allocated` | Jenkins usa :8080 no host; API tentou publicar a mesma porta | Overlay prod remove bind da API (`ports: !reset []`); re-rodar **`softmusic-api`** |
+| 502 nos domínios | App não subiu ou EasyPanel aponta porta errada | `curl http://127.0.0.1:4101/`; ver [reverse-proxy-vps](./reverse-proxy-vps.md) |
+| `Bind for 0.0.0.0:8080 failed` | Jenkins usa :8080 | API usa **8081** no host (`API_PORT`); re-rodar **`softmusic-api`** |
 | `failed to export image: lease does not exist` | Bug do **legacy builder** / estado do Docker no host | `sudo systemctl restart docker` na VPS; re-rodar o job |
-| `invalid from flag value deps: No such image` | Multi-stage no legacy builder perde stage intermediário | `docker-build.sh` faz pré-build `--target deps`; ou monte buildx no Jenkins (BuildKit) |
-| `Connection refused` no certbot / domínios | EasyPanel Traefik ocupa :80/:443 | Usar [modo EasyPanel](./easypanel-traefik.md); não subir `softmusic-nginx` |
+| `Connection refused` nos domínios | EasyPanel sem rotas para as portas | Configurar domínios → `IP:4100/4101/8081` — ver [reverse-proxy-vps](./reverse-proxy-vps.md) |
 | `BuildKit is enabled but the buildx component is missing` | Jenkins sem plugin buildx | Pipelines detectam buildx automaticamente; ou instale buildx no host (ver abaixo) |
 
 ## Referências
 
-- [Portas, firewall e reverse proxy](./portas-firewall-reverse-proxy.md)
+- [Reverse proxy na VPS — portas + EasyPanel](./reverse-proxy-vps.md)
+- [Portas, firewall e reverse proxy](./portas-firewall-reverse-proxy.md) *(legado nginx interno)*
 - [Credenciais e jobs do Jenkins](../../infra/jenkins/credentials.md)
 - [Variáveis de ambiente](./variaveis-ambiente.md)
 - [Monitoramento e observabilidade](./monitoramento.md)

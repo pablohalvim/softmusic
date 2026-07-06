@@ -1,17 +1,16 @@
 # =============================================================================
 # SoftMusic — Docker Compose overlay de produção
 # =============================================================================
-# Uso:
-#   docker compose -f infra/docker/docker-compose.yml \
-#     -f infra/docker/docker-compose.prod.yml \
-#     --env-file /opt/softmusic/.env.production \
-#     --profile infra --profile app --profile observability up -d
+# Modelo igual ao Sportshub: cada app publica uma porta no HOST; o reverse
+# proxy da VPS (EasyPanel / Nginx) aponta para 127.0.0.1:PORTA.
+#
+# Portas default (não conflitam com Sportshub 4000/3333 nem Jenkins 8080):
+#   LP 4100 | Web 4101 | Admin 4102 | API 8081 | Grafana 4103
 # =============================================================================
 
 services:
   mysql:
     restart: unless-stopped
-    # Apenas localhost no host — acesso remoto via túnel SSH.
     ports:
       - "127.0.0.1:3307:3307"
     deploy:
@@ -42,8 +41,8 @@ services:
     restart: unless-stopped
     image: ${SOFTMUSIC_API_IMAGE:-softmusic/api:latest}
     pull_policy: never
-    # Jenkins do host usa :8080 — API fica só na rede Docker (nginx → api:8080).
-    ports: !reset []
+    ports:
+      - "${API_PORT:-8081}:8080"
     deploy:
       resources:
         limits:
@@ -84,7 +83,8 @@ services:
     restart: unless-stopped
     image: ${SOFTMUSIC_WEB_IMAGE:-softmusic/web:latest}
     pull_policy: never
-    ports: !reset []
+    ports:
+      - "${WEB_PORT:-4101}:80"
     deploy:
       resources:
         limits:
@@ -95,7 +95,8 @@ services:
     restart: unless-stopped
     image: ${SOFTMUSIC_LP_IMAGE:-softmusic/lp:latest}
     pull_policy: never
-    ports: !reset []
+    ports:
+      - "${LP_PORT:-4100}:80"
     deploy:
       resources:
         limits:
@@ -106,7 +107,8 @@ services:
     restart: unless-stopped
     image: ${SOFTMUSIC_ADMIN_WEB_IMAGE:-softmusic/admin-web:latest}
     pull_policy: never
-    ports: !reset []
+    ports:
+      - "${ADMIN_PORT:-4102}:80"
     deploy:
       resources:
         limits:
@@ -123,29 +125,6 @@ services:
           cpus: "0.25"
           memory: 256M
 
-  nginx:
-    profiles: [app]
-    image: nginx:1.27-alpine
-    container_name: softmusic-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ${SOFTMUSIC_NGINX_DIR:-../nginx}/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ${SOFTMUSIC_NGINX_DIR:-../nginx}/conf.d:/etc/nginx/conf.d:ro
-      - softmusic_certbot_certs:/etc/letsencrypt:ro
-      - softmusic_certbot_www:/var/www/certbot:ro
-    depends_on:
-      api:
-        condition: service_healthy
-      web:
-        condition: service_healthy
-      lp:
-        condition: service_started
-      admin-web:
-        condition: service_started
-
   prometheus:
     ports: !reset []
 
@@ -153,21 +132,8 @@ services:
     ports: !reset []
 
   grafana:
-    ports: !reset []
+    ports:
+      - "${GRAFANA_PORT:-4103}:3000"
 
   otel-collector:
     ports: !reset []
-
-  certbot:
-    profiles: [app]
-    image: certbot/certbot:latest
-    container_name: softmusic-certbot
-    restart: unless-stopped
-    volumes:
-      - softmusic_certbot_certs:/etc/letsencrypt
-      - softmusic_certbot_www:/var/www/certbot
-    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done"
-
-volumes:
-  softmusic_certbot_certs:
-  softmusic_certbot_www:

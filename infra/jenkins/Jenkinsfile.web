@@ -1,10 +1,8 @@
 /**
- * SoftMusic — Deploy do Front (web + landing page) + NGINX
+ * SoftMusic — Deploy do Front (web + landing page)
  *
- * Jenkins em container: builda as imagens LOCALMENTE no daemon do host (sem
- * push) e sobe web + lp + nginx. O admin-web NÃO é deployado aqui
- * (DEPLOY_ADMIN_WEB=0) — ele tem job próprio (Jenkinsfile.admin).
- * Segredos: credenciais "Secret text".
+ * Publica portas no host (modelo Sportshub). Reverse proxy (EasyPanel) na VPS
+ * aponta os domínios para 127.0.0.1:PORTA — ver docs/producao/reverse-proxy-vps.md
  */
 pipeline {
   agent any
@@ -19,11 +17,11 @@ pipeline {
     DEPLOY_DIR_HOST  = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
     IMAGE_TAG        = "${env.BUILD_NUMBER ?: 'latest'}"
     IMAGE_PREFIX     = 'softmusic'
-    WEB_VITE_API_URL        = "${env.WEB_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
-    LP_VITE_APP_URL         = "${env.LP_VITE_APP_URL ?: 'https://softmusic.com.br'}"
-    DEPLOY_ADMIN_WEB        = '0'
-    EDGE_PROXY              = "${env.EDGE_PROXY ?: 'easypanel'}"
-    TRAEFIK_DOCKER_NETWORK  = "${env.TRAEFIK_DOCKER_NETWORK ?: 'easypanel'}"
+    WEB_VITE_API_URL = "${env.WEB_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
+    LP_VITE_APP_URL  = "${env.LP_VITE_APP_URL ?: 'https://app.softmusic.com.br'}"
+    DEPLOY_ADMIN_WEB = '0'
+    LP_PORT          = "${env.LP_PORT ?: '4100'}"
+    WEB_PORT         = "${env.WEB_PORT ?: '4101'}"
   }
 
   stages {

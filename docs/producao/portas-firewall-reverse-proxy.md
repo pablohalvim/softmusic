@@ -1,5 +1,11 @@
 # Portas, firewall e reverse proxy (VPS)
 
+> **Produção atual (VPS com EasyPanel):** use o modelo Sportshub — portas no host
+> + reverse proxy no EasyPanel. Ver **[reverse-proxy-vps.md](./reverse-proxy-vps.md)**.
+>
+> O documento abaixo descreve o modelo **legado** com `softmusic-nginx` nas portas 80/443
+> (não usado quando o EasyPanel já ocupa essas portas).
+
 Guia para liberar portas no firewall da VPS, configurar DNS e entender como o
 **nginx** (`softmusic-nginx`) roteia o tráfego público para os containers.
 
