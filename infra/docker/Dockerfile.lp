@@ -12,9 +12,10 @@ ENV VITE_APP_URL=$VITE_APP_URL
 RUN pnpm --filter @softmusic/lp build
 
 FROM deps AS runner
-RUN apk add --no-cache nginx
+RUN apk add --no-cache nginx curl
 COPY infra/nginx/conf.d/lp.conf /etc/nginx/http.d/default.conf
 RUN mkdir -p /usr/share/nginx/html \
   && cp -r /app/apps/lp/dist/. /usr/share/nginx/html/
 EXPOSE 80
+ENTRYPOINT []
 CMD ["nginx", "-g", "daemon off;"]

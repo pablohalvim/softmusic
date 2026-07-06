@@ -19,9 +19,10 @@ ENV VITE_APP_VERSION=$VITE_APP_VERSION
 RUN pnpm --filter @softmusic/web build
 
 FROM deps AS runner
-RUN apk add --no-cache nginx
+RUN apk add --no-cache nginx curl
 COPY infra/nginx/conf.d/spa.conf /etc/nginx/http.d/default.conf
 RUN mkdir -p /usr/share/nginx/html \
   && cp -r /app/apps/web/build/client/. /usr/share/nginx/html/
 EXPOSE 80
+ENTRYPOINT []
 CMD ["nginx", "-g", "daemon off;"]

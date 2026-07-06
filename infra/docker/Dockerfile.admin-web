@@ -12,9 +12,10 @@ ENV VITE_API_URL=$VITE_API_URL
 RUN pnpm --filter @softmusic/admin-web build
 
 FROM deps AS runner
-RUN apk add --no-cache nginx
+RUN apk add --no-cache nginx curl
 COPY infra/nginx/conf.d/spa.conf /etc/nginx/http.d/default.conf
 RUN mkdir -p /usr/share/nginx/html \
   && cp -r /app/apps/admin-web/dist/. /usr/share/nginx/html/
 EXPOSE 80
+ENTRYPOINT []
 CMD ["nginx", "-g", "daemon off;"]

@@ -15,6 +15,12 @@ Não usamos `softmusic-nginx` nem certbot do compose — o EasyPanel já ocupa :
 | API (BFF) | `softmusic-api` | **8081** | `app…/api` e `admin…/api` |
 | Grafana | `softmusic-grafana` | **4103** | `grafana.softmusic.com.br` |
 
+> **Grafana vs EasyPanel:** o painel EasyPanel usa a porta **3000 no host**
+> (`easypanel:3000`). O Grafana do SoftMusic escuta **3000 só dentro do container**
+> e é publicado na **4103** no host — **não há conflito**. Se `docker ps` mostrar
+> `softmusic-grafana` apenas como `3000/tcp` (sem `0.0.0.0:4103`), re-rode o job
+> **`softmusic-infra`** para recriar o Grafana com a porta exposta.
+
 Na mesma VPS (referência):
 
 | Projeto | Web | API |
