@@ -61,7 +61,47 @@ Use o IP da VPS ou `host.docker.internal` se o Traefik alcançar o host:
 **HTTPS:** ligado em cada domínio — o EasyPanel emite o certificado Let's Encrypt.
 
 > Se `127.0.0.1` não funcionar no Personalizado, use o IP público da VPS
-> (ex.: `170.0.60.107:4101`) — o Traefik precisa alcançar a porta publicada no host.
+> (ex.: `170.0.0.60.108:4101`) — o Traefik precisa alcançar a porta publicada no host.
+
+### Regras importantes (SSL + roteamento)
+
+| Certo | Errado |
+|-------|--------|
+| Host: `app.softmusic.com.br`, Caminho: `/api` | Host: `app.softmusic.com.br/api` |
+| SSL `letsencrypt` no domínio (Host sem path) | Certificado só na rota `/api` |
+| Rota `/api` → `:8081` + **Strip Prefix** `/api` | `/api` indo para `:4101` (SPA) |
+
+A rota `/api` deve ter **prioridade maior** que `/` no mesmo host (no EasyPanel, crie `/api` antes ou use caminho mais específico).
+
+## Troubleshooting
+
+### `405 Method Not Allowed` em `/api/*` (não é CORS)
+
+Se o DevTools mostra `Server: nginx` e `Content-Type: text/html` no POST `/api/...`,
+a requisição está indo para o **container web (4101)**, não para a **API (8081)**.
+
+```bash
+# Deve responder JSON da API (4xx/422), NÃO 405 nginx:
+curl -sI -X POST https://app.softmusic.com.br/api/auth/register \
+  -H "Content-Type: application/json" -d '{}'
+
+# API direta (sempre deve funcionar):
+curl -sI -X POST http://127.0.0.1:8081/auth/register \
+  -H "Content-Type: application/json" -d '{}'
+```
+
+**Correção no EasyPanel:** rota `app.softmusic.com.br` + caminho `/api` → `http://IP:8081` com middleware **Strip Prefix** `/api`.
+
+### Certificado `CN=Easypanel` / `ERR_CERT_AUTHORITY_INVALID`
+
+Let's Encrypt falhou. Causas comuns: DNS apontando para IP errado, Host com `/api` no nome,
+muitas tentativas falhas (rate limit ~1h). Ver logs:
+
+```bash
+docker logs $(docker ps -q -f name=easypanel-traefik | head -1) 2>&1 | grep -i acme | tail -10
+```
+
+Remova `/etc/easypanel/traefik/config/custom.yaml` se existir (conflita com a UI).
 
 ## Nginx no host (alternativa ao EasyPanel UI)
 
