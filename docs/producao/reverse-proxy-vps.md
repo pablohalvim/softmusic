@@ -53,9 +53,7 @@ Use o IP da VPS ou `host.docker.internal` se o Traefik alcançar o host:
 | `softmusic.com.br` | `/` | `http://SEU_IP_VPS:4100` |
 | `www.softmusic.com.br` | `/` | `http://SEU_IP_VPS:4100` |
 | `app.softmusic.com.br` | `/` | `http://SEU_IP_VPS:4101` |
-| `app.softmusic.com.br` | `/api` | `http://SEU_IP_VPS:8081` + middleware **Strip Prefix** `/api` |
 | `admin.softmusic.com.br` | `/` | `http://SEU_IP_VPS:4102` |
-| `admin.softmusic.com.br` | `/api` | `http://SEU_IP_VPS:8081` + Strip `/api` + Add Prefix `/admin` |
 | `grafana.softmusic.com.br` | `/` | `http://SEU_IP_VPS:4103` |
 
 **HTTPS:** ligado em cada domínio — o EasyPanel emite o certificado Let's Encrypt.
@@ -63,15 +61,14 @@ Use o IP da VPS ou `host.docker.internal` se o Traefik alcançar o host:
 > Se `127.0.0.1` não funcionar no Personalizado, use o IP público da VPS
 > (ex.: `170.0.0.60.108:4101`) — o Traefik precisa alcançar a porta publicada no host.
 
-### Regras importantes (SSL + roteamento)
+### `/api` no mesmo domínio (recomendado — igual Sportshub)
 
-| Certo | Errado |
-|-------|--------|
-| Host: `app.softmusic.com.br`, Caminho: `/api` | Host: `app.softmusic.com.br/api` |
-| SSL `letsencrypt` no domínio (Host sem path) | Certificado só na rota `/api` |
-| Rota `/api` → `:8081` + **Strip Prefix** `/api` | `/api` indo para `:4101` (SPA) |
+O nginx **dentro** dos containers `web` e `admin-web` faz proxy de `/api/` → `http://api:8080/`
+(ver `infra/nginx/conf.d/spa.conf`). No EasyPanel basta **uma rota por host** (`/` → `:4101` ou `:4102`).
 
-A rota `/api` deve ter **prioridade maior** que `/` no mesmo host (no EasyPanel, crie `/api` antes ou use caminho mais específico).
+**Remova** rotas separadas `app…/api` e `admin…/api` no EasyPanel se existirem — elas conflitam ou mandam POST para o SPA (405).
+
+A API continua exposta em `:8081` no host para debug/webhooks diretos se necessário.
 
 ## Troubleshooting
 
