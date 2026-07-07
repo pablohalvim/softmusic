@@ -74,8 +74,18 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
       body: JSON.stringify({ name, plan_code: planCode }),
     });
     if (!response.ok) {
-      const message = await response.text();
-      throw new Error(message || "Não foi possível criar a banda");
+      const text = await response.text();
+      let message = text || "Não foi possível criar a banda";
+      try {
+        const payload = JSON.parse(text) as {
+          error?: { message?: string };
+          detail?: string;
+        };
+        message = payload.error?.message ?? payload.detail ?? message;
+      } catch {
+        // resposta não-JSON (ex.: HTML de proxy)
+      }
+      throw new Error(message);
     }
     const band: BandSummary = await response.json();
     await refreshBands();

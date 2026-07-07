@@ -9,6 +9,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.billing_service import BillingService
+from app.logging import logger
 from app.infrastructure.database.models import (
     Band,
     BandInvite,
@@ -99,9 +100,7 @@ class BandService:
         await self.session.refresh(band)
         await self.session.refresh(owner_member)
 
-        billing_service = BillingService(self.session)
-        await billing_service.sync_subscription(billing.id)
-
+        # Assinatura Asaas é sincronizada no checkout; no trial a banda já funciona.
         return self._serialize_band(band, owner_member, 1)
 
     async def get_member(self, band_id: str, user_id: str) -> BandMember | None:
@@ -305,7 +304,14 @@ class BandService:
         if band is None:
             raise ValueError("Banda não encontrada")
         billing_service = BillingService(self.session)
-        await billing_service.sync_subscription(band.billing_account_id)
+        try:
+            await billing_service.sync_subscription(band.billing_account_id)
+        except Exception as exc:
+            logger.warning(
+                "billing_sync_failed_after_invite",
+                band_id=band.id,
+                error=str(exc),
+            )
         return self._serialize_band(band, member, await self._active_member_count(band.id))
 
     async def update_member_permissions(

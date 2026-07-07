@@ -17,37 +17,43 @@ class AsaasClient:
     def _headers(self) -> dict[str, str]:
         return {"access_token": self.api_key, "Content-Type": "application/json"}
 
+    async def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if not self.api_key:
+            return {"id": f"mock_{path.strip('/').replace('/', '_')}"}
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.request(
+                method, f"{self.base_url}{path}", headers=self._headers(), **kwargs
+            )
+            if response.is_error:
+                detail = response.text
+                try:
+                    payload = response.json()
+                    errors = payload.get("errors")
+                    if isinstance(errors, list) and errors:
+                        detail = "; ".join(
+                            str(item.get("description", item)) for item in errors
+                        )
+                    elif payload.get("detail"):
+                        detail = str(payload["detail"])
+                except Exception:
+                    pass
+                raise RuntimeError(detail or f"Asaas HTTP {response.status_code}")
+            return response.json()
+
     async def create_customer(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.api_key:
             return {"id": "mock_customer", **payload}
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"{self.base_url}/customers", json=payload, headers=self._headers()
-            )
-            response.raise_for_status()
-            return response.json()
+        return await self._request("POST", "/customers", json=payload)
 
     async def create_subscription(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.api_key:
             return {"id": "mock_subscription", **payload}
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"{self.base_url}/subscriptions", json=payload, headers=self._headers()
-            )
-            response.raise_for_status()
-            return response.json()
+        return await self._request("POST", "/subscriptions", json=payload)
 
     async def update_subscription(self, subscription_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.api_key:
             return {"id": subscription_id, **payload}
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.put(
-                f"{self.base_url}/subscriptions/{subscription_id}",
-                json=payload,
-                headers=self._headers(),
-            )
-            response.raise_for_status()
-            return response.json()
+        return await self._request("PUT", f"/subscriptions/{subscription_id}", json=payload)
 
     async def list_payments(self, subscription_id: str) -> list[dict[str, Any]]:
         if not self.api_key:

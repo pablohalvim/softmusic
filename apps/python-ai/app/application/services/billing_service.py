@@ -61,34 +61,40 @@ class BillingService:
 
         user = await self._get_user(account.owner_user_id)
         if user and not account.asaas_customer_id:
-            customer = await self.asaas.create_customer(
-                {
-                    "name": user.full_name,
-                    "email": user.email,
-                    "cpfCnpj": user.cpf,
-                    "mobilePhone": user.phone,
-                }
-            )
+            try:
+                customer = await self.asaas.create_customer(
+                    {
+                        "name": user.full_name,
+                        "email": user.email,
+                        "cpfCnpj": user.cpf,
+                        "mobilePhone": user.phone,
+                    }
+                )
+            except RuntimeError as exc:
+                raise ValueError(str(exc)) from exc
             account.asaas_customer_id = customer.get("id")
 
         if account.asaas_customer_id:
             value = round(total_cents / 100, 2)
-            if account.asaas_subscription_id:
-                await self.asaas.update_subscription(
-                    account.asaas_subscription_id,
-                    {"value": value, "description": "SoftMusic — assinaturas consolidadas"},
-                )
-            else:
-                sub = await self.asaas.create_subscription(
-                    {
-                        "customer": account.asaas_customer_id,
-                        "billingType": "UNDEFINED",
-                        "value": value,
-                        "cycle": "MONTHLY",
-                        "description": "SoftMusic — assinaturas consolidadas",
-                    }
-                )
-                account.asaas_subscription_id = sub.get("id")
+            try:
+                if account.asaas_subscription_id:
+                    await self.asaas.update_subscription(
+                        account.asaas_subscription_id,
+                        {"value": value, "description": "SoftMusic — assinaturas consolidadas"},
+                    )
+                else:
+                    sub = await self.asaas.create_subscription(
+                        {
+                            "customer": account.asaas_customer_id,
+                            "billingType": "UNDEFINED",
+                            "value": value,
+                            "cycle": "MONTHLY",
+                            "description": "SoftMusic — assinaturas consolidadas",
+                        }
+                    )
+                    account.asaas_subscription_id = sub.get("id")
+            except RuntimeError as exc:
+                raise ValueError(str(exc)) from exc
 
         account.status = "active" if total_cents > 0 else account.status
         await self.session.commit()
