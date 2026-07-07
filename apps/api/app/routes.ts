@@ -19,6 +19,7 @@ export default [
   route("billing/checkout", "routes/billing.checkout.tsx"),
   route("webhooks/asaas", "routes/webhooks.asaas.tsx"),
   route("admin/auth/login", "routes/admin.auth.login.tsx"),
+  route("admin/dashboard/stats", "routes/admin.dashboard.stats.tsx"),
   route("admin/users", "routes/admin.users.tsx"),
   route("admin/bands", "routes/admin.bands.tsx"),
   route("admin/bands/:bandId/exempt", "routes/admin.bands.$bandId.exempt.tsx"),

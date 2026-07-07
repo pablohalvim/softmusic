@@ -6,153 +6,107 @@ import { StatusBadge } from "../components/analysis/StatusBadge";
 import { fetchDashboardStats } from "../lib/api";
 import { useBand } from "../lib/band-context";
 
-function formatDuration(seconds: number | null): string {
-  if (seconds == null) return "—";
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = Math.round(seconds % 60);
-  return `${minutes}m ${remainder}s`;
-}
-
-function formatPercent(value: number | null): string {
-  if (value == null) return "—";
-  return `${value.toFixed(1)}%`;
-}
-
 export default function Dashboard() {
-  const { activeBand } = useBand();
+  const { activeBand, bands, loading: bandsLoading } = useBand();
   const statsQuery = useQuery({
     queryKey: ["dashboard-stats", activeBand?.id ?? null],
     queryFn: fetchDashboardStats,
     enabled: Boolean(activeBand?.id),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
 
   const stats = statsQuery.data;
 
-  const cards = stats
-    ? [
-        {
-          label: "Análises concluídas",
-          value: String(stats.songs.completed),
-          hint: `${stats.songs.total} músicas na biblioteca`,
-        },
-        {
-          label: "Jobs em fila",
-          value: String(stats.jobs.queued),
-          hint:
-            stats.jobs.processing > 0
-              ? `${stats.jobs.processing} processando agora`
-              : "Nenhum job em execução",
-        },
-        {
-          label: "Tempo médio",
-          value: formatDuration(stats.pipeline.average_duration_seconds),
-          hint: "Pipeline completo · últimas 24h",
-        },
-        {
-          label: "Taxa de sucesso",
-          value: formatPercent(stats.pipeline.success_rate_24h),
-          hint: `${stats.pipeline.completed_24h} ok · ${stats.pipeline.failed_24h} falhas (24h)`,
-        },
-      ]
-    : [];
+  if (bandsLoading) {
+    return <p className="text-slate-400">Carregando...</p>;
+  }
+
+  if (!activeBand) {
+    return (
+      <section className="space-y-4">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <p className="text-slate-400">
+          {bands.length === 0
+            ? "Crie uma banda para acompanhar suas análises."
+            : "Selecione uma banda para ver o resumo."}
+        </p>
+        <Link
+          to="/bandas"
+          className="inline-block rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400"
+        >
+          Ir para bandas
+        </Link>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-slate-400">Visão operacional da plataforma SoftMusic.</p>
+          <p className="text-slate-400">
+            Resumo da banda <span className="text-slate-200">{activeBand.name}</span>
+          </p>
         </div>
         {stats ? (
           <p className="text-xs text-slate-500">
-            Atualizado {formatRelativeTime(stats.generated_at)} · refresh a cada 10s
+            Atualizado {formatRelativeTime(stats.generated_at)}
           </p>
         ) : null}
       </div>
 
       {statsQuery.isLoading ? (
         <p className="text-slate-400">Carregando métricas...</p>
-      ) : statsQuery.isError ? (
+      ) : statsQuery.isError || !stats ? (
         <div className="rounded-xl border border-red-900/50 bg-red-950/20 p-4 text-red-200">
-          Não foi possível carregar o dashboard. Verifique se a API está no ar.
+          Não foi possível carregar o dashboard. Tente novamente em instantes.
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {cards.map((card) => (
-              <article
-                key={card.label}
-                className="rounded-xl border border-slate-800 bg-slate-900/60 p-4"
-              >
-                <p className="text-sm text-slate-400">{card.label}</p>
-                <p className="mt-2 text-3xl font-bold text-slate-100">{card.value}</p>
-                <p className="mt-2 text-xs text-slate-500">{card.hint}</p>
-              </article>
-            ))}
+          <div className="rounded-2xl border border-indigo-900/40 bg-indigo-950/20 p-6">
+            <p className="text-sm text-indigo-200/80">Músicas analisadas</p>
+            <p className="mt-2 text-5xl font-bold text-indigo-100">{stats.analyzed_count}</p>
+            <p className="mt-2 text-sm text-slate-400">
+              de {stats.songs.total} na biblioteca desta banda
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+              <p className="text-sm text-slate-400">Em análise</p>
+              <p className="mt-2 text-2xl font-semibold text-indigo-300">
+                {stats.songs.pending + stats.songs.processing}
+              </p>
+            </article>
+            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+              <p className="text-sm text-slate-400">Concluídas</p>
+              <p className="mt-2 text-2xl font-semibold text-emerald-300">{stats.songs.completed}</p>
+            </article>
+            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+              <p className="text-sm text-slate-400">Com falha</p>
+              <p className="mt-2 text-2xl font-semibold text-red-300">{stats.songs.failed}</p>
+            </article>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-medium">Em processamento</h2>
+                <h2 className="font-medium">Últimas músicas</h2>
                 <Link to="/library" className="text-xs text-indigo-300 hover:text-indigo-200">
                   Ver biblioteca
                 </Link>
               </div>
-              {stats!.active_jobs.length === 0 ? (
-                <p className="text-sm text-slate-500">Nenhuma análise ativa no momento.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {stats!.active_jobs.map((job) => (
-                    <li key={job.job_id}>
-                      <Link
-                        to={`/songs/${job.song_id}`}
-                        className="block rounded-lg border border-slate-800 px-3 py-2 transition hover:border-slate-700 hover:bg-slate-950/50"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm text-slate-200">
-                            {job.title ?? "Música sem título"}
-                          </span>
-                          <StatusBadge status={job.status} kind="job" />
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
-                            <div
-                              className="h-full rounded-full bg-indigo-500 transition-all"
-                              style={{ width: `${job.progress}%` }}
-                            />
-                          </div>
-                          <span className="text-xs text-slate-500">{job.progress}%</span>
-                        </div>
-                        {job.stage ? (
-                          <p className="mt-1 text-xs text-slate-500">Etapa: {job.stage}</p>
-                        ) : null}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </article>
-
-            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-medium">Atividade recente</h2>
-                <Link to="/analyze" className="text-xs text-orange-400 hover:text-orange-300">
-                  Nova análise
-                </Link>
-              </div>
-              {stats!.recent_songs.length === 0 ? (
+              {stats.recent_songs.length === 0 ? (
                 <p className="text-sm text-slate-500">
-                  Nenhuma música analisada ainda.{" "}
+                  Nenhuma música ainda.{" "}
                   <Link to="/analyze" className="text-indigo-300 underline">
-                    Começar agora
+                    Analisar primeira música
                   </Link>
                 </p>
               ) : (
                 <ul className="space-y-2">
-                  {stats!.recent_songs.map((song) => (
+                  {stats.recent_songs.map((song) => (
                     <li key={song.id}>
                       <Link
                         to={`/songs/${song.id}`}
@@ -174,23 +128,39 @@ export default function Dashboard() {
                 </ul>
               )}
             </article>
-          </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm">
-              <span className="text-slate-500">Pendentes</span>
-              <p className="mt-1 text-xl font-semibold text-slate-200">{stats!.songs.pending}</p>
-            </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm">
-              <span className="text-slate-500">Falhas</span>
-              <p className="mt-1 text-xl font-semibold text-red-300">{stats!.songs.failed}</p>
-            </div>
-            <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm">
-              <span className="text-slate-500">Processando</span>
-              <p className="mt-1 text-xl font-semibold text-indigo-300">
-                {stats!.songs.processing}
-              </p>
-            </div>
+            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="font-medium">Em andamento</h2>
+                <Link to="/analyze" className="text-xs text-orange-400 hover:text-orange-300">
+                  Nova análise
+                </Link>
+              </div>
+              {stats.in_progress_songs.length === 0 ? (
+                <p className="text-sm text-slate-500">Nenhuma análise em andamento.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {stats.in_progress_songs.map((song) => (
+                    <li key={song.id}>
+                      <Link
+                        to={`/songs/${song.id}`}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 px-3 py-2 transition hover:border-slate-700 hover:bg-slate-950/50"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-slate-200">
+                            {song.title ?? "Música sem título"}
+                          </p>
+                          <p className="truncate text-xs text-slate-500">
+                            {formatRelativeTime(song.updated_at)}
+                          </p>
+                        </div>
+                        <StatusBadge status={song.status} kind="song" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
           </div>
         </>
       )}

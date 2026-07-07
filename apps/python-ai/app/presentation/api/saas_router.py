@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.admin_service import AdminService
+from app.application.services.analysis_service import AnalysisService
 from app.application.services.auth_service import AuthService
 from app.application.services.band_service import BandService
 from app.application.services.billing_service import BillingService
@@ -262,6 +263,15 @@ async def admin_login(body: AdminLoginBody, session: AsyncSession = Depends(get_
         return await AdminService(session).login(body.email, body.password)
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+@router.get("/admin/dashboard/stats")
+async def admin_dashboard_stats(
+    admin=Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    _ = admin
+    return await AnalysisService(session).get_dashboard_stats()
 
 
 @router.get("/admin/users")

@@ -121,22 +121,13 @@ export interface SongsListResponse {
 
 export interface DashboardStats {
   generated_at: string;
+  analyzed_count: number;
   songs: {
     total: number;
     completed: number;
     failed: number;
     pending: number;
     processing: number;
-  };
-  jobs: {
-    queued: number;
-    processing: number;
-  };
-  pipeline: {
-    average_duration_seconds: number | null;
-    success_rate_24h: number | null;
-    completed_24h: number;
-    failed_24h: number;
   };
   recent_songs: Array<{
     id: string;
@@ -145,13 +136,11 @@ export interface DashboardStats {
     status: SongSummary["status"];
     updated_at: string;
   }>;
-  active_jobs: Array<{
-    job_id: string;
-    song_id: string;
+  in_progress_songs: Array<{
+    id: string;
     title: string | null;
-    status: Job["status"];
-    stage: string | null;
-    progress: number;
+    artist: string | null;
+    status: SongSummary["status"];
     updated_at: string;
   }>;
 }

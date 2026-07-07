@@ -1,6 +1,43 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 const TOKEN_KEY = "softmusic:admin_token";
 
+export interface AdminDashboardStats {
+  generated_at: string;
+  songs: {
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+    processing: number;
+  };
+  jobs: {
+    queued: number;
+    processing: number;
+  };
+  pipeline: {
+    average_duration_seconds: number | null;
+    success_rate_24h: number | null;
+    completed_24h: number;
+    failed_24h: number;
+  };
+  recent_songs: Array<{
+    id: string;
+    title: string | null;
+    artist: string | null;
+    status: string;
+    updated_at: string;
+  }>;
+  active_jobs: Array<{
+    job_id: string;
+    song_id: string;
+    title: string | null;
+    status: string;
+    stage: string | null;
+    progress: number;
+    updated_at: string;
+  }>;
+}
+
 export function getAdminToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -22,7 +59,23 @@ export async function adminFetch(path: string, init: RequestInit = {}): Promise<
   if (!headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
   }
-  return fetch(`${API_URL}${path}`, { ...init, headers });
+  const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  if (response.status === 401) {
+    clearAdminToken();
+  }
+  return response;
+}
+
+async function parseAdminError(response: Response, fallback: string): Promise<never> {
+  const text = await response.text();
+  let message = fallback;
+  try {
+    const payload = JSON.parse(text) as { error?: { message?: string }; detail?: string };
+    message = payload.error?.message ?? payload.detail ?? message;
+  } catch {
+    if (text) message = text;
+  }
+  throw new Error(message);
 }
 
 export async function adminLogin(email: string, password: string) {
@@ -41,13 +94,19 @@ export async function adminLogin(email: string, password: string) {
 
 export async function fetchAdminUsers(query = "") {
   const response = await adminFetch(`/admin/users${query ? `?q=${encodeURIComponent(query)}` : ""}`);
-  if (!response.ok) throw new Error("Falha ao carregar usuários");
+  if (!response.ok) await parseAdminError(response, "Falha ao carregar usuários");
   return response.json();
 }
 
 export async function fetchAdminBands() {
   const response = await adminFetch("/admin/bands");
-  if (!response.ok) throw new Error("Falha ao carregar bandas");
+  if (!response.ok) await parseAdminError(response, "Falha ao carregar bandas");
+  return response.json();
+}
+
+export async function fetchAdminDashboardStats(): Promise<AdminDashboardStats> {
+  const response = await adminFetch("/admin/dashboard/stats");
+  if (!response.ok) await parseAdminError(response, "Falha ao carregar dashboard");
   return response.json();
 }
 

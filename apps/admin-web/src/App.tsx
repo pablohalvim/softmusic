@@ -11,15 +11,16 @@ import {
   suspendBand,
   suspendOverdueAccounts,
 } from "./lib/api";
+import { AdminDashboard } from "./components/AdminDashboard";
 
-type Tab = "users" | "bands" | "marketing";
+type Tab = "dashboard" | "users" | "bands" | "marketing";
 
 export function App() {
   const [token, setToken] = useState(getAdminToken);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("bands");
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [users, setUsers] = useState<Array<Record<string, unknown>>>([]);
   const [bands, setBands] = useState<Array<Record<string, unknown>>>([]);
   const [marketingSubject, setMarketingSubject] = useState("");
@@ -28,6 +29,7 @@ export function App() {
 
   useEffect(() => {
     if (!token) return;
+    if (tab === "dashboard" || tab === "marketing") return;
     void loadData();
   }, [token, tab]);
 
@@ -42,6 +44,9 @@ export function App() {
         setBands(payload.items ?? []);
       }
     } catch (err) {
+      if (!getAdminToken()) {
+        setToken(null);
+      }
       setError(err instanceof Error ? err.message : "Erro ao carregar dados");
     }
   }
@@ -97,15 +102,23 @@ export function App() {
       </header>
 
       <nav className="tabs">
-        {(["bands", "users", "marketing"] as Tab[]).map((item) => (
+        {(["dashboard", "bands", "users", "marketing"] as Tab[]).map((item) => (
           <button key={item} type="button" className={tab === item ? "active" : ""} onClick={() => setTab(item)}>
-            {item === "bands" ? "Bandas" : item === "users" ? "Usuários" : "Marketing"}
+            {item === "dashboard"
+              ? "Dashboard"
+              : item === "bands"
+                ? "Bandas"
+                : item === "users"
+                  ? "Usuários"
+                  : "Marketing"}
           </button>
         ))}
       </nav>
 
       {status ? <p className="status">{status}</p> : null}
       {error ? <p className="error">{error}</p> : null}
+
+      {tab === "dashboard" ? <AdminDashboard onUnauthorized={() => setToken(null)} /> : null}
 
       {tab === "users" ? (
         <section className="card">

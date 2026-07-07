@@ -239,22 +239,27 @@ async def dashboard_stats(
     for song in songs:
         if song.status in by_status:
             by_status[song.status] += 1
-    recent = sorted(songs, key=lambda s: s.updated_at, reverse=True)[:6]
+    recent = sorted(songs, key=lambda s: s.updated_at, reverse=True)[:8]
+    in_progress = [
+        {
+            "id": song.id,
+            "title": song.title,
+            "artist": song.artist,
+            "status": song.status,
+            "updated_at": song.updated_at.isoformat(),
+        }
+        for song in songs
+        if song.status in {"pending", "processing"}
+    ][:6]
     return {
         "generated_at": now.isoformat(),
+        "analyzed_count": by_status["completed"],
         "songs": {
             "total": total,
             "completed": by_status["completed"],
             "failed": by_status["failed"],
             "pending": by_status["pending"],
             "processing": by_status["processing"],
-        },
-        "jobs": {"queued": 0, "processing": by_status["pending"] + by_status["processing"]},
-        "pipeline": {
-            "average_duration_seconds": None,
-            "success_rate_24h": None,
-            "completed_24h": 0,
-            "failed_24h": 0,
         },
         "recent_songs": [
             {
@@ -266,7 +271,7 @@ async def dashboard_stats(
             }
             for song in recent
         ],
-        "active_jobs": [],
+        "in_progress_songs": in_progress,
     }
 
 

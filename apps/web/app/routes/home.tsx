@@ -21,7 +21,7 @@ export default function Home() {
             to="/dashboard"
             className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:border-slate-500"
           >
-            Ver dashboard
+            Ver meu resumo
           </Link>
         </div>
       </div>
