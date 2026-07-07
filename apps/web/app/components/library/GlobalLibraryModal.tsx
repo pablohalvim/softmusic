@@ -93,7 +93,7 @@ export function GlobalLibraryModal({ open, bandId, onClose }: GlobalLibraryModal
                       type="button"
                       disabled={linkMutation.isPending}
                       onClick={() => linkMutation.mutate(song.id)}
-                      className="rounded-lg bg-indigo-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50"
+                      className="rounded-lg bg-green-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-400 disabled:opacity-50"
                     >
                       {isLinking ? "Adicionando..." : "Adicionar"}
                     </button>

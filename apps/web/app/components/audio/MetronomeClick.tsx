@@ -170,7 +170,7 @@ export const MetronomeClick = forwardRef<MetronomeClickHandle, MetronomeClickPro
                   active
                     ? measureBeat === 1
                       ? "bg-orange-400"
-                      : "bg-indigo-400"
+                      : "bg-green-400"
                     : "bg-slate-800"
                 }`}
               />

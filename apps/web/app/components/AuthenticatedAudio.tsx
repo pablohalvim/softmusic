@@ -68,7 +68,7 @@ export function AuthenticatedAudio({
         <button
           type="button"
           onClick={() => void handleDownload()}
-          className="shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:border-indigo-500/50 hover:text-indigo-200"
+          className="shrink-0 rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:border-green-500/50 hover:text-green-200"
         >
           Salvar
         </button>

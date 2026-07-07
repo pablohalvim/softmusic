@@ -47,7 +47,7 @@ export function JobStatusTracker({
           ? "border-emerald-900/50 bg-emerald-950/20"
           : job.status === "failed"
             ? "border-red-900/50 bg-red-950/20"
-            : "border-indigo-900/50 bg-indigo-950/20"
+            : "border-green-900/50 bg-green-950/20"
       } p-5`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -65,7 +65,7 @@ export function JobStatusTracker({
           <div className="flex flex-wrap gap-2">
             <Link
               to={`/songs/${songId}`}
-              className="rounded-lg bg-indigo-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-400"
+              className="rounded-lg bg-green-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-400"
             >
               Ver análise
             </Link>
@@ -101,7 +101,7 @@ export function JobStatusTracker({
       {!compact && job.status !== "completed" && job.status !== "failed" ? (
         <p className="mt-4 text-xs text-slate-500">
           Esta página atualiza automaticamente a cada poucos segundos. Você também pode acompanhar em{" "}
-          <Link className="text-indigo-300 underline" to="/library">
+          <Link className="text-green-300 underline" to="/library">
             Biblioteca
           </Link>
           .

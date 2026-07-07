@@ -12,7 +12,7 @@ export default function JobDetail() {
       <section className="space-y-4">
         <h1 className="text-2xl font-semibold">Status da análise</h1>
         <p className="text-red-400">Job inválido. Volte para a biblioteca ou envie uma nova análise.</p>
-        <Link to="/library" className="text-indigo-300 underline">
+        <Link to="/library" className="text-green-300 underline">
           Ir para biblioteca
         </Link>
       </section>

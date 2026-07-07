@@ -19,7 +19,7 @@ interface MusicMapPanelProps {
 
 const SECTION_COLORS: Record<string, string> = {
   intro: "bg-slate-500",
-  verse: "bg-indigo-500",
+  verse: "bg-green-500",
   pre_chorus: "bg-violet-500",
   chorus: "bg-orange-500",
   bridge: "bg-purple-500",
@@ -115,7 +115,7 @@ export function MusicMapPanel({
         </div>
         <div className="flex flex-wrap gap-3 text-[11px] text-slate-400">
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-indigo-500" /> Seções
+            <span className="inline-block h-2 w-2 rounded-sm bg-green-500" /> Seções
           </span>
           <span className="flex items-center gap-1">
             <span className="inline-block h-2 w-2 rounded-sm bg-emerald-600" /> Tônica

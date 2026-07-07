@@ -42,7 +42,7 @@ export default function ConvitePage() {
       <section className="mx-auto max-w-md space-y-4 text-center">
         <h1 className="text-2xl font-semibold">Convite para banda</h1>
         <p className="text-slate-400">Faça login ou crie uma conta para aceitar o convite.</p>
-        <a href={`/login?next=/convite?token=${encodeURIComponent(token)}`} className="inline-block rounded-lg bg-indigo-500 px-4 py-2 text-white">
+        <a href={`/login?next=/convite?token=${encodeURIComponent(token)}`} className="inline-block rounded-lg bg-green-500 px-4 py-2 text-white">
           Ir para login
         </a>
       </section>
@@ -58,7 +58,7 @@ export default function ConvitePage() {
         type="button"
         onClick={() => void acceptInvite()}
         disabled={submitting || !token}
-        className="rounded-lg bg-indigo-500 px-4 py-2 font-medium text-white hover:bg-indigo-400 disabled:opacity-60"
+        className="rounded-lg bg-green-500 px-4 py-2 font-medium text-white hover:bg-green-400 disabled:opacity-60"
       >
         {submitting ? "Aceitando..." : "Aceitar convite"}
       </button>

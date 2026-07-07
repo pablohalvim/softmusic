@@ -33,7 +33,14 @@ import {
   ImportedCifraEditor,
 } from "./ImportedCifraEditor";
 import { ImportCifraVariationModal } from "./ImportCifraVariationModal";
-import { useCifraScroll } from "./cifra-scroll-context";
+import {
+  chordInputClass,
+  chordNoteClass,
+  cifraControlClass,
+  cifraPanelClass,
+  cifraSelectClass,
+  btnPrimary,
+} from "../../lib/ui-classes";
 import { SaveCifraVariationModal } from "./SaveCifraVariationModal";
 import { FoundChordsBar } from "./FoundChordsBar";
 
@@ -92,11 +99,9 @@ function chordKey(sectionId: string, chordIndex: number): string {
   return `${sectionId}:${chordIndex}`;
 }
 
-const panelClass = "rounded-xl border border-slate-800 bg-slate-900/60 p-4";
-const controlClass =
-  "rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2 text-slate-200 transition hover:border-slate-600 hover:bg-slate-900";
-const selectClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-slate-100 outline-none focus:border-orange-500/60";
+const panelClass = cifraPanelClass;
+const controlClass = cifraControlClass;
+const selectClass = cifraSelectClass;
 
 const TOOLS_MINIMIZED_MOBILE_KEY = "softmusic:cifra-tools-minimized-mobile";
 
@@ -668,7 +673,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
             </select>
             <button
               type="button"
-              className={`${controlClass} mt-2 w-full text-center text-orange-300 hover:text-orange-200`}
+              className={`${controlClass} mt-2 w-full text-center text-green-300 hover:text-green-200`}
               onClick={() => setSaveVariationOpen(true)}
             >
               Salvar variação
@@ -684,7 +689,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
 
           <div className={`${panelClass} !p-3`}>
             <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">Tom</p>
-            <p className="mb-3 text-2xl font-bold text-orange-400">{currentKey}</p>
+            <p className="mb-3 text-2xl chord-note">{currentKey}</p>
             <div className="flex items-center justify-between gap-1">
               <button
                 type="button"
@@ -749,9 +754,9 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
           <div className={`${panelClass} !p-3`}>
             <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">Rolagem automática</p>
             <p className="mb-3 text-xs text-slate-400">
-              Use o botão <strong className="text-orange-300">▶ Rolagem</strong> na barra de áudio
+              Use o botão <strong className="text-green-300">▶ Rolagem</strong> na barra de áudio
               {scrollPlaying ? (
-                <span className="text-orange-300"> (ativa agora)</span>
+                <span className="text-green-300"> (ativa agora)</span>
               ) : null}
               .
             </p>
@@ -765,7 +770,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                 step={5}
                 value={Math.round(autoScrollSpeed * 100)}
                 onChange={(event) => setAutoScrollSpeed(Number(event.target.value) / 100)}
-                className="mt-2 w-full accent-orange-500"
+                className="mt-2 w-full accent-chord"
               />
             </label>
 
@@ -774,7 +779,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                 type="checkbox"
                 checked={autoScrollSyncAudio}
                 onChange={(event) => setAutoScrollSyncAudio(event.target.checked)}
-                className="rounded border-slate-600 bg-slate-950 text-orange-500 focus:ring-orange-500/40"
+                className="rounded border-slate-600 bg-slate-950 text-green-500 focus:ring-green-500/40"
               />
               <span className="text-xs text-slate-400">
                 Ao iniciar rolagem, tocar o áudio e pausar junto
@@ -800,7 +805,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
               type="checkbox"
               checked={showDegrees}
               onChange={(event) => setShowDegrees(event.target.checked)}
-              className="rounded border-slate-600 bg-slate-950 text-orange-500 focus:ring-orange-500/40"
+              className="rounded border-slate-600 bg-slate-950 text-green-500 focus:ring-green-500/40"
             />
             <span className="text-xs text-slate-400">Mostrar graus do campo harmônico</span>
           </label>
@@ -811,7 +816,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
 
           <Link
             to={`/songs/${songId}`}
-            className={`${controlClass} block text-center text-indigo-300 hover:text-indigo-200`}
+            className={`${controlClass} block text-center text-green-300 hover:text-green-200`}
           >
             Ver análise completa
           </Link>
@@ -822,7 +827,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
           <header className="mb-8 border-b border-slate-800 pb-6">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-orange-400">{artist ?? "Artista desconhecido"}</p>
+                <p className="text-sm text-green-400">{artist ?? "Artista desconhecido"}</p>
                 <h1 className="mt-1 break-words text-2xl font-bold text-slate-100 sm:text-3xl">{songTitle}</h1>
               </div>
               <button
@@ -830,7 +835,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                 onClick={toggleCifraEditMode}
                 className={`shrink-0 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
                   cifraEditMode
-                    ? "border-orange-500/60 bg-orange-500/15 text-orange-200 hover:bg-orange-500/25"
+                    ? "border-green-500/60 bg-green-500/15 text-green-200 hover:bg-green-500/25"
                     : "border-slate-700 bg-slate-950/50 text-slate-200 hover:border-slate-500 hover:bg-slate-900"
                 }`}
                 aria-pressed={cifraEditMode}
@@ -841,7 +846,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
             <div className="mt-3 space-y-2">
               <p className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm text-slate-400">
                 <span>
-                  Tom: <strong className="text-orange-400">{currentKey}</strong>
+                  Tom: <strong className="text-green-400">{currentKey}</strong>
                   {capo > 0 ? ` · Capo ${capo}` : null}
                   <span className="mx-2 text-slate-700">·</span>
                   {effectiveMode === "minor" ? "menor" : "maior"}
@@ -850,7 +855,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                   <>
                     <button
                       type="button"
-                      className="rounded-lg border border-orange-800/60 bg-orange-950/30 px-2.5 py-1 text-xs text-orange-200 transition hover:border-orange-500/50 hover:bg-orange-950/50"
+                      className="rounded-lg border border-green-800/60 bg-green-950/30 px-2.5 py-1 text-xs text-green-200 transition hover:border-green-500/50 hover:bg-green-950/50"
                       onClick={() => (showKeyPicker ? setShowKeyPicker(false) : handleOpenKeyPicker())}
                     >
                       {showKeyPicker ? "Fechar" : "Corrigir TOM"}
@@ -904,7 +909,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                   </label>
                   <button
                     type="button"
-                    className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-medium text-white hover:bg-orange-400"
+                    className="sm-btn-primary px-3 py-2 text-xs"
                     onClick={handleApplyKeyOverride}
                   >
                     Aplicar
@@ -952,7 +957,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                     {cifraEditMode ? (
                       <button
                         type="button"
-                        className="rounded-full border border-dashed border-slate-600 px-2.5 py-0.5 text-xs text-slate-400 transition hover:border-orange-500/60 hover:text-orange-400"
+                        className="rounded-full border border-dashed border-slate-600 px-2.5 py-0.5 text-xs text-slate-400 transition hover:border-green-500/60 hover:text-green-400"
                         onClick={() => addChord(section.id)}
                       >
                         + acorde
@@ -984,7 +989,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                             <input
                               autoFocus
                               defaultValue={chord}
-                              className="w-20 rounded border border-orange-500/50 bg-slate-950 px-1 py-0.5 text-center font-bold text-orange-400 outline-none ring-1 ring-orange-500/30"
+                              className="chord-note-input w-20 px-1 py-0.5"
                               onBlur={(event) =>
                                 updateChord(section.id, chordIndex, event.target.value)
                               }
@@ -1000,14 +1005,14 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                           ) : cifraEditMode ? (
                             <button
                               type="button"
-                              className="font-bold text-orange-400 transition hover:text-orange-300"
+                              className="chord-note transition hover:text-green-300"
                               onClick={() => setEditingKey(key)}
                               title="Clique para editar o acorde"
                             >
                               {chord}
                             </button>
                           ) : (
-                            <span className="font-bold text-orange-400">{chord}</span>
+                            <span className="chord-note">{chord}</span>
                           )}
                           {showDegrees ? (
                             <p className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-500">
@@ -1021,7 +1026,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                     {cifraEditMode ? (
                       <button
                         type="button"
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-slate-600 text-lg text-slate-500 transition hover:border-orange-500/60 hover:bg-orange-500/5 hover:text-orange-400"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-slate-600 text-lg text-slate-500 transition hover:border-green-500/60 hover:bg-green-500/5 hover:text-green-400"
                         onClick={() => addChord(section.id)}
                         title="Adicionar acorde nesta seção"
                       >

@@ -2,7 +2,7 @@ import { labelJobStatus, labelJobStage, statusTone } from "../../lib/status-labe
 
 const toneClasses = {
   neutral: "border-slate-700 bg-slate-800/60 text-slate-300",
-  active: "border-indigo-700/60 bg-indigo-950/40 text-indigo-200",
+  active: "border-green-700/60 bg-green-950/40 text-green-200",
   success: "border-emerald-800/60 bg-emerald-950/30 text-emerald-200",
   error: "border-red-800/60 bg-red-950/30 text-red-200",
 } as const;
@@ -40,7 +40,7 @@ export function ProgressBar({ value }: { value: number }) {
   return (
     <div className="h-2 overflow-hidden rounded-full bg-slate-800">
       <div
-        className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+        className="h-full rounded-full bg-green-500 transition-all duration-500"
         style={{ width: `${safeValue}%` }}
       />
     </div>

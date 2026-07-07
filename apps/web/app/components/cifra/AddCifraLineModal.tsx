@@ -11,10 +11,10 @@ interface CifraLineModalProps {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-orange-500/60";
+  "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-green-500/60";
 
 const textareaClass =
-  "w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 outline-none focus:border-orange-500/60";
+  "w-full resize-y rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 outline-none focus:border-green-500/60";
 
 export function CifraLineModal({
   open,
@@ -108,7 +108,7 @@ export function CifraLineModal({
             <button
               type="submit"
               disabled={!canSubmit}
-              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="sm-btn-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
               {isEdit ? "Salvar" : "Adicionar"}
             </button>

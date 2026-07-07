@@ -155,7 +155,7 @@ export default function Analyze() {
           <p>{duplicateInfo.message}</p>
           <p className="mt-2">
             <Link
-              className="text-indigo-300 underline"
+              className="text-green-300 underline"
               to={
                 duplicateInfo.variationId
                   ? `/songs/${duplicateInfo.songId}/cifra?variation=${duplicateInfo.variationId}`
@@ -174,7 +174,7 @@ export default function Analyze() {
           onClick={() => setMode("upload")}
           disabled={isPending}
           className={`flex-1 rounded-md px-3 py-2 text-sm ${
-            mode === "upload" ? "bg-indigo-500 text-white" : "text-slate-300 hover:text-white"
+            mode === "upload" ? "bg-green-500 text-white" : "text-slate-300 hover:text-white"
           }`}
         >
           Upload
@@ -184,7 +184,7 @@ export default function Analyze() {
           onClick={() => setMode("youtube")}
           disabled={isPending}
           className={`flex-1 rounded-md px-3 py-2 text-sm ${
-            mode === "youtube" ? "bg-indigo-500 text-white" : "text-slate-300 hover:text-white"
+            mode === "youtube" ? "bg-green-500 text-white" : "text-slate-300 hover:text-white"
           }`}
         >
           YouTube
@@ -222,13 +222,13 @@ export default function Analyze() {
           <input
             type="file"
             accept="audio/*"
-            className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-500 file:px-4 file:py-2 file:text-white"
+            className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-md file:border-0 file:bg-green-500 file:px-4 file:py-2 file:text-white"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           />
           <button
             type="submit"
             disabled={!file || isPending}
-            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="rounded-lg bg-green-500 px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {isPending ? "Enviando..." : "Iniciar análise"}
           </button>
@@ -260,7 +260,7 @@ export default function Analyze() {
           <button
             type="submit"
             disabled={!youtubeUrl.trim() || isPending}
-            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="rounded-lg bg-green-500 px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {isPending ? "Enviando para análise..." : "Analisar do YouTube"}
           </button>
@@ -268,7 +268,7 @@ export default function Analyze() {
       )}
 
       {isPending ? (
-        <div className="rounded-xl border border-indigo-900/40 bg-indigo-950/20 p-4 text-sm text-indigo-200">
+        <div className="rounded-xl border border-green-900/40 bg-green-950/20 p-4 text-sm text-green-200">
           Enviando requisição... Em instantes o progresso aparecerá acima.
         </div>
       ) : null}
@@ -277,7 +277,7 @@ export default function Analyze() {
 
       <p className="text-sm text-slate-500">
         Todas as análises também ficam disponíveis em{" "}
-        <Link className="text-indigo-300 underline" to="/library">
+        <Link className="text-green-300 underline" to="/library">
           Biblioteca
         </Link>
         .

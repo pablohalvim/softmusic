@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { PLANS, formatBrl } from "@softmusic/shared";
 
+import { btnPrimary, inputClass, labelClass, linkClass, panelClass, panelHoverClass } from "../lib/ui-classes";
 import { useBand } from "../lib/band-context";
 
 const PLANS_LIST = Object.values(PLANS).map((plan) => ({
@@ -33,8 +34,8 @@ export default function BandasPage() {
   return (
     <section className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold">Minhas bandas</h1>
-        <p className="text-slate-400">Escolha a banda ativa ou crie uma nova.</p>
+        <h1 className="sm-page-title">Minhas bandas</h1>
+        <p className="sm-page-subtitle">Escolha a banda ativa ou crie uma nova.</p>
       </div>
 
       {loading ? <p className="text-slate-400">Carregando...</p> : null}
@@ -45,10 +46,10 @@ export default function BandasPage() {
             key={band.id}
             type="button"
             onClick={() => setActiveBandId(band.id)}
-            className={`rounded-xl border p-4 text-left transition ${
+            className={`${panelHoverClass} p-4 text-left ${
               activeBand?.id === band.id
-                ? "border-indigo-500 bg-indigo-950/30"
-                : "border-slate-800 hover:border-slate-600"
+                ? "border-green-500/50 bg-green-500/10 shadow-[0_0_24px_rgba(34,197,94,0.12)]"
+                : ""
             }`}
           >
             <p className="font-medium">{band.name}</p>
@@ -63,28 +64,28 @@ export default function BandasPage() {
       </div>
 
       {bands.length > 0 ? (
-        <Link to="/library" className="inline-block text-sm text-indigo-300 hover:text-indigo-200">
+        <Link to="/library" className={`text-sm ${linkClass}`}>
           Ir para biblioteca com &quot;{activeBand?.name}&quot;
         </Link>
       ) : null}
 
-      <form onSubmit={handleCreate} className="max-w-md space-y-4 rounded-xl border border-slate-800 p-4">
+      <form onSubmit={handleCreate} className={`${panelClass} max-w-md space-y-4`}>
         <h2 className="font-medium">Nova banda</h2>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>Nome</span>
           <input
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+            className={inputClass}
           />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>Plano</span>
           <select
             value={planCode}
             onChange={(e) => setPlanCode(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+            className={inputClass}
           >
             {PLANS_LIST.map((plan) => (
               <option key={plan.code} value={plan.code}>
@@ -94,11 +95,7 @@ export default function BandasPage() {
           </select>
         </label>
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-60"
-        >
+        <button type="submit" disabled={submitting} className={`${btnPrimary} disabled:opacity-60`}>
           {submitting ? "Criando..." : "Criar banda"}
         </button>
       </form>

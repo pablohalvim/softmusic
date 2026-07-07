@@ -292,7 +292,7 @@ export function ImportedCifraEditor({
         <input
           autoFocus
           defaultValue={displayChord}
-          className="w-full rounded border border-orange-500/50 bg-slate-950 px-2 py-1 text-center text-sm font-bold text-orange-400 outline-none ring-1 ring-orange-500/30"
+          className="w-full rounded border border-green-500/50 bg-slate-950 px-2 py-1 text-center text-sm font-bold text-green-400 outline-none ring-1 ring-green-500/30"
           onBlur={(event) =>
             updatePlacementChord(sectionId, lineId, placement.id, event.target.value)
           }
@@ -309,7 +309,7 @@ export function ImportedCifraEditor({
         <div className="flex items-center justify-center gap-1">
           <button
             type="button"
-            className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 bg-slate-800 text-xs text-slate-200 hover:border-orange-500/60 hover:text-orange-300"
+            className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 bg-slate-800 text-xs text-slate-200 hover:border-green-500/60 hover:text-green-300"
             onClick={() => movePlacement(sectionId, lineId, placement.id, -1, sectionLabel)}
             title="Mover para esquerda"
           >
@@ -325,7 +325,7 @@ export function ImportedCifraEditor({
           </button>
           <button
             type="button"
-            className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 bg-slate-800 text-xs text-slate-200 hover:border-orange-500/60 hover:text-orange-300"
+            className="flex h-7 w-7 items-center justify-center rounded border border-slate-600 bg-slate-800 text-xs text-slate-200 hover:border-green-500/60 hover:text-green-300"
             onClick={() => movePlacement(sectionId, lineId, placement.id, 1, sectionLabel)}
             title="Mover para direita"
           >
@@ -453,10 +453,10 @@ export function ImportedCifraEditor({
       />
 
       {editable ? (
-        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-lg border border-orange-500/30 bg-slate-950/95 px-3 py-2 backdrop-blur-sm">
+        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-lg border border-green-500/30 bg-slate-950/95 px-3 py-2 backdrop-blur-sm">
           <button
             type="button"
-            className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-slate-950 transition hover:bg-orange-400"
+            className="rounded-lg bg-green-500 px-3 py-1.5 text-sm font-medium text-slate-950 transition hover:bg-green-400"
             onClick={openAddLineModal}
           >
             + Linha (notas + letra)
@@ -515,8 +515,8 @@ export function ImportedCifraEditor({
                                 data-chord-trigger
                                 className={`font-bold transition ${
                                   isSelected
-                                    ? "rounded bg-orange-500/15 px-0.5 text-orange-300 ring-1 ring-orange-500/40"
-                                    : "text-orange-400 hover:text-orange-300"
+                                    ? "rounded bg-green-500/15 px-0.5 text-green-300 ring-1 ring-green-500/40"
+                                    : "text-green-400 hover:text-green-300"
                                 }`}
                                 onClick={(event) => {
                                   event.stopPropagation();
@@ -527,7 +527,7 @@ export function ImportedCifraEditor({
                                 {displayChord}
                               </button>
                             ) : (
-                              <span className="font-bold text-orange-400">{displayChord}</span>
+                              <span className="chord-note">{displayChord}</span>
                             )}
                           </span>
                         );
@@ -541,7 +541,7 @@ export function ImportedCifraEditor({
                     {editable ? (
                       <button
                         type="button"
-                        className="shrink-0 rounded-full border border-dashed border-slate-600 px-2.5 py-1 text-xs text-slate-400 transition hover:border-orange-500/60 hover:bg-orange-500/5 hover:text-orange-400"
+                        className="shrink-0 rounded-full border border-dashed border-slate-600 px-2.5 py-1 text-xs text-slate-400 transition hover:border-green-500/60 hover:bg-green-500/5 hover:text-green-400"
                         onClick={() => addPlacementAtEnd(section.id, line.id, section.label)}
                         title="Adicionar acorde no final da linha"
                       >
@@ -588,7 +588,7 @@ export function ImportedCifraEditor({
                     {editable ? (
                       <button
                         type="button"
-                        className="mt-0.5 shrink-0 rounded-lg border border-slate-600 bg-slate-900 p-1.5 text-slate-400 transition hover:border-orange-500/60 hover:bg-orange-950/30 hover:text-orange-300"
+                        className="mt-0.5 shrink-0 rounded-lg border border-slate-600 bg-slate-900 p-1.5 text-slate-400 transition hover:border-green-500/60 hover:bg-green-950/30 hover:text-green-300"
                         onClick={() => openEditLineModal(section.id, line)}
                         title="Editar letra e notas desta linha"
                         aria-label="Editar linha"
@@ -608,7 +608,7 @@ export function ImportedCifraEditor({
         <div className="flex justify-center border-t border-dashed border-slate-800 pt-6">
           <button
             type="button"
-            className="rounded-full border border-dashed border-slate-600 px-4 py-2 text-sm text-slate-400 transition hover:border-orange-500/60 hover:bg-orange-500/5 hover:text-orange-400"
+            className="rounded-full border border-dashed border-slate-600 px-4 py-2 text-sm text-slate-400 transition hover:border-green-500/60 hover:bg-green-500/5 hover:text-green-400"
             onClick={openAddLineModal}
           >
             + Linha (notas + letra)

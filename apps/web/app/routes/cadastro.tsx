@@ -10,6 +10,7 @@ import {
   isValidCpf,
   isValidPhone,
 } from "../lib/br-format";
+import { btnPrimary, inputClass, labelClass, linkClass } from "../lib/ui-classes";
 import { useViaCep } from "../lib/use-viacep";
 
 const PLANS = [
@@ -111,26 +112,26 @@ export default function CadastroPage() {
     }
   }
 
-  const inputClass = "w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm";
+  const fieldClass = inputClass;
 
   return (
     <section className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Criar conta</h1>
-        <p className="text-slate-400">Trial de 2 dias para visualizar cifras (sem análise).</p>
+        <h1 className="sm-page-title">Criar conta</h1>
+        <p className="sm-page-subtitle">Trial de 2 dias para visualizar cifras (sem análise).</p>
       </div>
-      <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
-        <label className="block space-y-1 text-sm sm:col-span-2">
+      <form onSubmit={handleSubmit} className="glass-panel grid gap-4 sm:grid-cols-2">
+        <label className={`${labelClass} sm:col-span-2`}>
           <span>Nome completo</span>
-          <input required className={inputClass} value={form.full_name} onChange={(e) => updateField("full_name", e.target.value)} />
+          <input required className={fieldClass} value={form.full_name} onChange={(e) => updateField("full_name", e.target.value)} />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>CPF</span>
           <input
             required
             inputMode="numeric"
             placeholder="000.000.000-00"
-            className={`${inputClass} ${cpfError ? "border-red-500" : ""}`}
+            className={`${fieldClass} ${cpfError ? "border-red-500/60 ring-red-500/20" : ""}`}
             value={formatCpf(form.cpf)}
             onChange={(e) => handleCpfChange(e.target.value)}
             onBlur={() => {
@@ -139,27 +140,27 @@ export default function CadastroPage() {
           />
           {cpfError ? <span className="text-xs text-red-400">{cpfError}</span> : null}
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>Data de nascimento</span>
-          <input required type="date" className={inputClass} value={form.birth_date} onChange={(e) => updateField("birth_date", e.target.value)} />
+          <input required type="date" className={fieldClass} value={form.birth_date} onChange={(e) => updateField("birth_date", e.target.value)} />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>E-mail</span>
-          <input required type="email" className={inputClass} value={form.email} onChange={(e) => updateField("email", e.target.value)} />
+          <input required type="email" className={fieldClass} value={form.email} onChange={(e) => updateField("email", e.target.value)} />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>Telefone</span>
           <input
             required
             type="tel"
             inputMode="numeric"
             placeholder="(11) 99999-9999"
-            className={inputClass}
+            className={fieldClass}
             value={formatPhone(form.phone)}
             onChange={(e) => updateField("phone", cleanDigits(e.target.value).slice(0, 11))}
           />
         </label>
-        <label className="block space-y-1 text-sm sm:col-span-2">
+        <label className={`${labelClass} sm:col-span-2`}>
           <span className="flex items-center gap-2">
             CEP
             {cepLoading ? <span className="text-xs text-slate-400">buscando…</span> : null}
@@ -179,43 +180,43 @@ export default function CadastroPage() {
             <span className="text-xs text-slate-500">Preencha o CEP para completar o endereço automaticamente.</span>
           )}
         </label>
-        <label className="block space-y-1 text-sm sm:col-span-2">
+        <label className={`${labelClass} sm:col-span-2`}>
           <span>Rua</span>
-          <input required className={inputClass} value={form.address_street} onChange={(e) => updateField("address_street", e.target.value)} />
+          <input required className={fieldClass} value={form.address_street} onChange={(e) => updateField("address_street", e.target.value)} />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>Número</span>
-          <input required className={inputClass} value={form.address_number} onChange={(e) => updateField("address_number", e.target.value)} />
+          <input required className={fieldClass} value={form.address_number} onChange={(e) => updateField("address_number", e.target.value)} />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>Complemento</span>
-          <input className={inputClass} value={form.address_complement} onChange={(e) => updateField("address_complement", e.target.value)} />
+          <input className={fieldClass} value={form.address_complement} onChange={(e) => updateField("address_complement", e.target.value)} />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>Bairro</span>
-          <input required className={inputClass} value={form.address_neighborhood} onChange={(e) => updateField("address_neighborhood", e.target.value)} />
+          <input required className={fieldClass} value={form.address_neighborhood} onChange={(e) => updateField("address_neighborhood", e.target.value)} />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>Cidade</span>
-          <input required className={inputClass} value={form.address_city} onChange={(e) => updateField("address_city", e.target.value)} />
+          <input required className={fieldClass} value={form.address_city} onChange={(e) => updateField("address_city", e.target.value)} />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>UF</span>
-          <input required maxLength={2} className={inputClass} value={form.address_state} onChange={(e) => updateField("address_state", e.target.value.toUpperCase())} />
+          <input required maxLength={2} className={fieldClass} value={form.address_state} onChange={(e) => updateField("address_state", e.target.value.toUpperCase())} />
         </label>
-        <label className="block space-y-1 text-sm sm:col-span-2">
+        <label className={`${labelClass} sm:col-span-2`}>
           <span>Senha</span>
-          <input required type="password" minLength={8} className={inputClass} value={form.password} onChange={(e) => updateField("password", e.target.value)} />
+          <input required type="password" minLength={8} className={fieldClass} value={form.password} onChange={(e) => updateField("password", e.target.value)} />
         </label>
         <div className="sm:col-span-2 rounded-xl border border-slate-800 p-4 space-y-3">
           <h2 className="font-medium">Primeira banda (opcional)</h2>
-          <label className="block space-y-1 text-sm">
+          <label className={labelClass}>
             <span>Nome da banda</span>
-            <input className={inputClass} value={form.band_name} onChange={(e) => updateField("band_name", e.target.value)} />
+            <input className={fieldClass} value={form.band_name} onChange={(e) => updateField("band_name", e.target.value)} />
           </label>
-          <label className="block space-y-1 text-sm">
+          <label className={labelClass}>
             <span>Plano</span>
-            <select className={inputClass} value={form.plan_code} onChange={(e) => updateField("plan_code", e.target.value)}>
+            <select className={fieldClass} value={form.plan_code} onChange={(e) => updateField("plan_code", e.target.value)}>
               {PLANS.map((plan) => (
                 <option key={plan.code} value={plan.code}>
                   {plan.label}
@@ -228,14 +229,14 @@ export default function CadastroPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="sm:col-span-2 rounded-lg bg-indigo-500 px-4 py-2 font-medium text-white hover:bg-indigo-400 disabled:opacity-60"
+          className={`${btnPrimary} sm:col-span-2`}
         >
           {submitting ? "Criando conta..." : "Criar conta"}
         </button>
       </form>
       <p className="text-sm text-slate-400">
         Já tem conta?{" "}
-        <Link to="/login" className="text-indigo-300 hover:text-indigo-200">
+        <Link to="/login" className={linkClass}>
           Entrar
         </Link>
       </p>

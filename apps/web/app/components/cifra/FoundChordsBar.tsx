@@ -63,13 +63,13 @@ export function FoundChordsBar({ chords, onReplace, editable = false }: FoundCho
                   onSubmit={submitReplacement}
                 >
                   <p className="text-[10px] text-slate-400">
-                    Trocar <strong className="text-orange-300">{chord}</strong> em toda a cifra
+                    Trocar <strong className="text-green-300">{chord}</strong> em toda a cifra
                   </p>
                   <input
                     autoFocus
                     value={replacement}
                     onChange={(event) => setReplacement(event.target.value)}
-                    className="w-full rounded border border-orange-500/50 bg-slate-950 px-2 py-1 text-center font-bold text-orange-400 outline-none ring-1 ring-orange-500/30"
+                    className="chord-note-input w-full px-2 py-1"
                     onKeyDown={(event) => {
                       if (event.key === "Escape") {
                         setSelectedChord(null);
@@ -78,7 +78,7 @@ export function FoundChordsBar({ chords, onReplace, editable = false }: FoundCho
                   />
                   <button
                     type="submit"
-                    className="rounded bg-orange-500 px-2 py-1 text-xs font-medium text-slate-950 hover:bg-orange-400"
+                    className="rounded bg-green-500 px-2 py-1 text-xs font-medium text-slate-950 hover:bg-green-400"
                   >
                     Aplicar em toda cifra
                   </button>
@@ -91,8 +91,8 @@ export function FoundChordsBar({ chords, onReplace, editable = false }: FoundCho
                   data-found-chord-trigger
                   className={`rounded-lg border px-2.5 py-1 font-bold transition ${
                     isSelected
-                      ? "border-orange-500/50 bg-orange-500/15 text-orange-300"
-                      : "border-slate-700 bg-slate-950/50 text-orange-400 hover:border-orange-500/40 hover:text-orange-300"
+                      ? "border-green-500/50 bg-green-500/15 text-green-300"
+                      : "border-slate-700 bg-slate-950/50 text-green-400 hover:border-green-500/40 hover:text-green-300"
                   }`}
                   onClick={() => openEditor(chord)}
                   title="Clique para trocar este acorde em toda a cifra"
@@ -100,7 +100,7 @@ export function FoundChordsBar({ chords, onReplace, editable = false }: FoundCho
                   {chord}
                 </button>
               ) : (
-                <span className="rounded-lg border border-slate-700 bg-slate-950/50 px-2.5 py-1 font-bold text-orange-400">
+                <span className="chord-chip">
                   {chord}
                 </span>
               )}

@@ -13,7 +13,7 @@ export function BandSelector() {
       <select
         value={activeBand?.id ?? ""}
         onChange={(event) => setActiveBandId(event.target.value)}
-        className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+        className="sm-input py-1.5 text-sm"
       >
         {bands.map((band) => (
           <option key={band.id} value={band.id}>

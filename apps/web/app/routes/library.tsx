@@ -43,7 +43,7 @@ export default function Library() {
           </button>
           <Link
             to="/analyze"
-            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400"
+            className="rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white hover:bg-green-400"
           >
             Nova análise
           </Link>
@@ -57,7 +57,7 @@ export default function Library() {
       />
 
       {activeCount > 0 ? (
-        <div className="rounded-xl border border-indigo-900/40 bg-indigo-950/20 px-4 py-3 text-sm text-indigo-200">
+        <div className="rounded-xl border border-green-900/40 bg-green-950/20 px-4 py-3 text-sm text-green-200">
           {activeCount} análise{activeCount > 1 ? "s" : ""} em andamento — atualizando automaticamente.
         </div>
       ) : null}
@@ -71,7 +71,7 @@ export default function Library() {
           <p className="text-slate-400">Nenhuma música analisada ainda.</p>
           <Link
             to="/analyze"
-            className="mt-4 inline-block rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400"
+            className="mt-4 inline-block rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white hover:bg-green-400"
           >
             Analisar primeira música
           </Link>

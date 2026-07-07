@@ -122,8 +122,8 @@ export default function SongDetail() {
       </div>
 
       {isProcessing && job ? (
-        <div className="rounded-xl border border-indigo-900/50 bg-indigo-950/20 p-5">
-          <h2 className="font-medium text-indigo-100">Progresso da análise</h2>
+        <div className="rounded-xl border border-green-900/50 bg-green-950/20 p-5">
+          <h2 className="font-medium text-green-100">Progresso da análise</h2>
           <div className="mt-4">
             <JobProgressDetails
               status={job.status}
@@ -135,7 +135,7 @@ export default function SongDetail() {
           <p className="mt-4 text-xs text-slate-500">Atualizando automaticamente...</p>
         </div>
       ) : isProcessing ? (
-        <div className="rounded-xl border border-indigo-900/50 bg-indigo-950/20 p-5 text-slate-300">
+        <div className="rounded-xl border border-green-900/50 bg-green-950/20 p-5 text-slate-300">
           Análise em processamento. Aguardando atualização do worker...
         </div>
       ) : null}

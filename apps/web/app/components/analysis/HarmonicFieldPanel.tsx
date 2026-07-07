@@ -27,7 +27,7 @@ function DegreeBadge({ degree, active }: { degree: number; active: boolean }) {
   return (
     <span
       className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-        active ? "bg-indigo-500 text-white" : "bg-slate-800 text-slate-500"
+        active ? "bg-green-500 text-white" : "bg-slate-800 text-slate-500"
       }`}
     >
       {degreeLabel(degree)}
@@ -39,7 +39,7 @@ function FieldRow({ item, active }: { item: HarmonicFieldDegree; active: boolean
   return (
     <div
       className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
-        active ? "border-indigo-600/70 bg-indigo-950/20" : "border-slate-800 bg-slate-900/30"
+        active ? "border-green-600/70 bg-green-950/20" : "border-slate-800 bg-slate-900/30"
       }`}
     >
       <div className="flex items-center gap-2">
@@ -72,7 +72,7 @@ export function HarmonicFieldPanel({ keyName, mode, scale, degreeUsage }: Harmon
             {degreeUsage.map((item) => (
               <span
                 key={item.degree}
-                className="rounded-full border border-indigo-700/50 bg-indigo-950/40 px-2.5 py-1 text-xs text-indigo-100"
+                className="rounded-full border border-green-700/50 bg-green-950/40 px-2.5 py-1 text-xs text-green-100"
               >
                 {degreeLabel(item.degree)} ({item.roman}) · {item.percentage}%
               </span>

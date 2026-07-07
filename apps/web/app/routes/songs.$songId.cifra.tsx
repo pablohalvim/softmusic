@@ -46,7 +46,7 @@ export default function SongCifraPage() {
     return (
       <div className="space-y-3">
         <p className="text-red-400">Não foi possível carregar a música.</p>
-        <Link to="/library" className="text-indigo-300 underline">
+        <Link to="/library" className="text-green-300 underline">
           Voltar para biblioteca
         </Link>
       </div>
@@ -57,7 +57,7 @@ export default function SongCifraPage() {
     return (
       <div className="space-y-3">
         <p className="text-slate-400">Análise em processamento. A cifra ficará disponível em breve.</p>
-        <Link to={`/songs/${songId}`} className="text-indigo-300 underline">
+        <Link to={`/songs/${songId}`} className="text-green-300 underline">
           Acompanhar análise
         </Link>
       </div>

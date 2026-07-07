@@ -8,7 +8,7 @@ interface ImportCifraVariationModalProps {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-orange-500/60";
+  "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-green-500/60";
 
 function isLikelyCifraClubUrl(url: string): boolean {
   try {
@@ -111,7 +111,7 @@ export function ImportCifraVariationModal({
             <button
               type="submit"
               disabled={!url.trim() || pending}
-              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="sm-btn-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
               {pending ? "Importando..." : "Importar"}
             </button>

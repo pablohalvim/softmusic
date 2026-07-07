@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useAuth } from "../lib/auth-context";
+import { btnPrimary, inputClass, labelClass, linkClass } from "../lib/ui-classes";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -28,41 +29,37 @@ export default function LoginPage() {
   return (
     <section className="mx-auto max-w-md space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Entrar</h1>
-        <p className="text-slate-400">Use e-mail ou CPF e sua senha.</p>
+        <h1 className="sm-page-title">Entrar</h1>
+        <p className="sm-page-subtitle">Use e-mail ou CPF e sua senha.</p>
       </div>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <label className="block space-y-1 text-sm">
+      <form onSubmit={handleSubmit} className="glass-panel space-y-4">
+        <label className={labelClass}>
           <span>E-mail ou CPF</span>
           <input
             required
             value={loginValue}
             onChange={(e) => setLoginValue(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+            className={inputClass}
           />
         </label>
-        <label className="block space-y-1 text-sm">
+        <label className={labelClass}>
           <span>Senha</span>
           <input
             required
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+            className={inputClass}
           />
         </label>
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-lg bg-indigo-500 px-4 py-2 font-medium text-white hover:bg-indigo-400 disabled:opacity-60"
-        >
+        <button type="submit" disabled={submitting} className={`${btnPrimary} w-full`}>
           {submitting ? "Entrando..." : "Entrar"}
         </button>
       </form>
       <p className="text-sm text-slate-400">
         Não tem conta?{" "}
-        <Link to="/cadastro" className="text-indigo-300 hover:text-indigo-200">
+        <Link to="/cadastro" className={linkClass}>
           Cadastre-se
         </Link>
       </p>

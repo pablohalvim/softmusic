@@ -66,7 +66,7 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
 
   if (result?.payment_method === "pix" && result.pix) {
     return (
-      <div className="rounded-xl border border-indigo-900/40 bg-indigo-950/20 p-4 space-y-4">
+      <div className="rounded-xl border border-green-900/40 bg-green-950/20 p-4 space-y-4">
         <h2 className="font-medium">Pague com PIX — {formatBrl(result.total_amount_cents)}</h2>
         {result.pix.qr_image_base64 ? (
           <img
@@ -87,7 +87,7 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
             <button
               type="button"
               onClick={() => void navigator.clipboard.writeText(result.pix!.copy_paste!)}
-              className="rounded-lg bg-indigo-500 px-3 py-1.5 text-sm text-white hover:bg-indigo-400"
+              className="rounded-lg bg-green-500 px-3 py-1.5 text-sm text-white hover:bg-green-400"
             >
               Copiar código PIX
             </button>
@@ -98,7 +98,7 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
             href={result.invoice_url}
             target="_blank"
             rel="noreferrer"
-            className="inline-block text-sm text-indigo-300 hover:text-indigo-200"
+            className="inline-block text-sm text-green-300 hover:text-green-200"
           >
             Abrir fatura no Asaas
           </a>
@@ -126,14 +126,14 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
         <button
           type="button"
           onClick={() => setMethod("pix")}
-          className={`rounded-lg px-3 py-1.5 text-sm ${method === "pix" ? "bg-indigo-500 text-white" : "border border-slate-700 text-slate-300"}`}
+          className={`rounded-lg px-3 py-1.5 text-sm ${method === "pix" ? "bg-green-500 text-white" : "border border-slate-700 text-slate-300"}`}
         >
           PIX
         </button>
         <button
           type="button"
           onClick={() => setMethod("credit_card")}
-          className={`rounded-lg px-3 py-1.5 text-sm ${method === "credit_card" ? "bg-indigo-500 text-white" : "border border-slate-700 text-slate-300"}`}
+          className={`rounded-lg px-3 py-1.5 text-sm ${method === "credit_card" ? "bg-green-500 text-white" : "border border-slate-700 text-slate-300"}`}
         >
           Cartão
         </button>
@@ -202,7 +202,7 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
       <button
         type="submit"
         disabled={loading || monthlyTotalCents <= 0}
-        className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-60"
+        className="rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white hover:bg-green-400 disabled:opacity-60"
       >
         {loading ? "Processando..." : method === "pix" ? "Gerar PIX" : "Pagar com cartão"}
       </button>

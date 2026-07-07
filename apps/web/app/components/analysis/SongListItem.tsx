@@ -110,7 +110,7 @@ export function SongListItem({ song }: { song: SongSummary }) {
           ) : (
             <Link
               to={`/songs/${song.id}`}
-              className="rounded-lg border border-indigo-800 px-3 py-1.5 text-sm text-indigo-200 hover:border-indigo-600"
+              className="rounded-lg border border-green-800 px-3 py-1.5 text-sm text-green-200 hover:border-green-600"
             >
               Acompanhar
             </Link>

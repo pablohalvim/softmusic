@@ -4,7 +4,7 @@ import { Link } from "react-router";
 
 import { StatusBadge } from "../components/analysis/StatusBadge";
 import { fetchDashboardStats } from "../lib/api";
-import { useBand } from "../lib/band-context";
+import { btnPrimary, linkClass, panelClass } from "../lib/ui-classes";
 
 export default function Dashboard() {
   const { activeBand, bands, loading: bandsLoading } = useBand();
@@ -24,16 +24,13 @@ export default function Dashboard() {
   if (!activeBand) {
     return (
       <section className="space-y-4">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-slate-400">
+        <h1 className="sm-page-title">Dashboard</h1>
+        <p className="sm-page-subtitle">
           {bands.length === 0
             ? "Crie uma banda para acompanhar suas análises."
             : "Selecione uma banda para ver o resumo."}
         </p>
-        <Link
-          to="/bandas"
-          className="inline-block rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400"
-        >
+        <Link to="/bandas" className={btnPrimary}>
           Ir para bandas
         </Link>
       </section>
@@ -64,43 +61,46 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="rounded-2xl border border-indigo-900/40 bg-indigo-950/20 p-6">
-            <p className="text-sm text-indigo-200/80">Músicas analisadas</p>
-            <p className="mt-2 text-5xl font-bold text-indigo-100">{stats.analyzed_count}</p>
+          <div className="glass-panel relative overflow-hidden p-6">
+            <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-green-500/15 blur-2xl" aria-hidden />
+            <p className="text-sm text-green-300/80">Músicas analisadas</p>
+            <p className="mt-2 text-5xl font-bold text-green-400 drop-shadow-[0_0_24px_rgba(74,222,128,0.35)]">
+              {stats.analyzed_count}
+            </p>
             <p className="mt-2 text-sm text-slate-400">
               de {stats.songs.total} na biblioteca desta banda
             </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <article className={panelClass}>
               <p className="text-sm text-slate-400">Em análise</p>
-              <p className="mt-2 text-2xl font-semibold text-indigo-300">
+              <p className="mt-2 text-2xl font-semibold text-green-300">
                 {stats.songs.pending + stats.songs.processing}
               </p>
             </article>
-            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <article className={panelClass}>
               <p className="text-sm text-slate-400">Concluídas</p>
               <p className="mt-2 text-2xl font-semibold text-emerald-300">{stats.songs.completed}</p>
             </article>
-            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <article className={panelClass}>
               <p className="text-sm text-slate-400">Com falha</p>
               <p className="mt-2 text-2xl font-semibold text-red-300">{stats.songs.failed}</p>
             </article>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <article className={panelClass}>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-medium">Últimas músicas</h2>
-                <Link to="/library" className="text-xs text-indigo-300 hover:text-indigo-200">
+                <Link to="/library" className={`text-xs ${linkClass}`}>
                   Ver biblioteca
                 </Link>
               </div>
               {stats.recent_songs.length === 0 ? (
                 <p className="text-sm text-slate-500">
                   Nenhuma música ainda.{" "}
-                  <Link to="/analyze" className="text-indigo-300 underline">
+                  <Link to="/analyze" className={`${linkClass} underline`}>
                     Analisar primeira música
                   </Link>
                 </p>
@@ -129,10 +129,10 @@ export default function Dashboard() {
               )}
             </article>
 
-            <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+            <article className={panelClass}>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="font-medium">Em andamento</h2>
-                <Link to="/analyze" className="text-xs text-orange-400 hover:text-orange-300">
+                <Link to="/analyze" className="text-xs text-red-400 transition hover:text-red-300">
                   Nova análise
                 </Link>
               </div>

@@ -139,7 +139,7 @@ export default function FaturasPage() {
                       href={invoice.invoice_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sm text-indigo-300 hover:text-indigo-200"
+                      className="text-sm text-green-300 hover:text-green-200"
                     >
                       Ver no Asaas
                     </a>

@@ -95,7 +95,7 @@ export function InstallButton({ className, label = "Instalar app", ...options }:
         onClick={() => void handleClick()}
         className={
           className ??
-          "inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-100 transition-colors hover:border-indigo-400 hover:text-white"
+          "inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-100 transition-colors hover:border-green-400 hover:text-white"
         }
       >
         <PhoneIcon className="h-4 w-4" />

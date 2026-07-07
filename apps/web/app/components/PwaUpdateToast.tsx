@@ -69,8 +69,8 @@ export function PwaUpdateToast() {
       role="status"
       aria-live="polite"
     >
-      <div className="pointer-events-auto w-full max-w-md overflow-hidden rounded-2xl border border-indigo-500/40 bg-slate-900 shadow-xl">
-        <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-sky-400 to-indigo-500" />
+      <div className="pointer-events-auto w-full max-w-md overflow-hidden rounded-2xl border border-green-500/40 bg-slate-900 shadow-xl">
+        <div className="h-1 w-full bg-gradient-to-r from-green-500 via-green-400 to-green-500" />
         <div className="flex items-start gap-3 p-4">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-slate-100">Nova versão disponível</p>
@@ -82,7 +82,7 @@ export function PwaUpdateToast() {
                 type="button"
                 onClick={() => void handleApply()}
                 disabled={isApplying}
-                className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-3.5 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
+                className="inline-flex items-center gap-2 rounded-lg bg-green-500 px-3.5 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm"
               >
                 {isApplying ? "Atualizando…" : "Atualizar agora"}
               </button>
