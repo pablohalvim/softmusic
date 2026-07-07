@@ -1,0 +1,65 @@
+
+> @softmusic/web@0.0.1 build D:\projetos\pessoal\2\softmusic\apps\web
+> react-router build
+
+The `envFile` option is deprecated, please use `envDir: false` instead.
+The `envFile` option is deprecated, please use `envDir: false` instead.
+Using Vite Environment API
+vite v8.1.3 building client environment for production...
+[plugin rolldown:vite-resolve] Module "node:crypto" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/packages/shared/dist/ids.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "node:crypto" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/packages/shared/dist/ids.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[2Ktransforming...✓ 778 modules transformed.
+rendering chunks...
+computing gzip size...
+build/client/.vite/manifest.json                       9.82 kB │ gzip:   1.34 kB
+build/client/assets/root-Dz8bMV8c.css                 74.67 kB │ gzip:  11.23 kB
+build/client/assets/datetime-DDKuFUex.js               0.54 kB │ gzip:   0.32 kB
+build/client/assets/jobs._jobId-B2Wr6RIr.js            0.95 kB │ gzip:   0.48 kB
+build/client/assets/ui-classes-DBLL2JnI.js             1.36 kB │ gzip:   0.55 kB
+build/client/assets/home-CONNVKzh.js                   1.36 kB │ gzip:   0.69 kB
+build/client/assets/band-context-BPfYsrvi.js           1.46 kB │ gzip:   0.83 kB
+build/client/assets/login-Cc5XZ3QW.js                  1.58 kB │ gzip:   0.74 kB
+build/client/assets/cifra-variations-C94PwRf6.js       1.61 kB │ gzip:   0.83 kB
+build/client/assets/convite-DuYmssk8.js                1.73 kB │ gzip:   0.89 kB
+build/client/assets/auth-context-CWdSqf68.js           1.79 kB │ gzip:   0.80 kB
+build/client/assets/chords-BWx6ozVX.js                 1.84 kB │ gzip:   1.02 kB
+build/client/assets/StatusBadge-EIFA4oKb.js            2.21 kB │ gzip:   1.04 kB
+build/client/assets/useMutation-BMiwhWt8.js            2.30 kB │ gzip:   0.96 kB
+build/client/assets/JobStatusTracker-Cq-xY0c7.js       2.58 kB │ gzip:   1.07 kB
+build/client/assets/bandas-Bh1D2Pnr.js                 3.04 kB │ gzip:   1.40 kB
+build/client/assets/mutation-D9iZnXgT.js               3.38 kB │ gzip:   1.14 kB
+build/client/assets/react-dom-BtqsOAY1.js              3.54 kB │ gzip:   1.34 kB
+build/client/assets/api-DUClYYyZ.js                    3.61 kB │ gzip:   1.25 kB
+build/client/assets/dashboard-xr0dtQYz.js              5.13 kB │ gzip:   1.59 kB
+build/client/assets/analyze-C7gRIrKl.js                5.31 kB │ gzip:   2.13 kB
+build/client/assets/faturas-BvbGt4BX.js                7.64 kB │ gzip:   2.64 kB
+build/client/assets/library-C3WuISH9.js                7.89 kB │ gzip:   2.54 kB
+build/client/assets/cadastro-BxOmyVEY.js               8.53 kB │ gzip:   2.76 kB
+build/client/assets/useQuery-C1WnTpxX.js               8.80 kB │ gzip:   3.21 kB
+build/client/assets/lib-CZ4-mMkA.js                   11.15 kB │ gzip:   4.51 kB
+build/client/assets/QueryClientProvider-_yLo2q_H.js   15.10 kB │ gzip:   5.22 kB
+build/client/assets/SongAudioPlayer-DwM52Ixc.js       15.18 kB │ gzip:   5.68 kB
+build/client/assets/root-NLvvQTqR.js                  19.73 kB │ gzip:   6.45 kB
+build/client/assets/errorBoundaries-DHHzI2fO.js       33.36 kB │ gzip:  11.65 kB
+build/client/assets/songs._songId.cifra-CfRZqRLB.js   40.42 kB │ gzip:  11.34 kB
+build/client/assets/jsx-runtime-kASMae3-.js           82.64 kB │ gzip:  27.67 kB
+build/client/assets/entry.client-yvcVLERz.js         182.46 kB │ gzip:  57.79 kB
+build/client/assets/songs._songId-Cemx0I-1.js        376.31 kB │ gzip: 100.67 kB
+
+✓ built in 498ms
+vite v8.1.3 building ssr environment for production...
+[2Ktransforming...✓ 17 modules transformed.
+rendering chunks...
+
+✓ 1 asset cleaned from React Router server build.
+build\server\assets\server-build-Dz8bMV8c.css
+
+computing gzip size...
+build/server/.vite/manifest.json                0.22 kB │ gzip:  0.15 kB
+build/server/assets/server-build-Dz8bMV8c.css  74.67 kB │ gzip: 11.23 kB
+build/server/index.js                          46.25 kB │ gzip:  9.91 kB
+
+✓ built in 109ms
+The `envFile` option is deprecated, please use `envDir: false` instead.
+The `envFile` option is deprecated, please use `envDir: false` instead.
+SPA Mode: Generated build\client\index.html

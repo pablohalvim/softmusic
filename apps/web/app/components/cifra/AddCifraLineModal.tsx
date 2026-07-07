@@ -1,6 +1,8 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
+import { modalOverlayClass, modalPanelClass } from "../../lib/ui-classes";
+
 interface CifraLineModalProps {
   open: boolean;
   mode: "add" | "edit";
@@ -58,9 +60,9 @@ export function CifraLineModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+    <div className={modalOverlayClass}>
       <div
-        className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+        className={`${modalPanelClass} max-w-lg`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="cifra-line-modal-title"

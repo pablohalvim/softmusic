@@ -4,7 +4,8 @@ import { Link } from "react-router";
 
 import { StatusBadge } from "../components/analysis/StatusBadge";
 import { fetchDashboardStats } from "../lib/api";
-import { btnPrimary, linkClass, panelClass } from "../lib/ui-classes";
+import { useBand } from "../lib/band-context";
+import { btnPrimary, linkClass, listItemHoverClass, panelClass } from "../lib/ui-classes";
 
 export default function Dashboard() {
   const { activeBand, bands, loading: bandsLoading } = useBand();
@@ -110,7 +111,7 @@ export default function Dashboard() {
                     <li key={song.id}>
                       <Link
                         to={`/songs/${song.id}`}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 px-3 py-2 transition hover:border-slate-700 hover:bg-slate-950/50"
+                        className={`${listItemHoverClass} flex items-center justify-between gap-3`}
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm text-slate-200">
@@ -144,7 +145,7 @@ export default function Dashboard() {
                     <li key={song.id}>
                       <Link
                         to={`/songs/${song.id}`}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 px-3 py-2 transition hover:border-slate-700 hover:bg-slate-950/50"
+                        className={`${listItemHoverClass} flex items-center justify-between gap-3`}
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm text-slate-200">

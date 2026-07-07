@@ -14,7 +14,12 @@ import { MusicMapPanel } from "../components/analysis/MusicMapPanel";
 import { RelatedKeysPanel } from "../components/analysis/RelatedKeysPanel";
 import { JobProgressDetails, StatusBadge } from "../components/analysis/StatusBadge";
 import {
-  cancelSongAnalysis,
+  alertErrorClass,
+  alertInfoClass,
+  btnPrimary,
+  panelClass,
+} from "../lib/ui-classes";
+import {
   deleteSong,
   fetchSong,
   fetchSongJob,
@@ -103,7 +108,7 @@ export default function SongDetail() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold">{song.title ?? "Música sem título"}</h1>
+            <h1 className="sm-page-title">{song.title ?? "Música sem título"}</h1>
             <StatusBadge status={song.status} kind="song" />
           </div>
           <p className="mt-2 text-slate-400">
@@ -112,17 +117,14 @@ export default function SongDetail() {
           </p>
         </div>
         {song.status === "completed" ? (
-          <Link
-            to={`/songs/${songId}/cifra`}
-            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-400"
-          >
+          <Link to={`/songs/${songId}/cifra`} className={`${btnPrimary} text-sm`}>
             Abrir cifra
           </Link>
         ) : null}
       </div>
 
       {isProcessing && job ? (
-        <div className="rounded-xl border border-green-900/50 bg-green-950/20 p-5">
+        <div className={`${alertInfoClass} p-5`}>
           <h2 className="font-medium text-green-100">Progresso da análise</h2>
           <div className="mt-4">
             <JobProgressDetails
@@ -135,13 +137,13 @@ export default function SongDetail() {
           <p className="mt-4 text-xs text-slate-500">Atualizando automaticamente...</p>
         </div>
       ) : isProcessing ? (
-        <div className="rounded-xl border border-green-900/50 bg-green-950/20 p-5 text-slate-300">
+        <div className={`${alertInfoClass} p-5 text-slate-300`}>
           Análise em processamento. Aguardando atualização do worker...
         </div>
       ) : null}
 
       {song.status === "failed" && job?.error ? (
-        <div className="rounded-xl border border-red-900/50 bg-red-950/20 p-5 text-red-200">
+        <div className={`${alertErrorClass} p-5`}>
           <h2 className="font-medium">Erro na análise</h2>
           <p className="mt-2 text-sm">{job.error}</p>
         </div>
@@ -156,12 +158,12 @@ export default function SongDetail() {
       ) : null}
 
       {waveform.length > 0 ? (
-        <div className="h-48 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <div className={`${panelClass} h-48`}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={waveform.map((peak: number, index: number) => ({ index, peak }))}>
               <XAxis dataKey="index" hide />
               <YAxis hide domain={[0, "dataMax"]} />
-              <Bar dataKey="peak" fill="#6366f1" />
+              <Bar dataKey="peak" fill="#4ade80" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -169,7 +171,7 @@ export default function SongDetail() {
 
       {analysis ? (
         <div className="grid gap-4 md:grid-cols-2">
-          <article className="rounded-xl border border-slate-800 p-4">
+          <article className={panelClass}>
             <h2 className="font-medium">Harmonia</h2>
             <p className="mt-2 text-slate-300">
               {analysis.harmony.key} {analysis.harmony.mode} · {analysis.harmony.tempo_bpm} BPM
@@ -188,7 +190,7 @@ export default function SongDetail() {
               </p>
             ) : null}
           </article>
-          <article className="rounded-xl border border-slate-800 p-4">
+          <article className={panelClass}>
             <h2 className="font-medium">Estrutura</h2>
             <p className="mt-2 text-slate-300">
               {analysis.structure.sections.length} seções detectadas
@@ -219,7 +221,7 @@ export default function SongDetail() {
 
           {stemsQuery.data && songId ? <StemsPanel songId={songId} stems={stemsQuery.data} /> : null}
 
-          <article className="rounded-xl border border-slate-800 p-4 md:col-span-2">
+          <article className={`${panelClass} md:col-span-2`}>
             <h2 className="font-medium">Explicação educacional</h2>
             <p className="mt-2 text-slate-300">{analysis.educational?.[0]?.summary}</p>
           </article>

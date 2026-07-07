@@ -1,0 +1,112 @@
+
+> @softmusic/api@ build D:\projetos\pessoal\2\softmusic\apps\api
+> react-router build
+
+The `envFile` option is deprecated, please use `envDir: false` instead.
+The `envFile` option is deprecated, please use `envDir: false` instead.
+Using Vite Environment API
+vite v8.1.3 building client environment for production...
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/summary.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/validation.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/counter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "zlib" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/pushgateway.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "http" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/pushgateway.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/histogram.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "https" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/pushgateway.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "cluster" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/cluster.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "url" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/pushgateway.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/gauge.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "zlib" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/pushgateway.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/validation.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/histogram.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/counter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/summary.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/gauge.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "cluster" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/cluster.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "http" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/pushgateway.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "https" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/pushgateway.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "url" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/pushgateway.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "fs" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/processMaxFileDescriptors.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "fs" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/processOpenFileDescriptors.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "perf_hooks" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/gc.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "perf_hooks" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/eventLoopLag.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "process" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/processOpenFileDescriptors.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "v8" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/heapSpacesSizeAndUsed.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "fs" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/processOpenFileDescriptors.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "fs" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/processMaxFileDescriptors.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "perf_hooks" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/gc.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "perf_hooks" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/eventLoopLag.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "process" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/processOpenFileDescriptors.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "v8" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/heapSpacesSizeAndUsed.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "fs" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/osMemoryHeapLinux.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "fs" has been externalized for browser compatibility, imported by "D:/projetos/pessoal/2/softmusic/node_modules/.pnpm/prom-client@15.1.3/node_modules/prom-client/lib/metrics/osMemoryHeapLinux.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[2Ktransforming...✓ 260 modules transformed.
+rendering chunks...
+computing gzip size...
+build/client/.vite/manifest.json                                      13.27 kB │ gzip:  1.34 kB
+build/client/assets/root-CUqRLaRd.css                                  0.12 kB │ gzip:  0.12 kB
+build/client/assets/admin.auth.login-BvRk9kiK.js                       0.00 kB │ gzip:  0.02 kB
+build/client/assets/admin.bands-BvRk9kiK.js                            0.00 kB │ gzip:  0.02 kB
+build/client/assets/admin.bands._bandId.exempt-BvRk9kiK.js             0.00 kB │ gzip:  0.02 kB
+build/client/assets/admin.bands._bandId.suspend-BvRk9kiK.js            0.00 kB │ gzip:  0.02 kB
+build/client/assets/admin.billing.suspend-overdue-BvRk9kiK.js          0.00 kB │ gzip:  0.02 kB
+build/client/assets/admin.dashboard.stats-BvRk9kiK.js                  0.00 kB │ gzip:  0.02 kB
+build/client/assets/admin.marketing.send-BvRk9kiK.js                   0.00 kB │ gzip:  0.02 kB
+build/client/assets/admin.songs.block-BvRk9kiK.js                      0.00 kB │ gzip:  0.02 kB
+build/client/assets/admin.users-BvRk9kiK.js                            0.00 kB │ gzip:  0.02 kB
+build/client/assets/auth.login-BvRk9kiK.js                             0.00 kB │ gzip:  0.02 kB
+build/client/assets/auth.logout-BvRk9kiK.js                            0.00 kB │ gzip:  0.02 kB
+build/client/assets/auth.me-BvRk9kiK.js                                0.00 kB │ gzip:  0.02 kB
+build/client/assets/auth.refresh-BvRk9kiK.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/auth.register-BvRk9kiK.js                          0.00 kB │ gzip:  0.02 kB
+build/client/assets/bands._bandId.invites-BvRk9kiK.js                  0.00 kB │ gzip:  0.02 kB
+build/client/assets/bands._index-BvRk9kiK.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/billing.checkout-BvRk9kiK.js                       0.00 kB │ gzip:  0.02 kB
+build/client/assets/billing.invoices-BvRk9kiK.js                       0.00 kB │ gzip:  0.02 kB
+build/client/assets/billing.status-BvRk9kiK.js                         0.00 kB │ gzip:  0.02 kB
+build/client/assets/dashboard.stats-BvRk9kiK.js                        0.00 kB │ gzip:  0.02 kB
+build/client/assets/health-BvRk9kiK.js                                 0.00 kB │ gzip:  0.02 kB
+build/client/assets/health.live-BvRk9kiK.js                            0.00 kB │ gzip:  0.02 kB
+build/client/assets/health.ready-BvRk9kiK.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/invites.accept-BvRk9kiK.js                         0.00 kB │ gzip:  0.02 kB
+build/client/assets/jobs._jobId-BvRk9kiK.js                            0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._index-BvRk9kiK.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId-BvRk9kiK.js                          0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.analysis-BvRk9kiK.js                 0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.audio-BvRk9kiK.js                    0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.cancel-BvRk9kiK.js                   0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.chords-BvRk9kiK.js                   0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.cifra-variations-BvRk9kiK.js         0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.job-BvRk9kiK.js                      0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.link-BvRk9kiK.js                     0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.lyrics-BvRk9kiK.js                   0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.stems-BvRk9kiK.js                    0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.stems._stemName.audio-BvRk9kiK.js    0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.timeline-BvRk9kiK.js                 0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs._songId.waveform-BvRk9kiK.js                 0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs.analyze-BvRk9kiK.js                          0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs.global-BvRk9kiK.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/songs.upload-BvRk9kiK.js                           0.00 kB │ gzip:  0.02 kB
+build/client/assets/webhooks.asaas-BvRk9kiK.js                         0.00 kB │ gzip:  0.02 kB
+build/client/assets/home-BpL8AwaI.js                                   0.77 kB │ gzip:  0.42 kB
+build/client/assets/rolldown-runtime-CNC7AqOf.js                       0.87 kB │ gzip:  0.50 kB
+build/client/assets/root-CL4KK_Uj.js                                   1.17 kB │ gzip:  0.63 kB
+build/client/assets/lib-zQJGcRi7.js                                   10.31 kB │ gzip:  4.14 kB
+build/client/assets/metrics-CnCnHzpX.js                               57.57 kB │ gzip: 17.29 kB
+build/client/assets/jsx-runtime-BiD7SPmR.js                          114.77 kB │ gzip: 37.80 kB
+build/client/assets/entry.client-rRmyqHU3.js                         185.90 kB │ gzip: 58.65 kB
+
+✓ built in 242ms
+vite v8.1.3 building ssr environment for production...
+[2Ktransforming...✓ 58 modules transformed.
+rendering chunks...
+
+✓ 1 asset cleaned from React Router server build.
+build\server\assets\server-build-CUqRLaRd.css
+
+computing gzip size...
+build/server/.vite/manifest.json                0.22 kB │ gzip:  0.15 kB
+build/server/assets/server-build-CUqRLaRd.css   0.12 kB │ gzip:  0.12 kB
+build/server/index.js                          72.73 kB │ gzip: 10.62 kB
+
+✓ built in 110ms

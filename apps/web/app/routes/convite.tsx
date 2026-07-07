@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { authFetch } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { btnPrimary, panelClass } from "../lib/ui-classes";
 
 export default function ConvitePage() {
   const { user } = useAuth();
@@ -39,26 +40,29 @@ export default function ConvitePage() {
 
   if (!user) {
     return (
-      <section className="mx-auto max-w-md space-y-4 text-center">
-        <h1 className="text-2xl font-semibold">Convite para banda</h1>
-        <p className="text-slate-400">Faça login ou crie uma conta para aceitar o convite.</p>
-        <a href={`/login?next=/convite?token=${encodeURIComponent(token)}`} className="inline-block rounded-lg bg-green-500 px-4 py-2 text-white">
+      <section className={`${panelClass} mx-auto max-w-md space-y-4 text-center`}>
+        <h1 className="sm-page-title">Convite para banda</h1>
+        <p className="sm-page-subtitle">Faça login ou crie uma conta para aceitar o convite.</p>
+        <Link
+          to={`/login?next=/convite?token=${encodeURIComponent(token)}`}
+          className={`${btnPrimary} inline-flex`}
+        >
           Ir para login
-        </a>
+        </Link>
       </section>
     );
   }
 
   return (
-    <section className="mx-auto max-w-md space-y-4">
-      <h1 className="text-2xl font-semibold">Aceitar convite</h1>
-      <p className="text-slate-400">Você foi convidado para participar de uma banda no SoftMusic.</p>
+    <section className={`${panelClass} mx-auto max-w-md space-y-4`}>
+      <h1 className="sm-page-title">Aceitar convite</h1>
+      <p className="sm-page-subtitle">Você foi convidado para participar de uma banda no SoftMusic.</p>
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
       <button
         type="button"
         onClick={() => void acceptInvite()}
         disabled={submitting || !token}
-        className="rounded-lg bg-green-500 px-4 py-2 font-medium text-white hover:bg-green-400 disabled:opacity-60"
+        className={`${btnPrimary} disabled:opacity-60`}
       >
         {submitting ? "Aceitando..." : "Aceitar convite"}
       </button>

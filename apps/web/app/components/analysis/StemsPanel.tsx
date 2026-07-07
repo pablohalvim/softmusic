@@ -1,4 +1,5 @@
 import { AuthenticatedAudio } from "../AuthenticatedAudio";
+import { panelClass } from "../../lib/ui-classes";
 
 interface StemInfo {
   name: string;
@@ -34,7 +35,7 @@ interface StemsPanelProps {
 export function StemsPanel({ songId, stems }: StemsPanelProps) {
   if (!stems.separated || stems.stems.length === 0) {
     return (
-      <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 md:col-span-2">
+      <article className={`${panelClass} md:col-span-2`}>
         <h2 className="font-medium">Separação de stems</h2>
         <p className="mt-2 text-sm text-slate-400">
           {stems.message ??
@@ -45,7 +46,7 @@ export function StemsPanel({ songId, stems }: StemsPanelProps) {
   }
 
   return (
-    <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 md:col-span-2">
+    <article className={`${panelClass} md:col-span-2`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-medium">Stems separados (Demucs)</h2>
@@ -67,7 +68,7 @@ export function StemsPanel({ songId, stems }: StemsPanelProps) {
           return (
             <li
               key={stem.name}
-              className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-3 text-sm"
+              className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-3 text-sm"
             >
               <div>
                 <p className="font-medium text-slate-100">{label}</p>

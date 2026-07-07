@@ -9,6 +9,18 @@ import {
 } from "../components/cifra/cifra-variations";
 import { authFetch } from "../lib/api";
 import { useBand } from "../lib/band-context";
+import {
+  alertInfoClass,
+  alertWarnClass,
+  btnAccent,
+  inputClass,
+  labelClass,
+  linkClass,
+  panelClass,
+  segmentedActiveClass,
+  segmentedIdleClass,
+  segmentedWrapClass,
+} from "../lib/ui-classes";
 
 type AnalyzeMode = "upload" | "youtube";
 
@@ -86,7 +98,7 @@ export default function Analyze() {
         });
       } catch {
         throw new Error(
-          "Não foi possível conectar à API (http://localhost:8080). Verifique se os containers api e python-ai estão rodando.",
+          "Não foi possível conectar à API. Verifique se os containers api e python-ai estão rodando.",
         );
       }
       if (!response.ok) {
@@ -114,7 +126,7 @@ export default function Analyze() {
         });
       } catch {
         throw new Error(
-          "Não foi possível conectar à API (http://localhost:8080). Verifique se os containers api e python-ai estão rodando.",
+          "Não foi possível conectar à API. Verifique se os containers api e python-ai estão rodando.",
         );
       }
       if (!response.ok) {
@@ -134,28 +146,26 @@ export default function Analyze() {
   return (
     <section className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Analisar música</h1>
-        <p className="text-slate-400">
+        <h1 className="sm-page-title">Analisar música</h1>
+        <p className="sm-page-subtitle">
           Envie um arquivo ou cole um link do YouTube. O status aparece aqui em tempo real após o envio.
         </p>
       </div>
 
       {activeBand?.status === "trial" ? (
-        <div className="rounded-xl border border-amber-900/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
+        <div className={`${alertWarnClass} px-4 py-3 text-sm`}>
           Período de trial: você pode visualizar cifras, mas não enviar músicas para análise até ativar a assinatura.
         </div>
       ) : null}
 
-      {hasActiveJob ? (
-        <JobStatusTracker jobId={jobId!} songId={songId!} />
-      ) : null}
+      {hasActiveJob ? <JobStatusTracker jobId={jobId!} songId={songId!} /> : null}
 
       {duplicateInfo ? (
-        <div className="rounded-xl border border-amber-900/50 bg-amber-950/30 p-4 text-sm text-amber-100">
+        <div className={`${alertWarnClass} p-4 text-sm`}>
           <p>{duplicateInfo.message}</p>
           <p className="mt-2">
             <Link
-              className="text-green-300 underline"
+              className={`${linkClass} underline`}
               to={
                 duplicateInfo.variationId
                   ? `/songs/${duplicateInfo.songId}/cifra?variation=${duplicateInfo.variationId}`
@@ -168,14 +178,12 @@ export default function Analyze() {
         </div>
       ) : null}
 
-      <div className="flex gap-2 rounded-lg border border-slate-800 bg-slate-900/40 p-1">
+      <div className={segmentedWrapClass}>
         <button
           type="button"
           onClick={() => setMode("upload")}
           disabled={isPending}
-          className={`flex-1 rounded-md px-3 py-2 text-sm ${
-            mode === "upload" ? "bg-green-500 text-white" : "text-slate-300 hover:text-white"
-          }`}
+          className={mode === "upload" ? segmentedActiveClass : segmentedIdleClass}
         >
           Upload
         </button>
@@ -183,27 +191,25 @@ export default function Analyze() {
           type="button"
           onClick={() => setMode("youtube")}
           disabled={isPending}
-          className={`flex-1 rounded-md px-3 py-2 text-sm ${
-            mode === "youtube" ? "bg-green-500 text-white" : "text-slate-300 hover:text-white"
-          }`}
+          className={mode === "youtube" ? segmentedActiveClass : segmentedIdleClass}
         >
           YouTube
         </button>
       </div>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-        <label className="block space-y-2 text-sm">
-          <span className="text-slate-300">Link do Cifra Club (opcional)</span>
+      <div className={`${panelClass} space-y-2`}>
+        <label className={labelClass}>
+          <span>Link do Cifra Club (opcional)</span>
           <input
             type="url"
             placeholder="https://www.cifraclub.com.br/artista/musica/"
             value={cifraClubUrl}
             onChange={(event) => setCifraClubUrl(event.target.value)}
             disabled={isPending}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+            className={inputClass}
           />
         </label>
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="text-xs text-slate-500">
           Se informado, a cifra com letra será importada do Cifra Club e usada na página de cifra em
           vez da detecção automática.
         </p>
@@ -211,7 +217,7 @@ export default function Analyze() {
 
       {mode === "upload" ? (
         <form
-          className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-6"
+          className={`${panelClass} space-y-4`}
           onSubmit={(event) => {
             event.preventDefault();
             if (file) {
@@ -222,20 +228,16 @@ export default function Analyze() {
           <input
             type="file"
             accept="audio/*"
-            className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-md file:border-0 file:bg-green-500 file:px-4 file:py-2 file:text-white"
+            className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-gradient-to-b file:from-red-400 file:to-red-600 file:px-4 file:py-2 file:font-medium file:text-white"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           />
-          <button
-            type="submit"
-            disabled={!file || isPending}
-            className="rounded-lg bg-green-500 px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
+          <button type="submit" disabled={!file || isPending} className={`${btnAccent} disabled:opacity-50`}>
             {isPending ? "Enviando..." : "Iniciar análise"}
           </button>
         </form>
       ) : (
         <form
-          className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-6"
+          className={`${panelClass} space-y-4`}
           onSubmit={(event) => {
             event.preventDefault();
             if (youtubeUrl.trim()) {
@@ -243,15 +245,15 @@ export default function Analyze() {
             }
           }}
         >
-          <label className="block space-y-2 text-sm">
-            <span className="text-slate-300">Link do YouTube</span>
+          <label className={labelClass}>
+            <span>Link do YouTube</span>
             <input
               type="url"
               required
               placeholder="https://www.youtube.com/watch?v=..."
               value={youtubeUrl}
               onChange={(event) => setYoutubeUrl(event.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+              className={inputClass}
             />
           </label>
           <p className="text-xs text-slate-500">
@@ -260,7 +262,7 @@ export default function Analyze() {
           <button
             type="submit"
             disabled={!youtubeUrl.trim() || isPending}
-            className="rounded-lg bg-green-500 px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className={`${btnAccent} disabled:opacity-50`}
           >
             {isPending ? "Enviando para análise..." : "Analisar do YouTube"}
           </button>
@@ -268,7 +270,7 @@ export default function Analyze() {
       )}
 
       {isPending ? (
-        <div className="rounded-xl border border-green-900/40 bg-green-950/20 p-4 text-sm text-green-200">
+        <div className={`${alertInfoClass} p-4 text-sm`}>
           Enviando requisição... Em instantes o progresso aparecerá acima.
         </div>
       ) : null}
@@ -277,7 +279,7 @@ export default function Analyze() {
 
       <p className="text-sm text-slate-500">
         Todas as análises também ficam disponíveis em{" "}
-        <Link className="text-green-300 underline" to="/library">
+        <Link className={`${linkClass} underline`} to="/library">
           Biblioteca
         </Link>
         .

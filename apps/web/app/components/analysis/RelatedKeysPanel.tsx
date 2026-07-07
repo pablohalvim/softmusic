@@ -1,5 +1,7 @@
 import { buildRelatedKeys, type RelatedKeyInfo } from "@softmusic/shared/harmony";
 
+import { panelClass } from "../../lib/ui-classes";
+
 interface RelatedKeysPanelProps {
   keyName: string;
   mode: string;
@@ -9,7 +11,7 @@ interface RelatedKeysPanelProps {
 
 function RelatedKeyCard({ item }: { item: RelatedKeyInfo }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+    <div className={panelClass}>
       <p className="text-xs uppercase tracking-wide text-slate-500">{item.type}</p>
       <p className="mt-1 font-medium text-white">
         {item.key} {item.mode === "minor" ? "menor" : "maior"}
@@ -23,7 +25,7 @@ export function RelatedKeysPanel({ keyName, mode, relativeKey, parallelKey }: Re
   const related = buildRelatedKeys(keyName, mode);
 
   return (
-    <article className="rounded-xl border border-slate-800 p-4 md:col-span-2">
+    <article className={`${panelClass} md:col-span-2`}>
       <h2 className="font-medium">Tons relacionados</h2>
       <p className="mt-1 text-sm text-slate-400">
         Relativos e paralelos possíveis a partir de {keyName} {mode}.

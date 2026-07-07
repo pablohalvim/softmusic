@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { usePwaInstall, type UsePwaInstallOptions } from "../lib/use-pwa-install";
+import { modalOverlayClass, modalPanelClass } from "../lib/ui-classes";
 
 interface InstallButtonProps extends UsePwaInstallOptions {
   className?: string;
@@ -30,14 +31,14 @@ function InstallHelpModal({ open, onClose }: { open: boolean; onClose: () => voi
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      className={`${modalOverlayClass} items-end sm:items-center`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="pwa-install-title"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 text-slate-100 shadow-2xl"
+        className={`${modalPanelClass} max-w-md text-slate-100`}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">

@@ -21,6 +21,7 @@ import {
   saveCifraKeyOverride,
   type CifraKeyOverride,
 } from "./cifra-key";
+import { useCifraScroll } from "./cifra-scroll-context";
 import {
   fetchCifraVariations,
   importCifraVariationFromUrl,

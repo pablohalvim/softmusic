@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BillingCheckout } from "../components/BillingCheckout";
 import { authFetch } from "../lib/api";
 import { useBand } from "../lib/band-context";
+import { alertWarnClass, linkClass, panelClass } from "../lib/ui-classes";
 
 interface InvoiceLine {
   band_id: string;
@@ -81,8 +82,8 @@ export default function FaturasPage() {
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Faturas e assinatura</h1>
-        <p className="text-slate-400">
+        <h1 className="sm-page-title">Faturas e assinatura</h1>
+        <p className="sm-page-subtitle">
           Assinatura consolidada do responsável pela conta
           {activeBand ? ` (banda ativa: ${activeBand.name})` : ""}.
         </p>
@@ -91,13 +92,13 @@ export default function FaturasPage() {
       {statusQuery.isLoading ? <p className="text-slate-400">Carregando status...</p> : null}
 
       {status ? (
-        <div className="rounded-xl border border-slate-800 p-4 text-sm text-slate-300">
+        <div className={`${panelClass} text-sm text-slate-300`}>
           <p>
-            Status da conta: <span className="text-slate-100">{status.status}</span> · Mensal:{" "}
-            {formatBrl(status.monthly_total_cents)}
+            Status da conta: <span className="font-medium text-green-300">{status.status}</span> · Mensal:{" "}
+            <span className="text-slate-100">{formatBrl(status.monthly_total_cents)}</span>
           </p>
           {status.grace_period_ends_at ? (
-            <p className="mt-1 text-amber-300">
+            <p className={`mt-2 ${alertWarnClass} border-0 bg-transparent p-0 text-amber-300`}>
               Tolerância até{" "}
               {new Date(status.grace_period_ends_at).toLocaleDateString("pt-BR")} — regularize o pagamento.
             </p>
@@ -117,7 +118,7 @@ export default function FaturasPage() {
       ) : null}
 
       <div>
-        <h2 className="text-lg font-medium">Histórico</h2>
+        <h2 className="text-lg font-medium text-slate-100">Histórico</h2>
         {invoicesQuery.isLoading ? <p className="mt-2 text-slate-400">Carregando...</p> : null}
         {invoicesQuery.isError ? <p className="mt-2 text-red-400">Erro ao carregar faturas.</p> : null}
 
@@ -126,21 +127,16 @@ export default function FaturasPage() {
         ) : (
           <div className="mt-4 space-y-4">
             {invoices.map((invoice) => (
-              <article key={invoice.id} className="rounded-xl border border-slate-800 p-4">
+              <article key={invoice.id} className={panelClass}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="font-medium">{formatBrl(invoice.total_amount_cents)}</p>
+                    <p className="font-medium text-slate-100">{formatBrl(invoice.total_amount_cents)}</p>
                     <p className="text-sm text-slate-400">
                       Vencimento: {new Date(invoice.due_date).toLocaleDateString("pt-BR")} · {invoice.status}
                     </p>
                   </div>
                   {invoice.invoice_url ? (
-                    <a
-                      href={invoice.invoice_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sm text-green-300 hover:text-green-200"
-                    >
+                    <a href={invoice.invoice_url} target="_blank" rel="noreferrer" className={`text-sm ${linkClass}`}>
                       Ver no Asaas
                     </a>
                   ) : null}

@@ -5,6 +5,8 @@ import {
   type ProgressionDegreeSummary,
 } from "@softmusic/shared/harmony";
 
+import { panelClass } from "../../lib/ui-classes";
+
 interface HarmonicFieldPanelProps {
   keyName: string;
   mode: string;
@@ -15,7 +17,7 @@ interface HarmonicFieldPanelProps {
 const FUNCTION_COLORS: Record<string, string> = {
   tonic: "border-emerald-700/60 bg-emerald-950/30 text-emerald-200",
   subdominant: "border-blue-700/60 bg-blue-950/30 text-blue-200",
-  dominant: "border-orange-700/60 bg-orange-950/30 text-orange-200",
+  dominant: "border-red-700/60 bg-red-950/30 text-red-200",
   other: "border-slate-700/60 bg-slate-900/40 text-slate-300",
 };
 
@@ -27,7 +29,7 @@ function DegreeBadge({ degree, active }: { degree: number; active: boolean }) {
   return (
     <span
       className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-        active ? "bg-green-500 text-white" : "bg-slate-800 text-slate-500"
+        active ? "bg-green-500 text-green-950" : "bg-white/5 text-slate-500"
       }`}
     >
       {degreeLabel(degree)}
@@ -39,7 +41,7 @@ function FieldRow({ item, active }: { item: HarmonicFieldDegree; active: boolean
   return (
     <div
       className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
-        active ? "border-green-600/70 bg-green-950/20" : "border-slate-800 bg-slate-900/30"
+        active ? "border-green-600/70 bg-green-950/20" : "border-white/[0.06] bg-white/[0.02]"
       }`}
     >
       <div className="flex items-center gap-2">
@@ -59,7 +61,7 @@ export function HarmonicFieldPanel({ keyName, mode, scale, degreeUsage }: Harmon
   const scaleText = scale.length > 0 ? scale.join(" · ") : field.map((item) => item.note).join(" · ");
 
   return (
-    <article className="rounded-xl border border-slate-800 p-4 md:col-span-2">
+    <article className={`${panelClass} md:col-span-2`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-medium">Campo harmônico</h2>

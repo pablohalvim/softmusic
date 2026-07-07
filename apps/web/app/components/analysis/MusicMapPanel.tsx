@@ -1,6 +1,8 @@
 import { buildMusicMap, degreeLabel, type MusicMap } from "@softmusic/shared/harmony";
 import type { ReactNode } from "react";
 
+import { panelClass } from "../../lib/ui-classes";
+
 interface MusicMapPanelProps {
   durationSeconds: number;
   sections: Array<{
@@ -21,7 +23,7 @@ const SECTION_COLORS: Record<string, string> = {
   intro: "bg-slate-500",
   verse: "bg-green-500",
   pre_chorus: "bg-violet-500",
-  chorus: "bg-orange-500",
+  chorus: "bg-red-500",
   bridge: "bg-purple-500",
   instrumental: "bg-cyan-600",
   solo: "bg-pink-500",
@@ -36,7 +38,7 @@ const SECTION_COLORS: Record<string, string> = {
 const CHORD_COLORS: Record<string, string> = {
   tonic: "bg-emerald-600",
   subdominant: "bg-blue-600",
-  dominant: "bg-orange-600",
+  dominant: "bg-red-600",
   other: "bg-slate-600",
 };
 
@@ -56,7 +58,7 @@ function TimelineRow({
   return (
     <div>
       <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <div className="relative h-10 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/60">
+      <div className="relative h-10 overflow-hidden rounded-lg border border-white/[0.06] bg-black/30">
         {children}
       </div>
     </div>
@@ -105,7 +107,7 @@ export function MusicMapPanel({
   });
 
   return (
-    <article className="rounded-xl border border-slate-800 p-4 md:col-span-2">
+    <article className={`${panelClass} md:col-span-2`}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-medium">Mapa da música</h2>
@@ -124,7 +126,7 @@ export function MusicMapPanel({
             <span className="inline-block h-2 w-2 rounded-sm bg-blue-600" /> Subdominante
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-orange-600" /> Dominante
+            <span className="inline-block h-2 w-2 rounded-sm bg-red-600" /> Dominante
           </span>
         </div>
       </div>
@@ -152,7 +154,7 @@ export function MusicMapPanel({
           {map.sections.map((section) => (
             <li
               key={section.id}
-              className="flex items-center justify-between rounded-lg border border-slate-800 px-3 py-2 text-sm"
+              className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-sm"
             >
               <span>{section.label}</span>
               <span className="text-xs text-slate-500">

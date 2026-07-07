@@ -12,6 +12,7 @@ import {
   type SongSummary,
 } from "../../lib/api";
 import { labelSongStatus } from "../../lib/status-labels";
+import { btnGhost, btnPrimary, panelClass } from "../../lib/ui-classes";
 import { JobProgressDetails, ProgressBar, StatusBadge } from "./StatusBadge";
 
 export function SongListItem({ song }: { song: SongSummary }) {
@@ -58,7 +59,7 @@ export function SongListItem({ song }: { song: SongSummary }) {
   const isBusy = deleteMutation.isPending || cancelMutation.isPending;
 
   return (
-    <article className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+    <article className={panelClass}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -79,7 +80,7 @@ export function SongListItem({ song }: { song: SongSummary }) {
                   cancelMutation.mutate();
                 }
               }}
-              className="rounded-lg border border-amber-800 px-3 py-1.5 text-sm text-amber-200 hover:border-amber-600 disabled:opacity-50"
+              className={`${btnGhost} border-amber-500/30 text-amber-200 hover:border-amber-400 disabled:opacity-50`}
             >
               {cancelMutation.isPending ? "Cancelando..." : "Cancelar"}
             </button>
@@ -87,31 +88,19 @@ export function SongListItem({ song }: { song: SongSummary }) {
 
           {song.status === "completed" ? (
             <>
-              <Link
-                to={`/songs/${song.id}/cifra`}
-                className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-400"
-              >
+              <Link to={`/songs/${song.id}/cifra`} className={`${btnPrimary} px-3 py-1.5 text-sm`}>
                 Cifra
               </Link>
-              <Link
-                to={`/songs/${song.id}`}
-                className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:border-slate-500"
-              >
+              <Link to={`/songs/${song.id}`} className={`${btnGhost} px-3 py-1.5 text-sm`}>
                 Detalhes
               </Link>
             </>
           ) : !isActive ? (
-            <Link
-              to={`/songs/${song.id}`}
-              className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm hover:border-slate-500"
-            >
+            <Link to={`/songs/${song.id}`} className={`${btnGhost} px-3 py-1.5 text-sm`}>
               Ver detalhes
             </Link>
           ) : (
-            <Link
-              to={`/songs/${song.id}`}
-              className="rounded-lg border border-green-800 px-3 py-1.5 text-sm text-green-200 hover:border-green-600"
-            >
+            <Link to={`/songs/${song.id}`} className={`${btnGhost} border-green-500/30 px-3 py-1.5 text-sm text-green-200`}>
               Acompanhar
             </Link>
           )}
@@ -124,7 +113,7 @@ export function SongListItem({ song }: { song: SongSummary }) {
                 deleteMutation.mutate();
               }
             }}
-            className="rounded-lg border border-red-900 px-3 py-1.5 text-sm text-red-300 hover:border-red-600 disabled:opacity-50"
+            className={`${btnGhost} border-red-500/30 px-3 py-1.5 text-sm text-red-300 hover:border-red-400 disabled:opacity-50`}
           >
             {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
           </button>
@@ -139,7 +128,7 @@ export function SongListItem({ song }: { song: SongSummary }) {
       ) : null}
 
       {showProgress ? (
-        <div className="mt-4 border-t border-slate-800 pt-4">
+        <div className="mt-4 border-t border-white/10 pt-4">
           <JobProgressDetails
             status={job.status}
             stage={job.stage}
@@ -148,11 +137,11 @@ export function SongListItem({ song }: { song: SongSummary }) {
           />
         </div>
       ) : job?.error && displayStatus === "failed" ? (
-        <div className="mt-4 border-t border-slate-800 pt-4">
+        <div className="mt-4 border-t border-white/10 pt-4">
           <p className="text-sm text-red-300">{job.error}</p>
         </div>
       ) : isActive ? (
-        <div className="mt-4 border-t border-slate-800 pt-4">
+        <div className="mt-4 border-t border-white/10 pt-4">
           <ProgressBar value={song.status === "processing" ? 30 : 5} />
           <p className="mt-2 text-xs text-slate-500">Atualizando status...</p>
         </div>

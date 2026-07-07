@@ -21,7 +21,7 @@ export function VolumeControl({ label, value, onChange, className }: VolumeContr
         step={1}
         value={percent}
         onChange={(event) => onChange(Number(event.target.value) / 100)}
-        className="h-3 w-full cursor-pointer accent-orange-500"
+        className="accent-chord h-3 w-full cursor-pointer"
         aria-label={label}
         aria-valuemin={0}
         aria-valuemax={100}

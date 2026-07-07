@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 
 import { fetchJob, fetchSong, isJobFinished } from "../../lib/api";
+import { btnPrimary, linkClass, panelClass } from "../../lib/ui-classes";
 import { JobProgressDetails } from "./StatusBadge";
 
 export function JobStatusTracker({
@@ -42,13 +43,13 @@ export function JobStatusTracker({
 
   return (
     <div
-      className={`rounded-xl border ${
+      className={`${panelClass} ${
         job.status === "completed"
-          ? "border-emerald-900/50 bg-emerald-950/20"
+          ? "border-emerald-500/30"
           : job.status === "failed"
-            ? "border-red-900/50 bg-red-950/20"
-            : "border-green-900/50 bg-green-950/20"
-      } p-5`}
+            ? "border-red-500/30"
+            : "border-green-500/25"
+      }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -63,16 +64,10 @@ export function JobStatusTracker({
         </div>
         {job.status === "completed" ? (
           <div className="flex flex-wrap gap-2">
-            <Link
-              to={`/songs/${songId}`}
-              className="rounded-lg bg-green-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-400"
-            >
+            <Link to={`/songs/${songId}`} className={`${btnPrimary} px-3 py-1.5 text-sm`}>
               Ver análise
             </Link>
-            <Link
-              to={`/songs/${songId}/cifra`}
-              className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-400"
-            >
+            <Link to={`/songs/${songId}/cifra`} className={`${btnPrimary} px-3 py-1.5 text-sm`}>
               Abrir cifra
             </Link>
           </div>
@@ -101,7 +96,7 @@ export function JobStatusTracker({
       {!compact && job.status !== "completed" && job.status !== "failed" ? (
         <p className="mt-4 text-xs text-slate-500">
           Esta página atualiza automaticamente a cada poucos segundos. Você também pode acompanhar em{" "}
-          <Link className="text-green-300 underline" to="/library">
+          <Link className={`${linkClass} underline`} to="/library">
             Biblioteca
           </Link>
           .

@@ -1,5 +1,5 @@
 
-> @softmusic/web@ typecheck D:\projetos\pessoal\softmusic\apps\web
+> @softmusic/web@0.0.1 typecheck D:\projetos\pessoal\2\softmusic\apps\web
 > react-router typegen && tsc
 
 The `envFile` option is deprecated, please use `envDir: false` instead.

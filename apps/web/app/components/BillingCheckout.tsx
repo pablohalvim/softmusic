@@ -1,6 +1,17 @@
 import { useState } from "react";
 
 import { authFetch } from "../lib/api";
+import {
+  alertInfoClass,
+  btnPrimary,
+  inputClass,
+  labelClass,
+  linkClass,
+  panelClass,
+  segmentedActiveClass,
+  segmentedIdleClass,
+  segmentedWrapClass,
+} from "../lib/ui-classes";
 
 interface CheckoutResult {
   invoice_id: string;
@@ -66,40 +77,30 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
 
   if (result?.payment_method === "pix" && result.pix) {
     return (
-      <div className="rounded-xl border border-green-900/40 bg-green-950/20 p-4 space-y-4">
+      <div className={`${alertInfoClass} space-y-4`}>
         <h2 className="font-medium">Pague com PIX — {formatBrl(result.total_amount_cents)}</h2>
         {result.pix.qr_image_base64 ? (
           <img
             src={`data:image/png;base64,${result.pix.qr_image_base64}`}
             alt="QR Code PIX"
-            className="mx-auto h-48 w-48 rounded-lg bg-white p-2"
+            className="mx-auto h-48 w-48 rounded-xl bg-white p-2 shadow-lg"
           />
         ) : null}
         {result.pix.copy_paste ? (
           <div className="space-y-2">
             <p className="text-sm text-slate-400">Copia e cola:</p>
-            <textarea
-              readOnly
-              value={result.pix.copy_paste}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-xs text-slate-200"
-              rows={3}
-            />
+            <textarea readOnly value={result.pix.copy_paste} className={`${inputClass} text-xs`} rows={3} />
             <button
               type="button"
               onClick={() => void navigator.clipboard.writeText(result.pix!.copy_paste!)}
-              className="rounded-lg bg-green-500 px-3 py-1.5 text-sm text-white hover:bg-green-400"
+              className={btnPrimary}
             >
               Copiar código PIX
             </button>
           </div>
         ) : null}
         {result.invoice_url ? (
-          <a
-            href={result.invoice_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block text-sm text-green-300 hover:text-green-200"
-          >
+          <a href={result.invoice_url} target="_blank" rel="noreferrer" className={`inline-block text-sm ${linkClass}`}>
             Abrir fatura no Asaas
           </a>
         ) : null}
@@ -109,31 +110,31 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
 
   if (result?.payment_status === "CONFIRMED") {
     return (
-      <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 p-4 text-emerald-200">
+      <div className={`${alertInfoClass} text-emerald-200`}>
         Pagamento confirmado! Sua assinatura será ativada em instantes.
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleCheckout} className="rounded-xl border border-slate-800 p-4 space-y-4">
+    <form onSubmit={handleCheckout} className={`${panelClass} space-y-4`}>
       <div>
-        <h2 className="font-medium">Ativar assinatura</h2>
+        <h2 className="font-medium text-slate-100">Ativar assinatura</h2>
         <p className="text-sm text-slate-400">Total mensal: {formatBrl(monthlyTotalCents)}</p>
       </div>
 
-      <div className="flex gap-2">
+      <div className={segmentedWrapClass}>
         <button
           type="button"
           onClick={() => setMethod("pix")}
-          className={`rounded-lg px-3 py-1.5 text-sm ${method === "pix" ? "bg-green-500 text-white" : "border border-slate-700 text-slate-300"}`}
+          className={method === "pix" ? segmentedActiveClass : segmentedIdleClass}
         >
           PIX
         </button>
         <button
           type="button"
           onClick={() => setMethod("credit_card")}
-          className={`rounded-lg px-3 py-1.5 text-sm ${method === "credit_card" ? "bg-green-500 text-white" : "border border-slate-700 text-slate-300"}`}
+          className={method === "credit_card" ? segmentedActiveClass : segmentedIdleClass}
         >
           Cartão
         </button>
@@ -141,53 +142,53 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
 
       {method === "credit_card" ? (
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block space-y-1 text-sm sm:col-span-2">
+          <label className={`${labelClass} sm:col-span-2`}>
             <span>Nome no cartão</span>
             <input
               required
               value={card.holder_name}
               onChange={(e) => setCard((c) => ({ ...c, holder_name: e.target.value }))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+              className={inputClass}
             />
           </label>
-          <label className="block space-y-1 text-sm sm:col-span-2">
+          <label className={`${labelClass} sm:col-span-2`}>
             <span>Número</span>
             <input
               required
               inputMode="numeric"
               value={card.number}
               onChange={(e) => setCard((c) => ({ ...c, number: e.target.value.replace(/\D/g, "") }))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+              className={inputClass}
             />
           </label>
-          <label className="block space-y-1 text-sm">
+          <label className={labelClass}>
             <span>Mês (MM)</span>
             <input
               required
               maxLength={2}
               value={card.expiry_month}
               onChange={(e) => setCard((c) => ({ ...c, expiry_month: e.target.value }))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+              className={inputClass}
             />
           </label>
-          <label className="block space-y-1 text-sm">
+          <label className={labelClass}>
             <span>Ano (AAAA)</span>
             <input
               required
               maxLength={4}
               value={card.expiry_year}
               onChange={(e) => setCard((c) => ({ ...c, expiry_year: e.target.value }))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+              className={inputClass}
             />
           </label>
-          <label className="block space-y-1 text-sm">
+          <label className={labelClass}>
             <span>CVV</span>
             <input
               required
               maxLength={4}
               value={card.ccv}
               onChange={(e) => setCard((c) => ({ ...c, ccv: e.target.value }))}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2"
+              className={inputClass}
             />
           </label>
         </div>
@@ -199,11 +200,7 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
 
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
-      <button
-        type="submit"
-        disabled={loading || monthlyTotalCents <= 0}
-        className="rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white hover:bg-green-400 disabled:opacity-60"
-      >
+      <button type="submit" disabled={loading || monthlyTotalCents <= 0} className={`${btnPrimary} disabled:opacity-60`}>
         {loading ? "Processando..." : method === "pix" ? "Gerar PIX" : "Pagar com cartão"}
       </button>
     </form>

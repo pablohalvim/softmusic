@@ -1,17 +1,17 @@
 
-> @softmusic/api@ test D:\projetos\pessoal\softmusic\apps\api
+> @softmusic/api@ test D:\projetos\pessoal\2\softmusic\apps\api
 > vitest run
 
 The `envFile` option is deprecated, please use `envDir: false` instead.
 The `envFile` option is deprecated, please use `envDir: false` instead.
 The `envFile` option is deprecated, please use `envDir: false` instead.
 
- RUN  v3.2.6 D:/projetos/pessoal/softmusic/apps/api
+ RUN  v3.2.6 D:/projetos/pessoal/2/softmusic/apps/api
 
  ✓ app/server/config.server.test.ts (2 tests) 3ms
 
  Test Files  1 passed (1)
       Tests  2 passed (2)
-   Start at  12:38:33
-   Duration  347ms (transform 27ms, setup 0ms, collect 28ms, tests 3ms, environment 0ms, prepare 93ms)
+   Start at  14:47:09
+   Duration  332ms (transform 31ms, setup 0ms, collect 30ms, tests 3ms, environment 0ms, prepare 90ms)
 

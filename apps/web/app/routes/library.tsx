@@ -6,6 +6,7 @@ import { SongListItem } from "../components/analysis/SongListItem";
 import { GlobalLibraryModal } from "../components/library/GlobalLibraryModal";
 import { fetchSongs, isActiveSong } from "../lib/api";
 import { useBand } from "../lib/band-context";
+import { alertInfoClass, btnAccent, btnGhost, linkClass, panelClass } from "../lib/ui-classes";
 
 export default function Library() {
   const { activeBand } = useBand();
@@ -27,8 +28,8 @@ export default function Library() {
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Biblioteca</h1>
-          <p className="text-slate-400">
+          <h1 className="sm-page-title">Biblioteca</h1>
+          <p className="sm-page-subtitle">
             Músicas da banda {activeBand?.name ? `"${activeBand.name}"` : "ativa"}.
           </p>
         </div>
@@ -37,14 +38,11 @@ export default function Library() {
             type="button"
             onClick={() => setGlobalOpen(true)}
             disabled={!activeBand?.id}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium hover:border-slate-500 disabled:opacity-50"
+            className={`${btnGhost} disabled:opacity-50`}
           >
             Adicionar da biblioteca global
           </button>
-          <Link
-            to="/analyze"
-            className="rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white hover:bg-green-400"
-          >
+          <Link to="/analyze" className={btnAccent}>
             Nova análise
           </Link>
         </div>
@@ -57,7 +55,7 @@ export default function Library() {
       />
 
       {activeCount > 0 ? (
-        <div className="rounded-xl border border-green-900/40 bg-green-950/20 px-4 py-3 text-sm text-green-200">
+        <div className={`${alertInfoClass} px-4 py-3 text-sm`}>
           {activeCount} análise{activeCount > 1 ? "s" : ""} em andamento — atualizando automaticamente.
         </div>
       ) : null}
@@ -67,12 +65,9 @@ export default function Library() {
       ) : songsQuery.isError ? (
         <p className="text-red-400">Não foi possível carregar a biblioteca.</p>
       ) : songs.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-700 p-10 text-center">
+        <div className={`${panelClass} border-dashed p-10 text-center`}>
           <p className="text-slate-400">Nenhuma música analisada ainda.</p>
-          <Link
-            to="/analyze"
-            className="mt-4 inline-block rounded-lg bg-green-500 px-4 py-2 text-sm font-medium text-white hover:bg-green-400"
-          >
+          <Link to="/analyze" className={`${btnAccent} mt-4 inline-flex`}>
             Analisar primeira música
           </Link>
         </div>

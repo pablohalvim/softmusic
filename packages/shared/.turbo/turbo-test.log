@@ -1,19 +1,19 @@
 
-> @softmusic/shared@0.1.0 test D:\projetos\pessoal\softmusic\packages\shared
+> @softmusic/shared@0.1.0 test D:\projetos\pessoal\2\softmusic\packages\shared
 > vitest run
 
 
- RUN  v3.2.6 D:/projetos/pessoal/softmusic/packages/shared
+ RUN  v3.2.6 D:/projetos/pessoal/2/softmusic/packages/shared
 
- ✓ src/cifra-scroll.test.ts (4 tests) 3ms
  ✓ src/billing.test.ts (4 tests) 3ms
- ✓ src/cifra-layout.test.ts (9 tests) 5ms
+ ✓ src/cifra-scroll.test.ts (4 tests) 3ms
  ✓ src/chords.test.ts (8 tests) 6ms
- ✓ src/harmony.test.ts (9 tests) 10ms
+ ✓ src/cifra-layout.test.ts (12 tests) 7ms
+ ✓ src/harmony.test.ts (9 tests) 9ms
  ✓ src/datetime.test.ts (2 tests) 3ms
 
  Test Files  6 passed (6)
-      Tests  36 passed (36)
-   Start at  12:38:32
-   Duration  537ms (transform 286ms, setup 0ms, collect 610ms, tests 31ms, environment 1ms, prepare 1.04s)
+      Tests  39 passed (39)
+   Start at  14:47:07
+   Duration  793ms (transform 618ms, setup 0ms, collect 828ms, tests 29ms, environment 1ms, prepare 824ms)
 

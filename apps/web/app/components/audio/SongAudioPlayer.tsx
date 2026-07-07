@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { fetchAuthenticatedBlob } from "../../lib/api";
+import { btnGhost, panelClass } from "../../lib/ui-classes";
 import { CifraScrollControl } from "./CifraScrollControl";
 import { MetronomeClick, type MetronomeClickHandle } from "./MetronomeClick";
 import { loadAudioVolume, saveAudioVolume } from "./volume-prefs";
@@ -153,7 +154,7 @@ export function SongAudioPlayer({
           type="checkbox"
           checked={syncMetronome}
           onChange={(event) => handleSyncChange(event.target.checked)}
-          className="rounded border-slate-600 bg-slate-950 text-orange-500 focus:ring-orange-500/40"
+          className="accent-brand rounded border-white/20 bg-black/30"
         />
         Iniciar metrônomo junto com o áudio
       </label>
@@ -171,7 +172,7 @@ export function SongAudioPlayer({
   if (isFixedFooter && minimized) {
     return (
       <div
-        className={`fixed inset-x-0 bottom-0 z-40 border-t border-slate-800/50 bg-slate-950/75 backdrop-blur-sm ${className ?? ""}`}
+        className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#020806]/90 backdrop-blur-xl ${className ?? ""}`}
       >
         <div className="mx-auto max-w-6xl px-4 py-2.5">
           <div className="flex items-center gap-3">
@@ -180,7 +181,7 @@ export function SongAudioPlayer({
             <button
               type="button"
               onClick={() => setFooterMinimized(false)}
-              className="shrink-0 rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+              className={`${btnGhost} shrink-0 px-3 py-1.5 text-xs`}
               aria-label="Expandir painel de áudio"
             >
               Expandir
@@ -201,7 +202,7 @@ export function SongAudioPlayer({
             <button
               type="button"
               onClick={() => setFooterMinimized(true)}
-              className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
+              className={`${btnGhost} px-2.5 py-1 text-xs`}
               aria-label="Minimizar painel de áudio"
             >
               Minimizar
@@ -221,7 +222,7 @@ export function SongAudioPlayer({
   if (isFixedFooter) {
     return (
       <div
-        className={`fixed inset-x-0 bottom-0 z-40 border-t border-slate-800/50 bg-slate-950/75 backdrop-blur-sm ${className ?? ""}`}
+        className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#020806]/90 backdrop-blur-xl ${className ?? ""}`}
       >
         <div className="mx-auto max-w-6xl space-y-3 px-4 py-4">
           {panelBody}
@@ -231,7 +232,7 @@ export function SongAudioPlayer({
   }
 
   return (
-    <article className={`rounded-xl border border-slate-800 bg-slate-900/60 p-4 ${className ?? ""}`}>
+    <article className={`${panelClass} ${className ?? ""}`}>
       {panelBody}
     </article>
   );

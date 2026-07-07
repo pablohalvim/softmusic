@@ -4,6 +4,13 @@ import { useEffect } from "react";
 import { formatDateTime } from "@softmusic/shared/datetime";
 
 import { fetchGlobalSongs, linkSongToBand } from "../../lib/api";
+import {
+  btnGhost,
+  btnPrimary,
+  listItemHoverClass,
+  modalOverlayClass,
+  modalPanelClass,
+} from "../../lib/ui-classes";
 
 interface GlobalLibraryModalProps {
   open: boolean;
@@ -44,14 +51,14 @@ export function GlobalLibraryModal({ open, bandId, onClose }: GlobalLibraryModal
   const songs = globalQuery.data?.items ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+    <div className={modalOverlayClass}>
       <div
-        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
+        className={`${modalPanelClass} flex max-h-[85vh] max-w-2xl flex-col`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="global-library-title"
       >
-        <div className="border-b border-slate-800 px-5 py-4">
+        <div className="border-b border-white/[0.06] px-5 py-4">
           <h2 id="global-library-title" className="text-lg font-semibold text-slate-100">
             Biblioteca global
           </h2>
@@ -83,7 +90,7 @@ export function GlobalLibraryModal({ open, bandId, onClose }: GlobalLibraryModal
                 return (
                   <li
                     key={song.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/50 px-4 py-3"
+                    className={`${listItemHoverClass} flex flex-wrap items-center justify-between gap-3 px-4 py-3`}
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium text-slate-100">{title}</p>
@@ -93,7 +100,7 @@ export function GlobalLibraryModal({ open, bandId, onClose }: GlobalLibraryModal
                       type="button"
                       disabled={linkMutation.isPending}
                       onClick={() => linkMutation.mutate(song.id)}
-                      className="rounded-lg bg-green-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-400 disabled:opacity-50"
+                      className={`${btnPrimary} px-3 py-1.5 text-sm disabled:opacity-50`}
                     >
                       {isLinking ? "Adicionando..." : "Adicionar"}
                     </button>
@@ -108,12 +115,8 @@ export function GlobalLibraryModal({ open, bandId, onClose }: GlobalLibraryModal
           ) : null}
         </div>
 
-        <div className="border-t border-slate-800 px-5 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500"
-          >
+        <div className="border-t border-white/[0.06] px-5 py-4">
+          <button type="button" onClick={onClose} className={btnGhost}>
             Fechar
           </button>
         </div>

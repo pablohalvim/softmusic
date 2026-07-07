@@ -2,6 +2,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 
 import { loadMetronomeVolume, saveMetronomeVolume } from "./volume-prefs";
 import { VolumeControl } from "./VolumeControl";
+import { btnPrimary } from "../../lib/ui-classes";
 
 export interface MetronomeClickHandle {
   start: () => Promise<void>;
@@ -131,7 +132,7 @@ export const MetronomeClick = forwardRef<MetronomeClickHandle, MetronomeClickPro
     useEffect(() => () => stop(), [stop]);
 
     return (
-      <div className={className ?? "mt-4 border-t border-slate-800 pt-4"}>
+      <div className={className ?? "mt-4 border-t border-white/10 pt-4"}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-medium text-slate-200">Metrônomo</h3>
@@ -142,11 +143,11 @@ export const MetronomeClick = forwardRef<MetronomeClickHandle, MetronomeClickPro
           <button
             type="button"
             onClick={toggle}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+            className={
               playing
-                ? "bg-orange-500 text-white hover:bg-orange-400"
-                : "border border-slate-700 bg-slate-950 text-slate-200 hover:border-slate-600"
-            }`}
+                ? `${btnPrimary} px-4 py-2 text-sm`
+                : "rounded-lg border border-white/10 bg-white/[0.02] px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-green-500/30 hover:text-green-300"
+            }
           >
             {playing ? "Parar click" : "Play click"}
           </button>
@@ -169,9 +170,9 @@ export const MetronomeClick = forwardRef<MetronomeClickHandle, MetronomeClickPro
                 className={`h-2.5 flex-1 rounded-full transition-colors ${
                   active
                     ? measureBeat === 1
-                      ? "bg-orange-400"
-                      : "bg-green-400"
-                    : "bg-slate-800"
+                      ? "bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.5)]"
+                      : "bg-green-500/70"
+                    : "bg-white/10"
                 }`}
               />
             );

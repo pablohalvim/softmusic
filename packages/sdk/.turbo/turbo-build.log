@@ -1,4 +1,4 @@
 
-> @softmusic/sdk@0.1.0 build D:\projetos\pessoal\softmusic\packages\sdk
+> @softmusic/sdk@0.1.0 build D:\projetos\pessoal\2\softmusic\packages\sdk
 > tsc -p tsconfig.json
 
