@@ -1,4 +1,4 @@
-import { formatRelativeTime } from "@softmusic/shared/datetime";
+import { formatRelativeTime } from "@softmusic/shared";
 import { useEffect, useState } from "react";
 
 import { fetchAdminDashboardStats, getAdminToken, type AdminDashboardStats } from "../lib/api";
