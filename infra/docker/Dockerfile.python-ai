@@ -12,12 +12,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# entrypoint antes do pip: evita COPY depois da layer enorme do site-packages
+# (legacy builder/containerd costuma falhar no export dessa layer).
 COPY apps/python-ai /app/apps/python-ai
-WORKDIR /app/apps/python-ai
-RUN pip install --no-cache-dir .
-
 COPY infra/docker/python-ai/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && mkdir -p uploads models
+WORKDIR /app/apps/python-ai
+RUN pip install --no-cache-dir . \
+    && chmod +x /entrypoint.sh \
+    && mkdir -p uploads models
 
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]

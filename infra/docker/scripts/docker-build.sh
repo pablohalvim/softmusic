@@ -25,17 +25,19 @@ docker_build_retry() {
     if [[ "$code" -eq 0 ]]; then
       return 0
     fi
-    if echo "$output" | grep -qiE 'lease does not exist|failed to prepare snapshot'; then
-      echo ">> Docker lease/snapshot error (tentativa ${attempt}/${max}) — limpando cache..."
-      docker builder prune -f 2>/dev/null || true
+    if echo "$output" | grep -qiE 'lease does not exist|failed to prepare snapshot|failed to write compressed diff|failed to create diff tar stream|mount callback failed'; then
+      echo ">> Docker layer/export error (tentativa ${attempt}/${max}) — limpando cache..."
+      docker builder prune -af 2>/dev/null || true
       docker image prune -f 2>/dev/null || true
-      sleep "$((attempt * 3))"
+      # Remove layers intermediárias órfãs do python-ai se existirem
+      docker system prune -f 2>/dev/null || true
+      sleep "$((attempt * 5))"
     else
       return "$code"
     fi
   done
-  echo "ERRO: build falhou após ${max} tentativas (lease does not exist)." >&2
-  echo "      Na VPS: sudo systemctl restart docker && re-rodar o job" >&2
+  echo "ERRO: build falhou após ${max} tentativas (erro de layer/export do Docker)." >&2
+  echo "      Na VPS: sudo systemctl restart docker && re-rodar o job softmusic-ia" >&2
   return 1
 }
 
