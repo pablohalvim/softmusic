@@ -19,10 +19,10 @@ if [[ "${DEPLOY_ADMIN_WEB:-0}" == "1" ]]; then
   SERVICES+=(admin-web)
 fi
 
-docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
+docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
   --profile infra --profile app up -d --no-deps --force-recreate "${SERVICES[@]}"
 
-docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps web lp
+docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps web lp
 
 load_host_ports
 wait_http "http://127.0.0.1:${WEB_PORT}/"

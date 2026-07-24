@@ -26,8 +26,8 @@ docker run -d \
   --group-add "$DOCKER_GID" \
   jenkins/jenkins:lts
 
-# Se usar docker compose no pipeline, monte também o plugin:
-#   -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/local/lib/docker/cli-plugins/docker-compose
+# Se usar docker compose no pipeline, monte também o plugin (obrigatório):
+#   -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose
 ```
 
 Teste dentro do container antes de rodar os jobs:
@@ -36,6 +36,17 @@ Teste dentro do container antes de rodar os jobs:
 docker exec -u jenkins jenkins docker ps
 docker exec -u jenkins jenkins docker compose version
 ```
+
+> Sem o plugin compose, o pipeline falha com `unknown shorthand flag: 'f' in -f`.
+> Correção rápida (host), sem recriar o Jenkins:
+>
+> ```bash
+> PLUGIN=/usr/libexec/docker/cli-plugins/docker-compose
+> mkdir -p /dados/jenkins_home/.docker/cli-plugins
+> cp -f "$PLUGIN" /dados/jenkins_home/.docker/cli-plugins/docker-compose
+> chmod +x /dados/jenkins_home/.docker/cli-plugins/docker-compose
+> docker exec -u jenkins jenkins docker compose version
+> ```
 
 ### DEPLOY_DIR (onde o compose e as configs são gravados)
 

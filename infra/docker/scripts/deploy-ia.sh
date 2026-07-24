@@ -23,9 +23,9 @@ if [[ "${USE_GPU:-1}" == "1" ]]; then
   echo ">> GPU: overlay runtime nvidia (USE_GPU=1)"
 fi
 
-docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
+docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
   --profile infra --profile app up -d --no-deps --force-recreate python-ai worker scheduler
 
-docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps python-ai worker scheduler
+docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps python-ai worker scheduler
 
 wait_http "http://127.0.0.1:${PYTHON_AI_PORT:-8000}/health"

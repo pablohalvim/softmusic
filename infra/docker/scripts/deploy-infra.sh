@@ -93,11 +93,11 @@ else
 fi
 
 if [[ "${SKIP_PULL:-0}" != "1" ]]; then
-  docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" pull
+  docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" pull
 fi
 
 # Sem --remove-orphans: a infra compartilha o projeto `softmusic` com os apps.
-docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" up -d
+docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" up -d
 
 # Se migrou para banco externo, derruba o MySQL local antigo (se existir).
 if [[ "${INSTALL_MYSQL}" == "0" ]]; then
@@ -110,7 +110,7 @@ fi
 if [[ "${INSTALL_MYSQL}" != "0" ]]; then
   echo ">> Aguardando MySQL..."
   for _ in $(seq 1 30); do
-    if docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" exec -T mysql mysqladmin ping -h localhost --silent 2>/dev/null; then
+    if docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" exec -T mysql mysqladmin ping -h localhost --silent 2>/dev/null; then
       echo ">> MySQL OK"
       break
     fi
@@ -120,7 +120,7 @@ else
   echo ">> Pulando healthcheck do MySQL local (banco externo)."
 fi
 
-docker compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" ps
+docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" ps
 
 # --- Verificação: todos os containers esperados no ar -----------------------
 echo ">> Verificando containers de infra/observabilidade..."

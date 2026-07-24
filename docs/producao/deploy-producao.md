@@ -56,8 +56,8 @@ docker run -d \
   --group-add "$DOCKER_GID" \
   jenkins/jenkins:lts
 
-# Se usar docker compose no pipeline, monte o plugin (caminho pode variar):
-#   -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/local/lib/docker/cli-plugins/docker-compose
+# Se usar docker compose no pipeline, monte também o plugin (obrigatório):
+#   -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose
 # BuildKit (opcional — pipelines detectam e usam legacy se ausente):
 #   -v /usr/libexec/docker/cli-plugins/docker-buildx:/usr/local/lib/docker/cli-plugins/docker-buildx
 ```
@@ -69,6 +69,19 @@ docker exec -u jenkins jenkins docker ps
 docker exec -u jenkins jenkins docker compose version
 docker exec -u jenkins jenkins docker buildx version
 ```
+
+> Se `docker compose version` falhar com `unknown shorthand flag: 'f'` ou
+> `'compose' is not a docker command`, o plugin não está visível no Jenkins.
+> Correção rápida **sem recriar** o container (na VPS/host):
+>
+> ```bash
+> PLUGIN=/usr/libexec/docker/cli-plugins/docker-compose
+> # se não achar: find /usr -name docker-compose 2>/dev/null
+> mkdir -p /dados/jenkins_home/.docker/cli-plugins
+> cp -f "$PLUGIN" /dados/jenkins_home/.docker/cli-plugins/docker-compose
+> chmod +x /dados/jenkins_home/.docker/cli-plugins/docker-compose
+> docker exec -u jenkins jenkins docker compose version
+> ```
 
 ### 2. DEPLOY_DIR
 
@@ -323,6 +336,7 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 
 | Sintoma | Causa provável | Ação |
 |---------|----------------|------|
+| `unknown shorthand flag: 'f' in -f` / compose missing | Plugin `docker compose` não montado no Jenkins | Copiar plugin para `/dados/jenkins_home/.docker/cli-plugins/` (ver pré-requisito 1) |
 | `permission denied` no `/var/run/docker.sock` | Jenkins sem `--group-add` do GID do docker | Recriar o container do Jenkins (pré-requisito 1) |
 | Observabilidade/nginx sobem com config vazia | `DEPLOY_DIR_HOST` errado (bind mount não visível no host) | Ajustar `DEPLOY_DIR_HOST` para o caminho real do `jenkins_home` no host |
 | Deploy infra aborta citando variável | Credencial Secret text ausente/vazia | Cadastrar a credencial e re-rodar |

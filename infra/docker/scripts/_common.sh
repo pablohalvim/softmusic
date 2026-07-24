@@ -13,6 +13,67 @@ export SOFTMUSIC_MYSQL_INIT_DIR="${DEPLOY_DIR_HOST}/mysql/init"
 export SOFTMUSIC_MONITORING_DIR="${DEPLOY_DIR_HOST}/monitoring"
 export SOFTMUSIC_NGINX_DIR="${DEPLOY_DIR_HOST}/nginx"
 
+# -----------------------------------------------------------------------------
+# docker compose (plugin V2) ou docker-compose (binário / plugin standalone)
+# No Jenkins-em-container o CLI do host é montado via socket, mas o plugin
+# compose precisa existir DENTRO do container (volume) ou em ~/.docker/cli-plugins.
+# -----------------------------------------------------------------------------
+DOCKER_COMPOSE_CMD=()
+
+resolve_docker_compose() {
+  if [[ ${#DOCKER_COMPOSE_CMD[@]} -gt 0 ]]; then
+    return 0
+  fi
+
+  if docker compose version >/dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD=(docker compose)
+    return 0
+  fi
+
+  if command -v docker-compose >/dev/null 2>&1 && docker-compose version >/dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD=(docker-compose)
+    return 0
+  fi
+
+  local candidate
+  for candidate in \
+    "${HOME}/.docker/cli-plugins/docker-compose" \
+    /var/jenkins_home/.docker/cli-plugins/docker-compose \
+    /usr/libexec/docker/cli-plugins/docker-compose \
+    /usr/local/lib/docker/cli-plugins/docker-compose \
+    /usr/lib/docker/cli-plugins/docker-compose
+  do
+    if [[ -x "${candidate}" ]]; then
+      # Plugin V2 aceita sintaxe docker-compose quando chamado direto.
+      if "${candidate}" version >/dev/null 2>&1; then
+        DOCKER_COMPOSE_CMD=("${candidate}")
+        return 0
+      fi
+    fi
+  done
+
+  echo "ERRO: 'docker compose' não está disponível neste ambiente (Jenkins)." >&2
+  echo "      O CLI docker está montado, mas o plugin compose não." >&2
+  echo "" >&2
+  echo "Correção rápida NA VPS (host), sem recriar o Jenkins:" >&2
+  echo "  PLUGIN=/usr/libexec/docker/cli-plugins/docker-compose" >&2
+  echo "  # se não existir: find /usr -name docker-compose 2>/dev/null" >&2
+  echo "  mkdir -p /dados/jenkins_home/.docker/cli-plugins" >&2
+  echo "  cp -f \"\$PLUGIN\" /dados/jenkins_home/.docker/cli-plugins/docker-compose" >&2
+  echo "  chmod +x /dados/jenkins_home/.docker/cli-plugins/docker-compose" >&2
+  echo "  docker exec -u jenkins jenkins docker compose version" >&2
+  echo "" >&2
+  echo "Ou remonte o container Jenkins com o plugin (permanente):" >&2
+  echo "  -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose" >&2
+  return 1
+}
+
+docker_compose() {
+  resolve_docker_compose || exit 1
+  echo ">> ${DOCKER_COMPOSE_CMD[*]} $*"
+  "${DOCKER_COMPOSE_CMD[@]}" "$@"
+}
+
 stage_assets() {
   mkdir -p "${DEPLOY_DIR}"
 
