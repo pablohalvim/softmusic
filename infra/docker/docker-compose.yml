@@ -394,9 +394,11 @@ services:
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     volumes:
+      # Volume de dados primeiro; o bind de dashboards precisa vir depois
+      # (mount aninhado), senão o named volume esconde /var/lib/grafana/dashboards.
+      - softmusic_grafana_data:/var/lib/grafana
       - ${SOFTMUSIC_MONITORING_DIR:-../monitoring}/grafana/provisioning:/etc/grafana/provisioning:ro
       - ${SOFTMUSIC_MONITORING_DIR:-../monitoring}/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - softmusic_grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
       - loki

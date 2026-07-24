@@ -138,9 +138,11 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
     volumes:
+      # Volume de dados primeiro; o bind de dashboards precisa vir depois
+      # (mount aninhado), senão o named volume esconde /var/lib/grafana/dashboards.
+      - softmusic_grafana_data:/var/lib/grafana
       - ${SOFTMUSIC_MONITORING_DIR:-../monitoring}/grafana/provisioning:/etc/grafana/provisioning:ro
       - ${SOFTMUSIC_MONITORING_DIR:-../monitoring}/grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - softmusic_grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
       - loki
