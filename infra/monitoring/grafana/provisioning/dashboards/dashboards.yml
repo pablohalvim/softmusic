@@ -6,6 +6,8 @@ providers:
     folder: SoftMusic
     type: file
     disableDeletion: false
-    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
     options:
       path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

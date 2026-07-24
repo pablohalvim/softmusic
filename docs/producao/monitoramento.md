@@ -1,20 +1,21 @@
 # Monitoramento e observabilidade
 
-Stack de observabilidade do SoftMusic: métricas (Prometheus), visualização (Grafana), logs (Loki) e traces (OpenTelemetry).
+Stack de observabilidade do SoftMusic: métricas (Prometheus), visualização (Grafana), logs (Loki) e coletor OTel.
 
 ## Arquitetura
 
 ```
-Apps (API, Python AI, Workers)
+Apps (API, Python AI)
     │
     ├── /metrics ──────────► Prometheus
-    ├── stdout JSON ───────► Promtail ──► Loki
-    └── OTLP gRPC/HTTP ──► OTel Collector ──► Tempo/Jaeger (traces)
-                                                    │
-Grafana ◄── datasources: Prometheus, Loki, Tempo
+    ├── stdout ────────────► Promtail ──► Loki
+    └── OTLP gRPC/HTTP ──► OTel Collector (metrics→:8889; traces→logging)
+
+Grafana ◄── datasources: Prometheus, Loki
+         ◄── dashboards: infra/monitoring/grafana/dashboards/
 ```
 
-Arquivos de configuração em `infra/monitoring/`.
+Arquivos em `infra/monitoring/`. O job **`softmusic-infra`** (`deploy-infra.sh`) copia essa pasta para o deploy dir e sobe o profile `observability` — datasources e dashboards entram sozinhos no Grafana (file provisioning). Não é preciso configurar nada na UI.
 
 ## Ativar localmente
 
@@ -30,193 +31,90 @@ docker compose -f infra/docker/docker-compose.yml \
 | Prometheus | http://localhost:9090 | — |
 | RabbitMQ Management | http://localhost:15672 | Ver `.env` |
 
-Dashboards pré-configurados em `infra/monitoring/grafana/dashboards/`:
+### Dashboards provisionados
 
-- **SoftMusic Overview** — RPS, latência p50/p95/p99, taxa de erro
-- **Analysis Pipeline** — jobs enfileirados, tempo por estágio, falhas por modelo
-- **Infrastructure** — CPU/memória por pod, conexões MySQL, Redis hit rate
-- **Celery Workers** — throughput, task duration, retries
+Pasta Grafana **SoftMusic** (JSONs em `infra/monitoring/grafana/dashboards/`):
 
-## Métricas expostas
+| Dashboard | UID | Conteúdo |
+|-----------|-----|----------|
+| SoftMusic Overview | `softmusic-overview` | Targets UP/DOWN, CPU/RSS, event loop lag (API) |
+| SoftMusic Logs | `softmusic-logs` | Volume + stream Loki (`service=~softmusic-.*`) |
+| SoftMusic Prometheus Targets | `softmusic-targets` | Tabela `up` + scrape duration/samples |
 
-### API (BFF)
+Para alterar: edite o JSON no repo e re-rode `softmusic-infra` (ou reinicie o Grafana). O provider recarrega a cada 30s.
 
-| Métrica | Tipo | Descrição |
-|---------|------|-----------|
-| `http_requests_total` | Counter | Total de requisições por método, rota, status |
-| `http_request_duration_seconds` | Histogram | Latência HTTP |
-| `auth_token_validations_total` | Counter | Validações JWT |
-| `rate_limit_exceeded_total` | Counter | Requisições bloqueadas por rate limit |
-| `analysis_jobs_created_total` | Counter | Jobs de análise criados |
+## Métricas expostas (hoje)
 
-Endpoint: `GET /metrics` (protegido em produção via network policy).
+Scrapes em `infra/monitoring/prometheus/prometheus.yml`: `api:8080/metrics`, `python-ai:8000/metrics`, `rabbitmq:15692`, Prometheus self.
 
-### Python AI
+### API (BFF) e Python AI
 
-| Métrica | Tipo | Descrição |
-|---------|------|-----------|
-| `analysis_pipeline_stage_duration_seconds` | Histogram | Duração por estágio (normalize, demucs, harmony, etc.) |
-| `analysis_pipeline_failures_total` | Counter | Falhas por estágio e tipo de erro |
-| `model_inference_duration_seconds` | Histogram | Tempo de inferência por modelo |
-| `active_analysis_jobs` | Gauge | Jobs em processamento |
+Ambos expõem **métricas default** do runtime (`prom-client` / `prometheus_client`):
 
-### Celery Workers
+| Família | Exemplos |
+|---------|----------|
+| Processo | `process_cpu_seconds_total`, `process_resident_memory_bytes` |
+| Node (API) | `nodejs_eventloop_lag_seconds`, `nodejs_heap_size_*` |
+| Python (IA) | `python_info`, GC collectors |
 
-| Métrica | Tipo | Descrição |
-|---------|------|-----------|
-| `celery_tasks_total` | Counter | Tasks por nome e estado |
-| `celery_task_duration_seconds` | Histogram | Duração de tasks |
-| `celery_queue_length` | Gauge | Tamanho da fila `analysis` |
+Endpoint: `GET /metrics`.
 
-## Logs estruturados
+### Métricas de negócio (planejadas)
 
-Todos os serviços emitem JSON para stdout:
+Ainda **não instrumentadas** — alertas em `alerts.yml` que dependem delas ficam sem série até existir o exporter:
 
-```json
-{
-  "timestamp": "2026-07-02T14:30:00.000Z",
-  "level": "info",
-  "service": "softmusic-api",
-  "trace_id": "abc123def456",
-  "span_id": "789ghi",
-  "message": "Analysis job created",
-  "job_id": "job_01HXYZ",
-  "user_id": "usr_01HABC",
-  "source_type": "upload"
-}
-```
+| Métrica | Uso previsto |
+|---------|--------------|
+| `http_requests_total` / `http_request_duration_seconds` | RPS, latência, 5xx |
+| `analysis_pipeline_*` / `model_inference_*` | Pipeline Demucs/harmony |
+| `celery_tasks_*` / `celery_queue_length` | Workers / backlog |
 
-Campos obrigatórios: `timestamp`, `level`, `service`, `message`.
+## Logs
 
-Campos de correlação: `trace_id`, `span_id`, `job_id`, `song_id`, `user_id`.
+Promtail coleta só containers `/softmusic-.*` e etiqueta `service=softmusic-<nome>`.
 
 ### Consultas LogQL (Loki)
 
 ```logql
-# Erros nos últimos 15 minutos
-{service=~"softmusic-.*"} |= "error" | json | level="error"
+# Tudo SoftMusic
+{service=~"softmusic-.*"}
 
-# Pipeline lento (> 5 min)
-{service="softmusic-worker"} | json | message="Pipeline completed" | duration > 300
+# Erros (texto)
+{service=~"softmusic-.*"} |= "error"
 
-# Falhas Demucs
-{service="softmusic-python-ai"} | json | stage="demucs" | level="error"
+# Só API
+{service="softmusic-api"}
 ```
 
 ## Traces (OpenTelemetry)
 
-Instrumentação automática em:
-
-- HTTP handlers (FastAPI, React Router)
-- Chamadas entre API ↔ Python AI
-- Tasks Celery (propagação de contexto)
-- Queries SQLAlchemy
-- Operações de object storage
-
-Configuração:
+O collector recebe OTLP (`4317`/`4318`). Hoje traces vão para o exporter **logging** (sem Tempo/Jaeger no compose). Datasource de traces no Grafana ainda não está provisionado.
 
 ```env
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
 OTEL_SERVICE_NAME=softmusic-api
-OTEL_TRACES_SAMPLER=parentbased_traceidratio
-OTEL_TRACES_SAMPLER_ARG=0.1
 ```
 
-Em produção, sample rate de 10% reduz custo; aumente para 100% em staging.
+## Alertas (Prometheus)
 
-## Alertas recomendados
+Definidos em `infra/monitoring/prometheus/alerts.yml` (ativos de verdade hoje):
 
-Definidos em `infra/monitoring/prometheus/alerts.yml`:
-
-| Alerta | Condição | Severidade | Ação |
+| Alerta | Condição | Severidade | Nota |
 |--------|----------|------------|------|
-| `HighErrorRate` | 5xx > 1% por 5 min | critical | PagerDuty |
-| `AnalysisQueueBacklog` | Fila `analysis` > 100 por 10 min | warning | Scale workers |
-| `AnalysisPipelineFailure` | Falhas > 5/min por 5 min | critical | Investigar logs |
-| `MySQLConnectionsHigh` | Conexões > 80% pool | warning | Verificar leaks |
-| `RedisDown` | Redis unreachable 1 min | critical | Failover Sentinel |
-| `PodCrashLooping` | Restarts > 3 em 10 min | critical | kubectl describe |
-| `DiskSpaceLow` | < 15% livre | warning | Expandir volume |
-
-### Exemplo de alerta Prometheus
-
-```yaml
-groups:
-  - name: softmusic
-    rules:
-      - alert: HighErrorRate
-        expr: |
-          sum(rate(http_requests_total{status=~"5.."}[5m]))
-          /
-          sum(rate(http_requests_total[5m])) > 0.01
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Taxa de erro HTTP acima de 1%"
-          description: "{{ $value | humanizePercentage }} de requisições retornando 5xx"
-
-      - alert: AnalysisQueueBacklog
-        expr: celery_queue_length{queue="analysis"} > 100
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Fila de análise com backlog"
-          description: "{{ $value }} jobs aguardando processamento"
-```
+| `ServiceDown` | `up == 0` por 2 min | critical | Funciona com scrapes atuais |
+| `HighErrorRate` | 5xx > 1% por 5 min | critical | Precisa de `http_requests_total` |
+| `AnalysisQueueBacklog` | fila `analysis` > 100 por 10 min | warning | Precisa de `celery_queue_length` |
 
 ## Health checks
 
 | Endpoint | Tipo | Uso |
 |----------|------|-----|
-| `GET /health/live` | Liveness | Processo vivo (sem deps) |
-| `GET /health/ready` | Readiness | MySQL, Redis, RabbitMQ, Python AI |
-| `GET /health` | Aggregated | Status completo + versão |
+| `GET /health/live` | Liveness | Processo vivo (sem deps) — usado no Docker healthcheck do python-ai |
+| `GET /health` | Readiness | DB (+ GPU best-effort no python-ai) |
 
-Kubernetes probes:
+## Runbook rápido
 
-```yaml
-livenessProbe:
-  httpGet:
-    path: /health/live
-    port: 8080
-  initialDelaySeconds: 10
-  periodSeconds: 15
-
-readinessProbe:
-  httpGet:
-    path: /health/ready
-    port: 8080
-  initialDelaySeconds: 5
-  periodSeconds: 10
-  failureThreshold: 3
-```
-
-## SLOs sugeridos
-
-| SLI | SLO | Janela |
-|-----|-----|--------|
-| Disponibilidade API | 99.9% | 30 dias |
-| Latência p95 `GET /songs/{id}/analysis` | < 200 ms (cache hit) | 7 dias |
-| Latência p95 pipeline completo | < 8 min (música 4 min) | 7 dias |
-| Taxa de sucesso de análise | > 98% | 7 dias |
-
-Error budget: quando SLO de disponibilidade cai abaixo de 99.9%, congelar deploys de feature até recuperação.
-
-## Runbook: pipeline travado
-
-1. Verificar fila RabbitMQ: http://localhost:15672 → queue `analysis`
-2. Logs do worker: `kubectl logs -l app=softmusic-worker --tail=200`
-3. Métrica `analysis_pipeline_failures_total` no Grafana
-4. Se OOM: escalar memória do worker ou reduzir `CELERY_CONCURRENCY`
-5. Reprocessar jobs failed: `celery -A app.worker call app.tasks.retry_failed --args='["job_id"]'`
-6. DLQ: jobs após 3 retries vão para fila `analysis.dlq` — investigar manualmente
-
-## Runbook: latência alta na API
-
-1. Dashboard **SoftMusic Overview** → latência p95 por rota
-2. Verificar Redis hit rate (cache de análises)
-3. Traces: identificar span lento (DB vs Python AI)
-4. MySQL: `SHOW PROCESSLIST`, slow query log
-5. Escalar replicas API via HPA se CPU > 70%
+1. Grafana → **SoftMusic Prometheus Targets**: algum `DOWN`?
+2. Grafana → **SoftMusic Logs**: filtrar o serviço e procurar `error`.
+3. Fila RabbitMQ: management UI → queue `analysis`.
+4. Logs do container: `docker logs softmusic-python-ai --tail 200` (ou worker/api).
