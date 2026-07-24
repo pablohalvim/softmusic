@@ -31,25 +31,24 @@ nvidia_docker_ok() {
     nvidia-smi -L >/dev/null 2>&1
 }
 
-print_nvidia_fix_hint() {
-  cat <<'EOF'
->> GPU pedida (USE_GPU=1), mas o Docker no host não consegue usar NVIDIA.
-   Erro típico: "failed to initialize NVML: Driver Not Loaded"
-
-   Rode NO HOST da VPS:
-     nvidia-smi
-     docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all \
-       nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
-
-   Workaround: re-rode softmusic-ia com IA_COMPUTE=cpu.
-EOF
-}
-
 dump_ia_logs() {
   echo ">> ---- logs softmusic-python-ai (tail 120) ----"
   docker logs --tail 120 softmusic-python-ai 2>&1 || true
   echo ">> ---- docker inspect health ----"
   docker inspect -f '{{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}' softmusic-python-ai 2>&1 || true
+}
+
+force_cpu() {
+  USE_GPU=0
+  COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+  # Evita o runtime nvidia e esconde CUDA para o PyTorch.
+  export CUDA_VISIBLE_DEVICES=""
+  export NVIDIA_VISIBLE_DEVICES=""
+}
+
+compose_up() {
+  docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
+    --profile infra --profile app up -d --no-deps --force-recreate python-ai worker scheduler
 }
 
 if [[ "${USE_GPU}" == "1" ]]; then
@@ -58,20 +57,27 @@ if [[ "${USE_GPU}" == "1" ]]; then
     COMPOSE_FILES+=(-f docker-compose.gpu.yml)
     echo ">> GPU: overlay runtime nvidia (USE_GPU=1)"
   else
-    print_nvidia_fix_hint
-    exit 1
+    echo ">> AVISO: USE_GPU=1 mas Docker no host não consegue usar NVIDIA (ex.: NVML Driver Not Loaded)."
+    echo "         Continuando em CPU. Para forçar GPU: driver + NVIDIA Container Toolkit no host."
+    force_cpu
   fi
 else
   echo ">> Compute: CPU (USE_GPU=0)"
-  # Evita o runtime nvidia e esconde CUDA para o PyTorch.
-  export CUDA_VISIBLE_DEVICES=""
-  export NVIDIA_VISIBLE_DEVICES=""
+  force_cpu
 fi
 
-if ! docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" \
-  --profile infra --profile app up -d --no-deps --force-recreate python-ai worker scheduler; then
-  dump_ia_logs
-  exit 1
+if ! compose_up; then
+  if [[ "${USE_GPU}" == "1" ]]; then
+    echo ">> AVISO: start com runtime nvidia falhou — retry em CPU..."
+    force_cpu
+    if ! compose_up; then
+      dump_ia_logs
+      exit 1
+    fi
+  else
+    dump_ia_logs
+    exit 1
+  fi
 fi
 
 docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" ps python-ai worker scheduler
