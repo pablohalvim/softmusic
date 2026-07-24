@@ -64,6 +64,10 @@ fi
 stage_assets
 cd "${DEPLOY_DIR}"
 
+# Garante docker compose (baixa o plugin para jenkins_home se faltar).
+resolve_docker_compose || exit 1
+echo ">> Compose OK: ${DOCKER_COMPOSE_CMD[*]}"
+
 # --- Seleção de arquivos compose --------------------------------------------
 COMPOSE_FILES=(-f docker-compose.infra.yml)
 if [[ "${INSTALL_MYSQL}" != "0" && "${LEGACY}" == "1" ]]; then

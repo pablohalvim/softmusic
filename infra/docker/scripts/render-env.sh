@@ -48,6 +48,15 @@ INSTALL_MYSQL="${INSTALL_MYSQL:-1}"
 MYSQL_DATABASE="${MYSQL_DATABASE:-softmusic}"
 MYSQL_USER="${MYSQL_USER:-softmusic}"
 
+# Host claramente externo (DigitalOcean, IP, FQDN) → força banco externo.
+# Evita o caso "INSTALL_MYSQL=1 + host DO" que sobe MariaDB local à toa.
+if [[ -n "${MYSQL_HOST:-}" && "${MYSQL_HOST}" != "mysql" && "${MYSQL_HOST}" != "localhost" && "${MYSQL_HOST}" != "127.0.0.1" ]]; then
+  if [[ "${INSTALL_MYSQL}" != "0" ]]; then
+    echo ">> AVISO: MYSQL_HOST=${MYSQL_HOST} não é o container local — forçando INSTALL_MYSQL=0 (banco externo)."
+  fi
+  INSTALL_MYSQL=0
+fi
+
 if [[ "${INSTALL_MYSQL}" == "0" ]]; then
   MYSQL_HOST="${MYSQL_HOST:-}"
   MYSQL_PORT="${MYSQL_PORT:-25060}"

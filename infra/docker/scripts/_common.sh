@@ -16,9 +16,67 @@ export SOFTMUSIC_NGINX_DIR="${DEPLOY_DIR_HOST}/nginx"
 # -----------------------------------------------------------------------------
 # docker compose (plugin V2) ou docker-compose (binário / plugin standalone)
 # No Jenkins-em-container o CLI do host é montado via socket, mas o plugin
-# compose precisa existir DENTRO do container (volume) ou em ~/.docker/cli-plugins.
+# compose precisa existir DENTRO do container. Se faltar, baixamos o binário
+# oficial para ~/.docker/cli-plugins (persistente no jenkins_home).
 # -----------------------------------------------------------------------------
 DOCKER_COMPOSE_CMD=()
+DOCKER_COMPOSE_VERSION="${DOCKER_COMPOSE_VERSION:-v2.32.4}"
+
+_compose_plugin_dirs() {
+  printf '%s\n' \
+    "${HOME}/.docker/cli-plugins" \
+    /var/jenkins_home/.docker/cli-plugins \
+    /usr/libexec/docker/cli-plugins \
+    /usr/local/lib/docker/cli-plugins \
+    /usr/lib/docker/cli-plugins
+}
+
+_try_compose_candidate() {
+  local candidate="$1"
+  if [[ -x "${candidate}" ]] && "${candidate}" version >/dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD=("${candidate}")
+    return 0
+  fi
+  return 1
+}
+
+_install_compose_plugin() {
+  local dest_dir dest url arch tmp
+  dest_dir="${HOME}/.docker/cli-plugins"
+  if [[ ! -d "$(dirname "${dest_dir}")" && -d /var/jenkins_home ]]; then
+    dest_dir="/var/jenkins_home/.docker/cli-plugins"
+  fi
+  mkdir -p "${dest_dir}"
+  dest="${dest_dir}/docker-compose"
+
+  arch="$(uname -m)"
+  case "${arch}" in
+    x86_64|amd64) arch="x86_64" ;;
+    aarch64|arm64) arch="aarch64" ;;
+    *)
+      echo "ERRO: arquitetura não suportada para download do compose: ${arch}" >&2
+      return 1
+      ;;
+  esac
+
+  url="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${arch}"
+  tmp="${dest}.tmp"
+  echo ">> Baixando Docker Compose ${DOCKER_COMPOSE_VERSION} → ${dest}"
+  if ! curl -fsSL --retry 3 --retry-delay 2 "${url}" -o "${tmp}"; then
+    echo "ERRO: falha ao baixar ${url}" >&2
+    rm -f "${tmp}"
+    return 1
+  fi
+  chmod +x "${tmp}"
+  mv -f "${tmp}" "${dest}"
+
+  if _try_compose_candidate "${dest}"; then
+    echo ">> Docker Compose instalado: $("${dest}" version 2>/dev/null | head -1)"
+    return 0
+  fi
+  echo "ERRO: compose baixado mas não executa (${dest})" >&2
+  return 1
+}
 
 resolve_docker_compose() {
   if [[ ${#DOCKER_COMPOSE_CMD[@]} -gt 0 ]]; then
@@ -35,36 +93,28 @@ resolve_docker_compose() {
     return 0
   fi
 
-  local candidate
-  for candidate in \
-    "${HOME}/.docker/cli-plugins/docker-compose" \
-    /var/jenkins_home/.docker/cli-plugins/docker-compose \
-    /usr/libexec/docker/cli-plugins/docker-compose \
-    /usr/local/lib/docker/cli-plugins/docker-compose \
-    /usr/lib/docker/cli-plugins/docker-compose
-  do
-    if [[ -x "${candidate}" ]]; then
-      # Plugin V2 aceita sintaxe docker-compose quando chamado direto.
-      if "${candidate}" version >/dev/null 2>&1; then
-        DOCKER_COMPOSE_CMD=("${candidate}")
-        return 0
-      fi
+  local dir candidate
+  while IFS= read -r dir; do
+    candidate="${dir}/docker-compose"
+    if _try_compose_candidate "${candidate}"; then
+      return 0
     fi
-  done
+  done < <(_compose_plugin_dirs)
+
+  # Auto-instala no jenkins_home (não precisa remontar o container).
+  if _install_compose_plugin; then
+    return 0
+  fi
 
   echo "ERRO: 'docker compose' não está disponível neste ambiente (Jenkins)." >&2
-  echo "      O CLI docker está montado, mas o plugin compose não." >&2
+  echo "      Tentativa de download automático falhou." >&2
   echo "" >&2
-  echo "Correção rápida NA VPS (host), sem recriar o Jenkins:" >&2
+  echo "Correção manual NA VPS (host):" >&2
   echo "  PLUGIN=/usr/libexec/docker/cli-plugins/docker-compose" >&2
-  echo "  # se não existir: find /usr -name docker-compose 2>/dev/null" >&2
   echo "  mkdir -p /dados/jenkins_home/.docker/cli-plugins" >&2
   echo "  cp -f \"\$PLUGIN\" /dados/jenkins_home/.docker/cli-plugins/docker-compose" >&2
   echo "  chmod +x /dados/jenkins_home/.docker/cli-plugins/docker-compose" >&2
   echo "  docker exec -u jenkins jenkins docker compose version" >&2
-  echo "" >&2
-  echo "Ou remonte o container Jenkins com o plugin (permanente):" >&2
-  echo "  -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose" >&2
   return 1
 }
 

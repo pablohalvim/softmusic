@@ -25,17 +25,17 @@ pipeline {
     choice(
       name: 'INSTALL_MYSQL',
       choices: ['1', '0'],
-      description: '1 = instalar MySQL 8.4 no Docker | 0 = usar banco MySQL externo (DigitalOcean etc.)'
+      description: '1 = MySQL 8.4 no Docker | 0 = banco EXTERNO (DigitalOcean). Se MYSQL_HOST for FQDN/IP, força externo automaticamente.'
     )
     string(
       name: 'MYSQL_HOST',
-      defaultValue: 'mysql',
-      description: 'Host do MySQL. Local: mysql. Externo: ex. db-mysql-nyc3-xxxxx.db.ondigitalocean.com'
+      defaultValue: '',
+      description: 'Host externo (ex.: db-mysql-nyc3-xxxxx.db.ondigitalocean.com). Vazio = container local (mysql)'
     )
     string(
       name: 'MYSQL_PORT',
-      defaultValue: '3307',
-      description: 'Porta do MySQL. Local: 3307. DigitalOcean Managed MySQL: costuma ser 25060'
+      defaultValue: '25060',
+      description: 'Porta. DigitalOcean: 25060. Local (INSTALL_MYSQL=1): use 3307'
     )
     string(
       name: 'MYSQL_DATABASE',
