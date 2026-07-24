@@ -200,6 +200,8 @@ MYSQL_PASSWORD_ENC="$(urlenc "${MYSQL_PASSWORD}")"
 REDIS_PASSWORD_ENC="$(urlenc "${REDIS_PASSWORD}")"
 RABBITMQ_PASSWORD_ENC="$(urlenc "${RABBITMQ_PASSWORD}")"
 
+# Flag consumida pelo python-ai (prepare_database_url → connect_args SSL).
+# Não use connect_args cru no PyMySQL: ?ssl=true como string quebra (_create_ssl_ctx).
 DATABASE_SSL_QUERY=""
 if [[ "${MYSQL_SSL}" == "1" || "${MYSQL_SSL}" == "true" ]]; then
   DATABASE_SSL_QUERY="?ssl=true"

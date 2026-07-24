@@ -5,6 +5,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
+from app.infrastructure.database.url import prepare_database_url
 
 settings = get_settings()
 
@@ -12,10 +13,12 @@ T = TypeVar("T")
 
 
 def _build_engine() -> AsyncEngine:
+    url, connect_args = prepare_database_url(settings.database_url)
     return create_async_engine(
-        settings.database_url,
+        url,
         pool_pre_ping=True,
         pool_recycle=3600,
+        connect_args=connect_args,
     )
 
 
