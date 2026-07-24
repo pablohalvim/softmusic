@@ -153,6 +153,81 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   return response.json();
 }
 
+export interface PendingInvite {
+  id: string;
+  band_id: string;
+  band_name: string;
+  email: string;
+  can_analyze_songs: boolean;
+  expires_at: string;
+  created_at: string;
+}
+
+export async function fetchPendingInvites(): Promise<PendingInvite[]> {
+  const response = await authFetch("/invites/pending");
+  if (!response.ok) {
+    throw new Error("Não foi possível carregar convites");
+  }
+  const payload = await response.json();
+  return payload.items ?? [];
+}
+
+function errorDetail(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== "object") return fallback;
+  const detail = (payload as { detail?: unknown }).detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0];
+    if (typeof first === "string") return first;
+    if (first && typeof first === "object" && "msg" in first) {
+      return String((first as { msg: unknown }).msg);
+    }
+  }
+  const message = (payload as { message?: unknown }).message;
+  if (typeof message === "string" && message.trim()) return message;
+  return fallback;
+}
+
+export async function acceptPendingInvite(inviteId: string): Promise<void> {
+  const response = await authFetch("/invites/accept", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ invite_id: inviteId }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(errorDetail(payload, "Não foi possível aceitar o convite"));
+  }
+}
+
+export async function declinePendingInvite(inviteId: string): Promise<void> {
+  const response = await authFetch("/invites/decline", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ invite_id: inviteId }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(errorDetail(payload, "Não foi possível recusar o convite"));
+  }
+}
+
+export async function inviteBandMember(
+  bandId: string,
+  email: string,
+  canAnalyzeSongs = false,
+): Promise<void> {
+  const response = await authFetch(`/bands/${bandId}/invites`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, can_analyze_songs: canAnalyzeSongs }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(errorDetail(payload, "Não foi possível enviar o convite"));
+  }
+}
+
 export async function fetchJob(jobId: string): Promise<Job> {
   const response = await authFetch(`/jobs/${jobId}`);
   if (!response.ok) {

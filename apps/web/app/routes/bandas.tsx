@@ -1,9 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { PLANS, formatBrl } from "@softmusic/shared";
+import type { BandSummary } from "@softmusic/types";
 
-import { btnPrimary, inputClass, labelClass, linkClass, panelClass, panelHoverClass } from "../lib/ui-classes";
+import { PendingInvitesCard } from "../components/PendingInvitesCard";
+import { inviteBandMember } from "../lib/api";
 import { useBand } from "../lib/band-context";
+import {
+  btnGhost,
+  btnPrimary,
+  inputClass,
+  labelClass,
+  linkClass,
+  panelClass,
+  panelHoverClass,
+} from "../lib/ui-classes";
 
 const PLANS_LIST = Object.values(PLANS).map((plan) => ({
   code: plan.code,
@@ -16,6 +27,7 @@ export default function BandasPage() {
   const [planCode, setPlanCode] = useState("individual");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [inviteBandId, setInviteBandId] = useState<string | null>(null);
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
@@ -35,31 +47,25 @@ export default function BandasPage() {
     <section className="space-y-8">
       <div>
         <h1 className="sm-page-title">Minhas bandas</h1>
-        <p className="sm-page-subtitle">Escolha a banda ativa ou crie uma nova.</p>
+        <p className="sm-page-subtitle">Escolha a banda ativa, convide membros ou crie uma nova.</p>
       </div>
+
+      <PendingInvitesCard />
 
       {loading ? <p className="text-slate-400">Carregando...</p> : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {bands.map((band) => (
-          <button
+          <BandCard
             key={band.id}
-            type="button"
-            onClick={() => setActiveBandId(band.id)}
-            className={`${panelHoverClass} p-4 text-left ${
-              activeBand?.id === band.id
-                ? "border-green-500/50 bg-green-500/10 shadow-[0_0_24px_rgba(34,197,94,0.12)]"
-                : ""
-            }`}
-          >
-            <p className="font-medium">{band.name}</p>
-            <p className="text-sm text-slate-400">
-              {band.plan_code} · {band.status} · {band.member_count}/{band.member_limit} membros
-            </p>
-            {band.status === "trial" ? (
-              <p className="mt-2 text-xs text-amber-300">Trial: visualização de cifras sem análise</p>
-            ) : null}
-          </button>
+            band={band}
+            active={activeBand?.id === band.id}
+            inviting={inviteBandId === band.id}
+            onSelect={() => setActiveBandId(band.id)}
+            onToggleInvite={() =>
+              setInviteBandId((current) => (current === band.id ? null : band.id))
+            }
+          />
         ))}
       </div>
 
@@ -106,5 +112,109 @@ export default function BandasPage() {
         </button>
       </form>
     </section>
+  );
+}
+
+function BandCard({
+  band,
+  active,
+  inviting,
+  onSelect,
+  onToggleInvite,
+}: {
+  band: BandSummary;
+  active: boolean;
+  inviting: boolean;
+  onSelect: () => void;
+  onToggleInvite: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [canAnalyze, setCanAnalyze] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteOk, setInviteOk] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+
+  async function handleInvite(event: React.FormEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    setSending(true);
+    setInviteError(null);
+    setInviteOk(null);
+    try {
+      await inviteBandMember(band.id, email.trim(), canAnalyze);
+      setInviteOk(`Convite enviado para ${email.trim()}`);
+      setEmail("");
+      setCanAnalyze(false);
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : "Erro ao convidar");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div
+      className={`${panelHoverClass} p-4 ${
+        active ? "border-green-500/50 bg-green-500/10 shadow-[0_0_24px_rgba(34,197,94,0.12)]" : ""
+      }`}
+    >
+      <button type="button" onClick={onSelect} className="w-full text-left">
+        <p className="font-medium">{band.name}</p>
+        <p className="text-sm text-slate-400">
+          {band.plan_code} · {band.status} · {band.member_count}/{band.member_limit} membros
+          {band.is_owner ? " · dono" : ""}
+        </p>
+        {band.status === "trial" ? (
+          <p className="mt-2 text-xs text-amber-300">Trial: visualização de cifras sem análise</p>
+        ) : null}
+      </button>
+
+      {band.is_owner ? (
+        <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
+          <button
+            type="button"
+            onClick={onToggleInvite}
+            className={`${btnGhost} w-full px-3 py-2 text-sm sm:w-auto`}
+          >
+            {inviting ? "Fechar convite" : "Convidar por e-mail"}
+          </button>
+
+          {inviting ? (
+            <form onSubmit={(e) => void handleInvite(e)} className="space-y-3">
+              <label className={labelClass}>
+                <span>E-mail do convidado</span>
+                <input
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={inputClass}
+                  placeholder="pessoa@email.com"
+                  autoComplete="email"
+                />
+              </label>
+              <label className="flex items-start gap-2 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={canAnalyze}
+                  onChange={(e) => setCanAnalyze(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>Permitir analisar músicas nesta banda</span>
+              </label>
+              {inviteError ? <p className="text-sm text-red-400">{inviteError}</p> : null}
+              {inviteOk ? <p className="text-sm text-green-300">{inviteOk}</p> : null}
+              <button
+                type="submit"
+                disabled={sending}
+                className={`${btnPrimary} w-full disabled:opacity-60 sm:w-auto`}
+              >
+                {sending ? "Enviando..." : "Enviar convite"}
+              </button>
+            </form>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

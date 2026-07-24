@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, Links, Meta, Outlet, Scripts, ScrollRestoration, useLocation } from "react-router";
 
 import { AuthGuard } from "./components/AuthGuard";
@@ -38,11 +38,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
+function NavLink({
+  to,
+  children,
+  onNavigate,
+}: {
+  to: string;
+  children: React.ReactNode;
+  onNavigate?: () => void;
+}) {
   const { pathname } = useLocation();
   const active = pathname === to || (to !== "/" && pathname.startsWith(to));
   return (
-    <Link to={to} className={active ? "nav-link-active font-medium" : "nav-link"}>
+    <Link
+      to={to}
+      onClick={onNavigate}
+      className={active ? "nav-link-active font-medium" : "nav-link"}
+    >
       {children}
     </Link>
   );
@@ -50,19 +62,39 @@ function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
 
 function AppHeader() {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuId = useId();
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+
+  const closeMenu = () => setMenuOpen(false);
 
   return (
-    <header className="sticky top-0 z-40 -mx-4 mb-8 border-b border-white/[0.06] bg-[#020806]/80 px-4 py-4 backdrop-blur-xl">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <Link to="/" className="group flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-400 to-green-600 text-sm font-bold text-green-950 shadow-lg shadow-green-500/20">
+    <header className="sticky top-0 z-40 -mx-4 mb-6 border-b border-white/[0.06] bg-[#020806]/90 px-4 py-3 backdrop-blur-xl sm:mb-8 sm:py-4">
+      <div className="flex items-center justify-between gap-3">
+        <Link to="/" className="group flex min-w-0 items-center gap-2" onClick={closeMenu}>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-green-400 to-green-600 text-sm font-bold text-green-950 shadow-lg shadow-green-500/20">
             S
           </span>
-          <span className="text-lg font-semibold tracking-tight text-slate-50 transition group-hover:text-green-300">
+          <span className="truncate text-lg font-semibold tracking-tight text-slate-50 transition group-hover:text-green-300">
             SoftMusic
           </span>
         </Link>
-        <div className="flex flex-wrap items-center gap-3 text-sm md:gap-4">
+
+        {/* Desktop */}
+        <nav className="hidden items-center gap-3 text-sm md:flex md:gap-4">
           {user ? (
             <>
               <BandSelector />
@@ -84,15 +116,95 @@ function AppHeader() {
             </>
           )}
           <InstallButton className="sm-btn-ghost px-3 py-1.5 text-xs" />
+        </nav>
+
+        {/* Mobile controls */}
+        <div className="flex items-center gap-2 md:hidden">
+          {user ? <BandSelector /> : null}
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-200"
+            aria-expanded={menuOpen}
+            aria-controls={menuId}
+            aria-label={menuOpen ? "Fechar menu" : "Abrir menu"}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span className="sr-only">Menu</span>
+            {menuOpen ? (
+              <span aria-hidden className="text-lg leading-none">
+                ×
+              </span>
+            ) : (
+              <span className="flex flex-col gap-1.5" aria-hidden>
+                <span className="block h-0.5 w-5 bg-current" />
+                <span className="block h-0.5 w-5 bg-current" />
+                <span className="block h-0.5 w-5 bg-current" />
+              </span>
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mobile panel */}
+      {menuOpen ? (
+        <nav
+          id={menuId}
+          className="mt-3 flex flex-col gap-1 border-t border-white/[0.06] pt-3 text-sm md:hidden"
+        >
+          {user ? (
+            <>
+              <NavLink to="/dashboard" onNavigate={closeMenu}>
+                Dashboard
+              </NavLink>
+              <NavLink to="/library" onNavigate={closeMenu}>
+                Biblioteca
+              </NavLink>
+              <NavLink to="/analyze" onNavigate={closeMenu}>
+                Analisar
+              </NavLink>
+              <NavLink to="/bandas" onNavigate={closeMenu}>
+                Bandas
+              </NavLink>
+              <NavLink to="/faturas" onNavigate={closeMenu}>
+                Faturas
+              </NavLink>
+              <button
+                type="button"
+                onClick={() => {
+                  closeMenu();
+                  void logout();
+                }}
+                className="nav-link py-2 text-left"
+              >
+                Sair
+              </button>
+            </>
+          ) : (
+            <>
+              <NavLink to="/login" onNavigate={closeMenu}>
+                Entrar
+              </NavLink>
+              <Link
+                to="/cadastro"
+                onClick={closeMenu}
+                className="sm-btn-primary mt-1 px-3 py-2 text-center text-xs"
+              >
+                Cadastro
+              </Link>
+            </>
+          )}
+          <div className="pt-2">
+            <InstallButton className="sm-btn-ghost w-full px-3 py-2 text-xs" />
+          </div>
+        </nav>
+      ) : null}
     </header>
   );
 }
 
 function AppShell() {
   return (
-    <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-6">
+    <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-4 sm:py-6">
       <div
         className="pointer-events-none fixed inset-0 -z-10 opacity-40"
         aria-hidden
@@ -102,7 +214,7 @@ function AppShell() {
         }}
       />
       <AppHeader />
-      <main className="min-w-0 flex-1 overflow-x-hidden">
+      <main className="min-w-0 flex-1 overflow-x-hidden pb-[env(safe-area-inset-bottom)]">
         <AuthGuard>
           <Outlet />
         </AuthGuard>
@@ -112,7 +224,18 @@ function AppShell() {
 }
 
 export default function App() {
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: true,
+            refetchOnMount: "always",
+            staleTime: 0,
+          },
+        },
+      }),
+  );
 
   return (
     <QueryClientProvider client={queryClient}>

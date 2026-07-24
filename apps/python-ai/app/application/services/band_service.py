@@ -249,34 +249,109 @@ class BandService:
         band = await self.get_band(band_id)
         if band is None or band.owner_user_id != owner_id:
             raise PermissionError("Apenas o responsável pode convidar membros")
+        email_norm = email.strip().lower()
+        if not email_norm:
+            raise ValueError("E-mail inválido")
+
+        member_count = await self._active_member_count(band_id)
+        if member_count >= band.member_limit:
+            raise ValueError(
+                f"Limite de membros atingido ({band.member_limit}). Faça upgrade do plano."
+            )
+
+        pending = await self.session.execute(
+            select(BandInvite).where(
+                BandInvite.band_id == band_id,
+                BandInvite.email == email_norm,
+                BandInvite.accepted_at.is_(None),
+                BandInvite.expires_at > datetime.now(UTC),
+            )
+        )
+        if pending.scalar_one_or_none():
+            raise ValueError("Já existe um convite pendente para este e-mail")
+
         token = secrets.token_urlsafe(32)
         invite = BandInvite(
             id=_new_id("inv"),
             band_id=band_id,
-            email=email.strip().lower(),
+            email=email_norm,
             token_hash=hashlib.sha256(token.encode()).hexdigest(),
             can_analyze_songs=can_analyze,
             expires_at=datetime.now(UTC) + timedelta(days=7),
         )
         self.session.add(invite)
         await self.session.commit()
-        return {"invite_id": invite.id, "token": token, "email": invite.email}
+        return {
+            "invite_id": invite.id,
+            "token": token,
+            "email": invite.email,
+            "band_name": band.name,
+        }
 
-    async def accept_invite(self, token: str, user: User) -> dict[str, Any]:
-        token_hash = hashlib.sha256(token.encode()).hexdigest()
+    async def list_pending_invites_for_user(self, user: User) -> list[dict[str, Any]]:
         result = await self.session.execute(
-            select(BandInvite).where(
-                BandInvite.token_hash == token_hash,
+            select(BandInvite, Band)
+            .join(Band, Band.id == BandInvite.band_id)
+            .where(
+                BandInvite.email == user.email.lower(),
                 BandInvite.accepted_at.is_(None),
                 BandInvite.expires_at > datetime.now(UTC),
             )
+            .order_by(BandInvite.created_at.desc())
         )
+        items: list[dict[str, Any]] = []
+        for invite, band in result.all():
+            items.append(self._serialize_pending_invite(invite, band))
+        return items
+
+    async def accept_invite(
+        self, user: User, *, token: str | None = None, invite_id: str | None = None
+    ) -> dict[str, Any]:
+        invite = await self._resolve_pending_invite(user, token=token, invite_id=invite_id)
+        return await self._accept_resolved_invite(invite, user)
+
+    async def decline_invite(self, user: User, invite_id: str) -> dict[str, str]:
+        invite = await self._resolve_pending_invite(user, invite_id=invite_id)
+        await self.session.delete(invite)
+        await self.session.commit()
+        return {"status": "declined", "invite_id": invite_id}
+
+    async def _resolve_pending_invite(
+        self,
+        user: User,
+        *,
+        token: str | None = None,
+        invite_id: str | None = None,
+    ) -> BandInvite:
+        now = datetime.now(UTC)
+        if token:
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            result = await self.session.execute(
+                select(BandInvite).where(
+                    BandInvite.token_hash == token_hash,
+                    BandInvite.accepted_at.is_(None),
+                    BandInvite.expires_at > now,
+                )
+            )
+        elif invite_id:
+            result = await self.session.execute(
+                select(BandInvite).where(
+                    BandInvite.id == invite_id,
+                    BandInvite.accepted_at.is_(None),
+                    BandInvite.expires_at > now,
+                )
+            )
+        else:
+            raise ValueError("Informe o token ou o id do convite")
+
         invite = result.scalar_one_or_none()
         if invite is None:
             raise ValueError("Convite inválido ou expirado")
         if invite.email != user.email.lower():
             raise ValueError("Este convite foi enviado para outro e-mail")
+        return invite
 
+    async def _accept_resolved_invite(self, invite: BandInvite, user: User) -> dict[str, Any]:
         existing = await self.get_member(invite.band_id, user.id)
         if existing:
             invite.accepted_at = datetime.now(UTC)
@@ -285,6 +360,13 @@ class BandService:
             if band is None:
                 raise ValueError("Banda não encontrada")
             return self._serialize_band(band, existing, await self._active_member_count(band.id))
+
+        member_count = await self._active_member_count(invite.band_id)
+        band = await self.get_band(invite.band_id)
+        if band is None:
+            raise ValueError("Banda não encontrada")
+        if member_count >= band.member_limit:
+            raise ValueError("Esta banda atingiu o limite de membros")
 
         member = BandMember(
             id=_new_id("mbr"),
@@ -300,9 +382,6 @@ class BandService:
         self.session.add(member)
         await self.session.commit()
 
-        band = await self.get_band(invite.band_id)
-        if band is None:
-            raise ValueError("Banda não encontrada")
         billing_service = BillingService(self.session)
         try:
             await billing_service.sync_subscription(band.billing_account_id)
@@ -313,6 +392,17 @@ class BandService:
                 error=str(exc),
             )
         return self._serialize_band(band, member, await self._active_member_count(band.id))
+
+    def _serialize_pending_invite(self, invite: BandInvite, band: Band) -> dict[str, Any]:
+        return {
+            "id": invite.id,
+            "band_id": band.id,
+            "band_name": band.name,
+            "email": invite.email,
+            "can_analyze_songs": invite.can_analyze_songs,
+            "expires_at": invite.expires_at.isoformat(),
+            "created_at": invite.created_at.isoformat(),
+        }
 
     async def update_member_permissions(
         self, band_id: str, owner_id: str, member_id: str, can_analyze: bool

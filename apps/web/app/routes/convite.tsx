@@ -44,7 +44,7 @@ export default function ConvitePage() {
         <h1 className="sm-page-title">Convite para banda</h1>
         <p className="sm-page-subtitle">Faça login ou crie uma conta para aceitar o convite.</p>
         <Link
-          to={`/login?next=/convite?token=${encodeURIComponent(token)}`}
+          to={`/login?next=${encodeURIComponent(`/convite?token=${token}`)}`}
           className={`${btnPrimary} inline-flex`}
         >
           Ir para login

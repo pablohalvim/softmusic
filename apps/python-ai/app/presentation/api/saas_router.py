@@ -56,7 +56,12 @@ class InviteBody(BaseModel):
 
 
 class AcceptInviteBody(BaseModel):
-    token: str
+    token: str | None = None
+    invite_id: str | None = None
+
+
+class DeclineInviteBody(BaseModel):
+    invite_id: str
 
 
 class MemberPermissionBody(BaseModel):
@@ -155,10 +160,21 @@ async def invite_member(
         )
         settings = get_settings()
         invite_url = f"{settings.web_origin}/convite?token={invite['token']}"
-        EmailService().invite_member(body.email, band_id, invite_url)
+        EmailService().invite_member(body.email, invite["band_name"], invite_url)
         return {"invite_id": invite["invite_id"], "email": invite["email"]}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/invites/pending")
+async def list_pending_invites(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    items = await BandService(session).list_pending_invites_for_user(user)
+    return {"items": items}
 
 
 @router.post("/invites/accept")
@@ -168,7 +184,21 @@ async def accept_invite(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     try:
-        return await BandService(session).accept_invite(body.token, user)
+        return await BandService(session).accept_invite(
+            user, token=body.token, invite_id=body.invite_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/invites/decline")
+async def decline_invite(
+    body: DeclineInviteBody,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await BandService(session).decline_invite(user, body.invite_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -1,12 +1,20 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { useAuth } from "../lib/auth-context";
 import { btnPrimary, inputClass, labelClass, linkClass } from "../lib/ui-classes";
 
+function safeNextPath(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
+    return "/library";
+  }
+  return raw;
+}
+
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loginValue, setLoginValue] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +26,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(loginValue.trim(), password);
-      navigate("/library");
+      navigate(safeNextPath(searchParams.get("next")));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");
     } finally {
@@ -40,6 +48,7 @@ export default function LoginPage() {
             value={loginValue}
             onChange={(e) => setLoginValue(e.target.value)}
             className={inputClass}
+            autoComplete="username"
           />
         </label>
         <label className={labelClass}>
@@ -50,6 +59,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className={inputClass}
+            autoComplete="current-password"
           />
         </label>
         {error ? <p className="text-sm text-red-400">{error}</p> : null}

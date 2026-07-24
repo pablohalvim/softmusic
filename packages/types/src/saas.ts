@@ -67,7 +67,18 @@ export const InvoiceSummarySchema = z.object({
   ),
 });
 
+export const PendingInviteSchema = z.object({
+  id: z.string(),
+  band_id: z.string(),
+  band_name: z.string(),
+  email: z.string().email(),
+  can_analyze_songs: z.boolean(),
+  expires_at: z.string(),
+  created_at: z.string(),
+});
+
 export type PlanCode = z.infer<typeof PlanCodeSchema>;
 export type RegisterUser = z.infer<typeof RegisterUserSchema>;
 export type LoginRequest = z.infer<typeof LoginSchema>;
 export type BandSummary = z.infer<typeof BandSummarySchema>;
+export type PendingInvite = z.infer<typeof PendingInviteSchema>;
