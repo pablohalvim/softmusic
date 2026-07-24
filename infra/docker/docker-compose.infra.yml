@@ -136,7 +136,10 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.softmusic.com.br}
+      # Atrás do nginx: sem isso a UI mostra "origin not allowed" em toda query.
+      GF_SECURITY_CSRF_TRUSTED_ORIGINS: ${GRAFANA_CSRF_TRUSTED_ORIGINS:-grafana.softmusic.com.br,https://grafana.softmusic.com.br}
+      GF_SECURITY_CSRF_ADDITIONAL_HEADERS: ${GRAFANA_CSRF_ADDITIONAL_HEADERS:-X-Forwarded-Host}
     volumes:
       # NÃO monte dashboards sob /var/lib/grafana (named volume): mount aninhado
       # costuma ficar vazio. Provisioning + JSONs ficam em /etc/grafana/*.
