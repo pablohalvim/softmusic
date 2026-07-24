@@ -38,6 +38,38 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(8)}"
 
 
+def _normalize_variation_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(snapshot, dict):
+        raise ValueError("Snapshot da variação inválido")
+
+    transpose = snapshot.get("transposeSemitones", 0)
+    capo = snapshot.get("capo", 0)
+    section_chords = snapshot.get("sectionChords") or {}
+    imported_sheet = snapshot.get("importedSheet")
+    key_override = snapshot.get("keyOverride")
+    is_imported = bool(snapshot.get("isImported")) or imported_sheet is not None
+
+    if not isinstance(transpose, int):
+        raise ValueError("transposeSemitones deve ser um inteiro")
+    if not isinstance(capo, int) or capo < 0 or capo > 12:
+        raise ValueError("capo deve ser um inteiro entre 0 e 12")
+    if not isinstance(section_chords, dict):
+        raise ValueError("sectionChords deve ser um objeto")
+    if imported_sheet is not None and not isinstance(imported_sheet, dict):
+        raise ValueError("importedSheet inválido")
+    if key_override is not None and not isinstance(key_override, dict):
+        raise ValueError("keyOverride inválido")
+
+    return {
+        "transposeSemitones": transpose,
+        "capo": capo,
+        "sectionChords": section_chords,
+        "isImported": is_imported,
+        "importedSheet": imported_sheet,
+        "keyOverride": key_override,
+    }
+
+
 class AnalysisService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -122,6 +154,174 @@ class AnalysisService:
         await self.session.refresh(job)
         return song, job
 
+    async def create_cifra_draft(
+        self,
+        *,
+        title: str | None = None,
+        artist: str | None = None,
+        cifra_club_url: str | None = None,
+        tempo_bpm: int = 120,
+        band_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Cria música completed sem job de áudio (Cifra Club ou cifra em branco)."""
+        trimmed_title = title.strip() if isinstance(title, str) and title.strip() else None
+        trimmed_artist = artist.strip() if isinstance(artist, str) and artist.strip() else None
+        url = cifra_club_url.strip() if isinstance(cifra_club_url, str) and cifra_club_url.strip() else None
+
+        if not url and not trimmed_title:
+            raise ValueError("Informe o título da música ou um link do Cifra Club")
+
+        song_id = _new_id("song")
+        imported: dict[str, Any] | None = None
+        if url:
+            imported = self.import_cifra_club(song_id, url)
+            if not imported:
+                raise ValueError("Não foi possível importar a cifra do Cifra Club")
+            if not trimmed_title and imported.get("title"):
+                trimmed_title = str(imported["title"])
+            if not trimmed_artist and imported.get("artist"):
+                trimmed_artist = str(imported["artist"])
+        else:
+            self._save_manual_cifra_sheet(
+                song_id,
+                title=trimmed_title or "Sem título",
+                artist=trimmed_artist,
+                tempo_bpm=tempo_bpm,
+            )
+
+        song = Song(
+            id=song_id,
+            title=trimmed_title or "Sem título",
+            artist=trimmed_artist,
+            source_type="cifra_club" if url else "manual",
+            source_ref=url or "manual",
+            cifra_club_url=url,
+            status=SongStatus.COMPLETED.value,
+        )
+        self.session.add(song)
+
+        sheet = imported or await self.get_cifra_club_sheet(song_id) or {}
+        snapshot = {
+            "transposeSemitones": 0,
+            "capo": 0,
+            "sectionChords": {},
+            "isImported": True,
+            "importedSheet": {"sections": sheet.get("sections") or []},
+            "keyOverride": None,
+            "tempoBpm": max(40, min(int(tempo_bpm), 240)),
+        }
+        variation = CifraVariation(
+            id=_new_id("var"),
+            song_id=song_id,
+            band_id=band_id,
+            name="Versão oficial",
+            snapshot_json=json.dumps(snapshot),
+            cifra_club_url=url,
+        )
+        self.session.add(variation)
+        await self.session.commit()
+        await self.session.refresh(song)
+        await self.session.refresh(variation)
+
+        return {"song": song, "variation": serialize_cifra_variation(variation)}
+
+    def _save_manual_cifra_sheet(
+        self,
+        song_id: str,
+        *,
+        title: str,
+        artist: str | None,
+        tempo_bpm: int,
+    ) -> None:
+        output_path = Path(self.storage.base_path) / song_id / "cifra_club.json"  # type: ignore[attr-defined]
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "source": "manual",
+            "url": None,
+            "title": title,
+            "artist": artist,
+            "key": "C",
+            "mode": "major",
+            "tempo_bpm": max(40, min(int(tempo_bpm), 240)),
+            "sections": [],
+        }
+        output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    async def attach_audio_source(
+        self,
+        song_id: str,
+        source_type: str,
+        source_ref: str,
+        options: dict[str, Any] | None = None,
+    ) -> AnalysisJob:
+        """Anexa YouTube/HTTP a uma música cifra-only e enfileira análise de áudio."""
+        song = await self.get_song(song_id)
+        if song is None:
+            raise ValueError("Song not found")
+        if song.file_path:
+            raise ValueError("Esta música já possui áudio analisado")
+        if source_type not in {"youtube", "http", "s3", "azure_blob", "gcs"}:
+            raise ValueError("Tipo de fonte de áudio inválido")
+
+        opts = dict(options or {})
+        if song.cifra_club_url and "cifra_club_url" not in opts:
+            opts["cifra_club_url"] = song.cifra_club_url
+
+        song.source_type = source_type
+        song.source_ref = source_ref
+        if source_type == "youtube":
+            song.youtube_url = source_ref
+            song.youtube_video_id = extract_youtube_video_id(source_ref)
+        song.status = SongStatus.PENDING.value
+
+        job = AnalysisJob(
+            id=_new_id("job"),
+            song_id=song_id,
+            status=JobStatus.QUEUED.value,
+            progress=0,
+            options_json=json.dumps(opts),
+        )
+        self.session.add(job)
+        await self.session.commit()
+        await self.session.refresh(job)
+        return job
+
+    async def attach_audio_upload(
+        self,
+        song_id: str,
+        filename: str,
+        content: bytes,
+        options: dict[str, Any] | None = None,
+    ) -> AnalysisJob:
+        song = await self.get_song(song_id)
+        if song is None:
+            raise ValueError("Song not found")
+        if song.file_path:
+            raise ValueError("Esta música já possui áudio analisado")
+
+        opts = dict(options or {})
+        if song.cifra_club_url and "cifra_club_url" not in opts:
+            opts["cifra_club_url"] = song.cifra_club_url
+
+        key = f"{song_id}/{filename}"
+        file_path = await self.storage.save(key, content)
+        song.source_type = "upload"
+        song.source_ref = filename
+        song.file_path = file_path
+        song.status = SongStatus.PENDING.value
+
+        job = AnalysisJob(
+            id=_new_id("job"),
+            song_id=song_id,
+            status=JobStatus.QUEUED.value,
+            progress=0,
+            options_json=json.dumps(opts),
+        )
+        self.session.add(job)
+        await self.session.commit()
+        await self.session.refresh(job)
+        return job
+
     async def get_song(self, song_id: str) -> Song | None:
         result = await self.session.execute(select(Song).where(Song.id == song_id, Song.deleted_at.is_(None)))
         return result.scalar_one_or_none()
@@ -150,7 +350,7 @@ class AnalysisService:
     ) -> list[dict[str, Any]]:
         query = select(CifraVariation).where(CifraVariation.song_id == song_id)
         if band_id is not None:
-            # Cada banda só enxerga as variações que ela mesma importou.
+            # Variações são da banda (não do usuário): qualquer membro vê as mesmas.
             query = query.where(CifraVariation.band_id == band_id)
         query = query.order_by(CifraVariation.created_at.desc())
         result = await self.session.execute(query)
@@ -183,6 +383,51 @@ class AnalysisService:
                 if not song.youtube_video_id:
                     song.youtube_video_id = extract_youtube_video_id(song.source_ref)
             song.cifra_club_url = url.strip()
+
+        await self.session.commit()
+        await self.session.refresh(variation)
+        return serialize_cifra_variation(variation)
+
+    async def upsert_cifra_variation(
+        self,
+        song_id: str,
+        name: str,
+        snapshot: dict[str, Any],
+        band_id: str | None = None,
+        cifra_club_url: str | None = None,
+    ) -> dict[str, Any]:
+        trimmed = name.strip()
+        if not trimmed:
+            raise ValueError("Nome da variação é obrigatório")
+        if len(trimmed) > 128:
+            raise ValueError("Nome da variação deve ter no máximo 128 caracteres")
+
+        normalized = _normalize_variation_snapshot(snapshot)
+        query = select(CifraVariation).where(
+            CifraVariation.song_id == song_id,
+            func.lower(CifraVariation.name) == trimmed.lower(),
+        )
+        if band_id is not None:
+            query = query.where(CifraVariation.band_id == band_id)
+        result = await self.session.execute(query)
+        existing = result.scalar_one_or_none()
+
+        if existing is not None:
+            existing.name = trimmed
+            existing.snapshot_json = json.dumps(normalized)
+            if cifra_club_url:
+                existing.cifra_club_url = cifra_club_url.strip()
+            variation = existing
+        else:
+            variation = CifraVariation(
+                id=_new_id("var"),
+                song_id=song_id,
+                band_id=band_id,
+                name=trimmed,
+                snapshot_json=json.dumps(normalized),
+                cifra_club_url=cifra_club_url.strip() if cifra_club_url else None,
+            )
+            self.session.add(variation)
 
         await self.session.commit()
         await self.session.refresh(variation)
@@ -362,7 +607,10 @@ class AnalysisService:
         job.error = "Cancelado pelo usuário"
         job.completed_at = datetime.now(UTC)
         song.status = SongStatus.FAILED.value
-        request_cancel(job.id)
+        try:
+            request_cancel(job.id)
+        except Exception:
+            logger.warning("cancel_flag_failed", job_id=job.id, song_id=song_id, exc_info=True)
         await self.session.commit()
         await self.session.refresh(job)
 
@@ -379,16 +627,24 @@ class AnalysisService:
 
         job = await self.get_latest_job_for_song(song_id)
         if job and job.status in {JobStatus.QUEUED.value, JobStatus.PROCESSING.value}:
-            await self.cancel_song_analysis(song_id)
+            try:
+                await self.cancel_song_analysis(song_id)
+            except Exception:
+                logger.warning("delete_cancel_failed", song_id=song_id, exc_info=True)
             song = await self.get_song(song_id)
             if song is None:
                 return
 
-        await self.storage.delete_song(song_id)
-
+        # Soft-delete primeiro: a música some da biblioteca mesmo se o
+        # cleanup de arquivos/storage falhar (ex.: pasta vazia após 403 do YT).
         song.deleted_at = datetime.now(UTC)
         await self.session.commit()
         logger.info("song_deleted", song_id=song_id)
+
+        try:
+            await self.storage.delete_song(song_id)
+        except Exception:
+            logger.warning("storage_delete_failed", song_id=song_id, exc_info=True)
 
     async def process_job(self, job_id: str) -> dict[str, Any]:
         job = await self.get_job(job_id)
@@ -401,6 +657,8 @@ class AnalysisService:
 
         if job.status == JobStatus.CANCELLED.value:
             raise AnalysisCancelledError("Análise cancelada pelo usuário")
+        if song.deleted_at is not None:
+            raise AnalysisCancelledError("Música excluída")
 
         options = json.loads(job.options_json or "{}")
         await self._raise_if_cancelled(job_id)

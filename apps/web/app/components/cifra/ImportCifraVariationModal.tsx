@@ -82,7 +82,8 @@ export function ImportCifraVariationModal({
           Importar nova variação
         </h2>
         <p className="mt-1 text-sm text-slate-400">
-          Cole o link do Cifra Club. A cifra será importada como uma nova variação salva nesta música.
+          Cole o link do Cifra Club. A cifra será importada como uma nova variação compartilhada
+          com toda a banda.
         </p>
 
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>

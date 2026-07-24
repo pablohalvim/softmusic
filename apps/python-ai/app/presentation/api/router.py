@@ -188,6 +188,135 @@ async def upload_song(
     return {"duplicate": False, "job_id": job.id, "song_id": song.id, "variation": None}
 
 
+class CreateCifraDraftBody(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    artist: str | None = Field(default=None, max_length=200)
+    cifra_club_url: str | None = None
+    tempo_bpm: int = Field(default=120, ge=40, le=240)
+
+
+@router.post("/songs/cifra-draft")
+async def create_cifra_draft(
+    body: CreateCifraDraftBody,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    """Cria música só com cifra (Cifra Club ou em branco), sem análise de áudio."""
+    if not band_id:
+        raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
+    band_service = BandService(session)
+    try:
+        await band_service.require_analyze_access(band_id, user.id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    if body.cifra_club_url:
+        from app.infrastructure.cifra.cifraclub_importer import is_cifra_club_url
+
+        if not is_cifra_club_url(body.cifra_club_url.strip()):
+            raise HTTPException(status_code=400, detail="URL do Cifra Club inválida")
+
+    service = AnalysisService(session)
+    try:
+        created = await service.create_cifra_draft(
+            title=body.title,
+            artist=body.artist,
+            cifra_club_url=body.cifra_club_url,
+            tempo_bpm=body.tempo_bpm,
+            band_id=band_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    song = created["song"]
+    await band_service.link_song(band_id, song.id, user.id)
+    return {
+        "song_id": song.id,
+        "job_id": None,
+        "duplicate": False,
+        "variation": created["variation"],
+        "message": "Música criada. Você pode editar a cifra e analisar o áudio depois.",
+    }
+
+
+class AttachAudioBody(BaseModel):
+    source: dict[str, Any]
+    options: dict[str, Any] | None = None
+
+
+@router.post("/songs/{song_id}/analyze-audio")
+async def analyze_audio_for_song(
+    song_id: str,
+    body: AttachAudioBody,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    """Anexa fonte de áudio (YouTube/URL) a uma música cifra-only e inicia análise."""
+    if not band_id:
+        raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
+    band_service = BandService(session)
+    try:
+        await band_service.require_analyze_access(band_id, user.id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    await _ensure_song_access(session, band_id, user.id, song_id)
+
+    source_type = body.source.get("type")
+    source_ref = body.source.get("url")
+    if not source_type or not source_ref:
+        raise HTTPException(status_code=400, detail="Informe source.type e source.url")
+    if source_type == "youtube" and not is_youtube_url(str(source_ref)):
+        raise HTTPException(status_code=400, detail="URL do YouTube inválida")
+
+    service = AnalysisService(session)
+    try:
+        job = await service.attach_audio_source(
+            song_id, str(source_type), str(source_ref), body.options
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    run_analysis.delay(job.id)
+    return {"job_id": job.id, "song_id": song_id}
+
+
+@router.post("/songs/{song_id}/analyze-audio-upload")
+async def analyze_audio_upload_for_song(
+    song_id: str,
+    file: UploadFile = File(...),
+    options: str | None = None,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    if not band_id:
+        raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
+    band_service = BandService(session)
+    try:
+        await band_service.require_analyze_access(band_id, user.id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    await _ensure_song_access(session, band_id, user.id, song_id)
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    parsed_options = json.loads(options) if options else None
+
+    service = AnalysisService(session)
+    try:
+        job = await service.attach_audio_upload(
+            song_id, file.filename or "upload.bin", content, parsed_options
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    run_analysis.delay(job.id)
+    return {"job_id": job.id, "song_id": song_id}
+
+
 def _serialize_job(job: Any) -> dict[str, Any]:
     return {
         "id": job.id,
@@ -203,6 +332,10 @@ def _serialize_job(job: Any) -> dict[str, Any]:
 
 
 def _serialize_song(song: Any) -> dict[str, Any]:
+    has_audio = bool(song.file_path) or song.source_type in {"youtube", "upload", "http", "s3", "azure_blob", "gcs"}
+    # Cifra-only drafts ainda não têm áudio até anexar fonte.
+    if song.source_type in {"manual", "cifra_club"} and not song.file_path and not song.youtube_url:
+        has_audio = False
     return {
         "id": song.id,
         "title": song.title,
@@ -212,6 +345,7 @@ def _serialize_song(song: Any) -> dict[str, Any]:
         "source_type": song.source_type,
         "youtube_url": song.youtube_url,
         "cifra_club_url": song.cifra_club_url,
+        "has_audio": has_audio,
         "created_at": song.created_at.isoformat(),
         "updated_at": song.updated_at.isoformat(),
     }
@@ -408,12 +542,37 @@ async def delete_song(
     user: User = Depends(get_current_user),
     band_id: str | None = Depends(get_band_id),
 ) -> dict[str, str]:
+    from app.logging import logger
+
     await _ensure_song_access(session, band_id, user.id, song_id)
+    assert band_id is not None  # garantido por _ensure_song_access
+
     service = AnalysisService(session)
+    band_service = BandService(session)
+    song = await service.get_song(song_id)
+    if song is None:
+        raise HTTPException(status_code=404, detail="Song not found")
+
     try:
+        # Música já analisada: só remove o vínculo com a banda.
+        # A análise/arquivos ficam no catálogo global para revinculação futura
+        # (ex.: reimportar o mesmo YouTube sem reprocessar).
+        if song.status == SongStatus.COMPLETED.value:
+            await band_service.unlink_song(band_id, song_id)
+            logger.info("song_unlinked_from_band", song_id=song_id, band_id=band_id)
+            return {"status": "unlinked", "song_id": song_id}
+
+        # Pendente / processando / falhou: cancela se preciso, soft-delete e limpa storage.
         await service.delete_song(song_id)
+        await band_service.unlink_song(band_id, song_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("delete_song_failed", song_id=song_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível excluir a música. Tente novamente.",
+        ) from exc
     return {"status": "deleted", "song_id": song_id}
 
 
@@ -473,7 +632,9 @@ async def list_cifra_variations(
 
 
 class ImportCifraVariationBody(BaseModel):
-    cifra_club_url: str = Field(min_length=1)
+    cifra_club_url: str | None = None
+    name: str | None = Field(default=None, max_length=128)
+    snapshot: dict[str, Any] | None = None
 
 
 @router.post("/songs/{song_id}/cifra-variations")
@@ -489,10 +650,6 @@ async def import_cifra_variation(
     if not band_id:
         raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
     band_service = BandService(session)
-    try:
-        await band_service.require_analyze_access(band_id, user.id)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
     await _ensure_song_access(session, band_id, user.id, song_id)
 
     service = AnalysisService(session)
@@ -502,16 +659,39 @@ async def import_cifra_variation(
     if song.status != SongStatus.COMPLETED.value:
         raise HTTPException(status_code=400, detail="A análise da música ainda não foi concluída")
 
-    url = body.cifra_club_url.strip()
-    if not is_cifra_club_url(url):
-        raise HTTPException(status_code=400, detail="URL do Cifra Club inválida")
+    url = body.cifra_club_url.strip() if body.cifra_club_url else ""
+    if url:
+        # Importar do Cifra Club exige permissão de análise (traz conteúdo externo).
+        try:
+            await band_service.require_analyze_access(band_id, user.id)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        if not is_cifra_club_url(url):
+            raise HTTPException(status_code=400, detail="URL do Cifra Club inválida")
+        try:
+            variation = await service.add_cifra_variation_from_cifra_club(song_id, url, band_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"variation": variation}
 
-    try:
-        variation = await service.add_cifra_variation_from_cifra_club(song_id, url, band_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if body.name and body.snapshot is not None:
+        # Salvar variação fica disponível para qualquer membro da banda —
+        # o snapshot é compartilhado com todos via band_id.
+        try:
+            variation = await service.upsert_cifra_variation(
+                song_id,
+                body.name,
+                body.snapshot,
+                band_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"variation": variation}
 
-    return {"variation": variation}
+    raise HTTPException(
+        status_code=400,
+        detail="Informe cifra_club_url para importar, ou name e snapshot para salvar a variação",
+    )
 
 
 @router.get("/songs/{song_id}/chords")
@@ -522,33 +702,57 @@ async def get_chords(
     band_id: str | None = Depends(get_band_id),
 ) -> dict[str, Any]:
     await _ensure_song_access(session, band_id, user.id, song_id)
-    analysis = await get_analysis(song_id, session, user, band_id)
     service = AnalysisService(session)
     song = await service.get_song(song_id)
+    if song is None:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    result = await service.get_analysis(song_id)
+    analysis = json.loads(result.payload_json) if result else None
     imported = await service.get_cifra_club_sheet(song_id)
+
     if imported:
-        key = imported.get("key") or analysis["harmony"]["key"]
-        mode = imported.get("mode") or analysis["harmony"]["mode"]
+        default_bpm = imported.get("tempo_bpm") or 120
+        if analysis:
+            key = imported.get("key") or analysis["harmony"]["key"]
+            mode = imported.get("mode") or analysis["harmony"]["mode"]
+            tempo = analysis["harmony"]["tempo_bpm"]
+            progression = analysis["harmony"]["chord_progression"]
+            sections = analysis["structure"]["sections"]
+            scale = analysis["harmony"]["scale"]
+            separated = bool(analysis.get("guitar", {}).get("separated"))
+        else:
+            key = imported.get("key") or "C"
+            mode = imported.get("mode") or "major"
+            tempo = default_bpm
+            progression = []
+            sections = []
+            scale = []
+            separated = False
         return {
             "song_id": song_id,
             "title": song.title if song else imported.get("title"),
             "artist": song.artist if song else imported.get("artist"),
             "key": key,
             "mode": mode,
-            "tempo_bpm": analysis["harmony"]["tempo_bpm"],
-            "progression": analysis["harmony"]["chord_progression"],
-            "sections": analysis["structure"]["sections"],
-            "scale": analysis["harmony"]["scale"],
-            "source": "cifra_club",
-            "cifra_club_url": imported.get("url"),
+            "tempo_bpm": tempo,
+            "progression": progression,
+            "sections": sections,
+            "scale": scale,
+            "source": "cifra_club" if imported.get("source") != "manual" else "manual",
+            "cifra_club_url": imported.get("url") or song.cifra_club_url,
             "cifra_sheet": {
                 "original_key": key,
                 "mode": mode,
-                "tempo_bpm": analysis["harmony"]["tempo_bpm"],
+                "tempo_bpm": tempo,
                 "sections": imported.get("sections", []),
             },
-            "separated": bool(analysis.get("guitar", {}).get("separated")),
+            "separated": separated,
+            "has_audio": bool(song.file_path or song.youtube_url),
         }
+
+    if analysis is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
 
     progression = analysis["harmony"]["chord_progression"]
     guitar = analysis.get("guitar")
@@ -567,6 +771,7 @@ async def get_chords(
         "source": "analysis",
         "source_stem": guitar.get("source_stem") if isinstance(guitar, dict) else "mix",
         "separated": bool(isinstance(guitar, dict) and guitar.get("separated")),
+        "has_audio": True,
     }
 
 

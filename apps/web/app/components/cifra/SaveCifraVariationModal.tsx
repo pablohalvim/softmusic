@@ -7,7 +7,7 @@ interface SaveCifraVariationModalProps {
   open: boolean;
   defaultName?: string;
   onClose: () => void;
-  onSave: (name: string) => void;
+  onSave: (name: string) => Promise<void>;
 }
 
 const inputClass =
@@ -20,31 +20,43 @@ export function SaveCifraVariationModal({
   onSave,
 }: SaveCifraVariationModalProps) {
   const [name, setName] = useState(defaultName);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName(defaultName);
+      setError(null);
+      setPending(false);
     }
   }, [open, defaultName]);
 
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !pending) {
         onClose();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, pending]);
 
   if (!open) return null;
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    onSave(trimmed);
+
+    setPending(true);
+    setError(null);
+    try {
+      await onSave(trimmed);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Falha ao salvar variação");
+      setPending(false);
+    }
   };
 
   return (
@@ -59,7 +71,8 @@ export function SaveCifraVariationModal({
           Salvar variação
         </h2>
         <p className="mt-1 text-sm text-slate-400">
-          Guarde tom, capo e edições da cifra para trocar depois.
+          Guarde tom, capo e edições da cifra. A variação fica disponível para todos os membros
+          da banda, em qualquer dispositivo.
         </p>
 
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
@@ -72,23 +85,27 @@ export function SaveCifraVariationModal({
               onChange={(event) => setName(event.target.value)}
               placeholder="Ex.: Capo 2 · Tom G"
               maxLength={80}
+              disabled={pending}
             />
           </label>
+
+          {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
           <div className="flex justify-end gap-2">
             <button
               type="button"
-              className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:bg-slate-800"
+              className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-40"
               onClick={onClose}
+              disabled={pending}
             >
               Cancelar
             </button>
             <button
               type="submit"
-              disabled={!name.trim()}
+              disabled={!name.trim() || pending}
               className="sm-btn-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Salvar
+              {pending ? "Salvando..." : "Salvar"}
             </button>
           </div>
         </form>

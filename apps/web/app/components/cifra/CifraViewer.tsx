@@ -25,7 +25,8 @@ import { useCifraScroll } from "./cifra-scroll-context";
 import {
   fetchCifraVariations,
   importCifraVariationFromUrl,
-  upsertCifraVariation,
+  OFFICIAL_CIFRA_VARIATION_NAME,
+  saveCifraVariationToServer,
   type CifraVariation,
   type CifraVariationSnapshot,
 } from "./cifra-variations";
@@ -199,6 +200,8 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
   const [activeVariationId, setActiveVariationId] = useState<string>("");
   const [saveVariationOpen, setSaveVariationOpen] = useState(false);
   const [importVariationOpen, setImportVariationOpen] = useState(false);
+  const [savingOfficial, setSavingOfficial] = useState(false);
+  const [officialSaveError, setOfficialSaveError] = useState<string | null>(null);
   const [keyOverride, setKeyOverride] = useState<CifraKeyOverride | null>(null);
   const [showKeyPicker, setShowKeyPicker] = useState(false);
   const [pickKey, setPickKey] = useState("C");
@@ -411,11 +414,36 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
   );
 
   const handleSaveVariation = async (name: string) => {
-    const saved = upsertCifraVariation(chordData.song_id, name, buildVariationSnapshot());
+    const saved = await saveCifraVariationToServer(
+      chordData.song_id,
+      name,
+      buildVariationSnapshot(),
+    );
     const items = await fetchCifraVariations(chordData.song_id);
     setVariations(items.length > 0 ? items : [saved]);
     setActiveVariationId(saved.id);
     setSaveVariationOpen(false);
+  };
+
+  const handleSaveOfficialVariation = async () => {
+    setSavingOfficial(true);
+    setOfficialSaveError(null);
+    try {
+      const saved = await saveCifraVariationToServer(
+        chordData.song_id,
+        OFFICIAL_CIFRA_VARIATION_NAME,
+        buildVariationSnapshot(),
+      );
+      const items = await fetchCifraVariations(chordData.song_id);
+      setVariations(items.length > 0 ? items : [saved]);
+      setActiveVariationId(saved.id);
+    } catch (error) {
+      setOfficialSaveError(
+        error instanceof Error ? error.message : "Falha ao salvar versão oficial",
+      );
+    } finally {
+      setSavingOfficial(false);
+    }
   };
 
   const handleImportVariation = async (cifraClubUrl: string) => {
@@ -426,6 +454,10 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
     applyVariationSnapshot(variation.snapshot);
     setImportVariationOpen(false);
   };
+
+  const hasOfficialVariation = variations.some(
+    (variation) => variation.name.toLowerCase() === OFFICIAL_CIFRA_VARIATION_NAME.toLowerCase(),
+  );
 
   const handleVariationSelect = (variationId: string) => {
     setActiveVariationId(variationId);
@@ -658,7 +690,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
 
           <div className={`${panelClass} !p-3`}>
             <label className="mb-2 block text-xs uppercase tracking-wide text-slate-500">
-              Variações salvas
+              Variações da banda
             </label>
             <select
               className={selectClass}
@@ -672,6 +704,24 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                 </option>
               ))}
             </select>
+            {importedSheet ? (
+              <button
+                type="button"
+                className={`${controlClass} mt-2 w-full text-center text-green-300 hover:text-green-200 disabled:cursor-not-allowed disabled:opacity-40`}
+                onClick={() => void handleSaveOfficialVariation()}
+                disabled={savingOfficial}
+                title="Salva a cifra atual com todas as edições (tom, capo, acordes e letra) para a banda"
+              >
+                {savingOfficial
+                  ? "Gravando..."
+                  : hasOfficialVariation
+                    ? "Atualizar cifra original"
+                    : "Gravar cifra original"}
+              </button>
+            ) : null}
+            {officialSaveError ? (
+              <p className="mt-2 text-xs text-red-400">{officialSaveError}</p>
+            ) : null}
             <button
               type="button"
               className={`${controlClass} mt-2 w-full text-center text-green-300 hover:text-green-200`}
