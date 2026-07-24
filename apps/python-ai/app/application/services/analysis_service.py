@@ -38,6 +38,38 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(8)}"
 
 
+def _normalize_variation_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(snapshot, dict):
+        raise ValueError("Snapshot da variação inválido")
+
+    transpose = snapshot.get("transposeSemitones", 0)
+    capo = snapshot.get("capo", 0)
+    section_chords = snapshot.get("sectionChords") or {}
+    imported_sheet = snapshot.get("importedSheet")
+    key_override = snapshot.get("keyOverride")
+    is_imported = bool(snapshot.get("isImported")) or imported_sheet is not None
+
+    if not isinstance(transpose, int):
+        raise ValueError("transposeSemitones deve ser um inteiro")
+    if not isinstance(capo, int) or capo < 0 or capo > 12:
+        raise ValueError("capo deve ser um inteiro entre 0 e 12")
+    if not isinstance(section_chords, dict):
+        raise ValueError("sectionChords deve ser um objeto")
+    if imported_sheet is not None and not isinstance(imported_sheet, dict):
+        raise ValueError("importedSheet inválido")
+    if key_override is not None and not isinstance(key_override, dict):
+        raise ValueError("keyOverride inválido")
+
+    return {
+        "transposeSemitones": transpose,
+        "capo": capo,
+        "sectionChords": section_chords,
+        "isImported": is_imported,
+        "importedSheet": imported_sheet,
+        "keyOverride": key_override,
+    }
+
+
 class AnalysisService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -150,7 +182,7 @@ class AnalysisService:
     ) -> list[dict[str, Any]]:
         query = select(CifraVariation).where(CifraVariation.song_id == song_id)
         if band_id is not None:
-            # Cada banda só enxerga as variações que ela mesma importou.
+            # Variações são da banda (não do usuário): qualquer membro vê as mesmas.
             query = query.where(CifraVariation.band_id == band_id)
         query = query.order_by(CifraVariation.created_at.desc())
         result = await self.session.execute(query)
@@ -183,6 +215,51 @@ class AnalysisService:
                 if not song.youtube_video_id:
                     song.youtube_video_id = extract_youtube_video_id(song.source_ref)
             song.cifra_club_url = url.strip()
+
+        await self.session.commit()
+        await self.session.refresh(variation)
+        return serialize_cifra_variation(variation)
+
+    async def upsert_cifra_variation(
+        self,
+        song_id: str,
+        name: str,
+        snapshot: dict[str, Any],
+        band_id: str | None = None,
+        cifra_club_url: str | None = None,
+    ) -> dict[str, Any]:
+        trimmed = name.strip()
+        if not trimmed:
+            raise ValueError("Nome da variação é obrigatório")
+        if len(trimmed) > 128:
+            raise ValueError("Nome da variação deve ter no máximo 128 caracteres")
+
+        normalized = _normalize_variation_snapshot(snapshot)
+        query = select(CifraVariation).where(
+            CifraVariation.song_id == song_id,
+            func.lower(CifraVariation.name) == trimmed.lower(),
+        )
+        if band_id is not None:
+            query = query.where(CifraVariation.band_id == band_id)
+        result = await self.session.execute(query)
+        existing = result.scalar_one_or_none()
+
+        if existing is not None:
+            existing.name = trimmed
+            existing.snapshot_json = json.dumps(normalized)
+            if cifra_club_url:
+                existing.cifra_club_url = cifra_club_url.strip()
+            variation = existing
+        else:
+            variation = CifraVariation(
+                id=_new_id("var"),
+                song_id=song_id,
+                band_id=band_id,
+                name=trimmed,
+                snapshot_json=json.dumps(normalized),
+                cifra_club_url=cifra_club_url.strip() if cifra_club_url else None,
+            )
+            self.session.add(variation)
 
         await self.session.commit()
         await self.session.refresh(variation)

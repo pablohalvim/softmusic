@@ -4,6 +4,8 @@ import { authFetch } from "../../lib/api";
 import { loadActiveBandId } from "../../lib/auth-storage";
 import type { CifraKeyOverride } from "./cifra-key";
 
+export const OFFICIAL_CIFRA_VARIATION_NAME = "Versão oficial";
+
 export interface CifraVariationSnapshot {
   transposeSemitones: number;
   capo: number;
@@ -58,8 +60,64 @@ export function serverVariationToLocal(variation: {
 }
 
 export function upsertServerVariationToStorage(songId: string, variation: CifraVariation): void {
-  const merged = mergeCifraVariations(loadCifraVariations(songId), [variation]);
+  const existing = loadCifraVariations(songId);
+  // Ao sincronizar do servidor, remove cópias locais com o mesmo nome (IDs antigos só no device).
+  const withoutSameName = existing.filter(
+    (item) =>
+      item.id === variation.id || item.name.toLowerCase() !== variation.name.toLowerCase(),
+  );
+  const merged = mergeCifraVariations(withoutSameName, [variation]);
   saveCifraVariations(songId, merged);
+}
+
+function parseVariationError(response: Response, fallback: string): Promise<never> {
+  return response.json().catch(() => null).then((error) => {
+    const payload = error as {
+      error?: { message?: string };
+      detail?: string | Array<{ msg?: string }>;
+    } | null;
+    const detail = payload?.detail;
+    const detailMessage = Array.isArray(detail)
+      ? detail.map((item) => item.msg).filter(Boolean).join("; ")
+      : detail;
+    throw new Error(payload?.error?.message ?? detailMessage ?? fallback);
+  });
+}
+
+export async function saveCifraVariationToServer(
+  songId: string,
+  name: string,
+  snapshot: CifraVariationSnapshot,
+): Promise<CifraVariation> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Nome da variação é obrigatório");
+  }
+
+  const response = await authFetch(`/songs/${songId}/cifra-variations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name: trimmed, snapshot }),
+  });
+
+  if (!response.ok) {
+    await parseVariationError(response, "Falha ao salvar variação da cifra");
+  }
+
+  const data = (await response.json()) as {
+    variation: {
+      id: string;
+      name: string;
+      createdAt: string;
+      updatedAt: string;
+      snapshot: CifraVariationSnapshot;
+    };
+  };
+  const variation = serverVariationToLocal(data.variation);
+  upsertServerVariationToStorage(songId, variation);
+  return variation;
 }
 
 export async function importCifraVariationFromUrl(
@@ -75,11 +133,7 @@ export async function importCifraVariationFromUrl(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    const payload = error as { error?: { message?: string }; detail?: string } | null;
-    throw new Error(
-      payload?.error?.message ?? payload?.detail ?? "Falha ao importar cifra do Cifra Club",
-    );
+    await parseVariationError(response, "Falha ao importar cifra do Cifra Club");
   }
 
   const data = (await response.json()) as {
@@ -94,6 +148,34 @@ export async function importCifraVariationFromUrl(
   const variation = serverVariationToLocal(data.variation);
   upsertServerVariationToStorage(songId, variation);
   return variation;
+}
+
+async function syncLocalOnlyVariations(
+  songId: string,
+  local: CifraVariation[],
+  server: CifraVariation[],
+): Promise<CifraVariation[]> {
+  const serverIds = new Set(server.map((variation) => variation.id));
+  const localOnly = local.filter((variation) => !serverIds.has(variation.id));
+  if (localOnly.length === 0) {
+    return server;
+  }
+
+  const synced = [...server];
+  for (const variation of localOnly) {
+    try {
+      const saved = await saveCifraVariationToServer(songId, variation.name, variation.snapshot);
+      const withoutSameName = synced.filter(
+        (item) => item.name.toLowerCase() !== saved.name.toLowerCase(),
+      );
+      synced.length = 0;
+      synced.push(...withoutSameName, saved);
+    } catch {
+      // Mantém a cópia local se o sync falhar (offline / permissão).
+      synced.push(variation);
+    }
+  }
+  return mergeCifraVariations([], synced);
 }
 
 export async function fetchCifraVariations(songId: string): Promise<CifraVariation[]> {
@@ -113,9 +195,9 @@ export async function fetchCifraVariations(songId: string): Promise<CifraVariati
       }>;
     };
     const server = data.items.map(serverVariationToLocal);
-    const merged = mergeCifraVariations(local, server);
-    saveCifraVariations(songId, merged);
-    return merged;
+    const synced = await syncLocalOnlyVariations(songId, local, server);
+    saveCifraVariations(songId, synced);
+    return synced;
   } catch {
     return local;
   }
@@ -136,6 +218,7 @@ export function saveCifraVariations(songId: string, variations: CifraVariation[]
   localStorage.setItem(variationsStorageKey(songId), JSON.stringify(variations));
 }
 
+/** @deprecated Prefer saveCifraVariationToServer — mantido só para fallback offline. */
 export function upsertCifraVariation(
   songId: string,
   name: string,

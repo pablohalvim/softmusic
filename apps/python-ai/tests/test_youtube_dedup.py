@@ -49,3 +49,23 @@ def test_build_cifra_variation_snapshot() -> None:
     snapshot = build_cifra_variation_snapshot(payload)
     assert snapshot["isImported"] is True
     assert snapshot["importedSheet"]["sections"][0]["lines"][0]["lyrics"] == "Hello"
+
+
+def test_normalize_variation_snapshot() -> None:
+    from app.application.services.analysis_service import _normalize_variation_snapshot
+
+    normalized = _normalize_variation_snapshot(
+        {
+            "transposeSemitones": 2,
+            "capo": 3,
+            "sectionChords": {"verse": ["C", "G"]},
+            "isImported": True,
+            "importedSheet": {"sections": []},
+            "keyOverride": {"key": "G", "mode": "major"},
+        }
+    )
+    assert normalized["transposeSemitones"] == 2
+    assert normalized["capo"] == 3
+    assert normalized["sectionChords"]["verse"] == ["C", "G"]
+    assert normalized["isImported"] is True
+    assert normalized["keyOverride"]["key"] == "G"

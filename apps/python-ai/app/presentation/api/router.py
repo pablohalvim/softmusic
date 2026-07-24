@@ -473,7 +473,9 @@ async def list_cifra_variations(
 
 
 class ImportCifraVariationBody(BaseModel):
-    cifra_club_url: str = Field(min_length=1)
+    cifra_club_url: str | None = None
+    name: str | None = Field(default=None, max_length=128)
+    snapshot: dict[str, Any] | None = None
 
 
 @router.post("/songs/{song_id}/cifra-variations")
@@ -489,10 +491,6 @@ async def import_cifra_variation(
     if not band_id:
         raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
     band_service = BandService(session)
-    try:
-        await band_service.require_analyze_access(band_id, user.id)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
     await _ensure_song_access(session, band_id, user.id, song_id)
 
     service = AnalysisService(session)
@@ -502,16 +500,39 @@ async def import_cifra_variation(
     if song.status != SongStatus.COMPLETED.value:
         raise HTTPException(status_code=400, detail="A análise da música ainda não foi concluída")
 
-    url = body.cifra_club_url.strip()
-    if not is_cifra_club_url(url):
-        raise HTTPException(status_code=400, detail="URL do Cifra Club inválida")
+    url = body.cifra_club_url.strip() if body.cifra_club_url else ""
+    if url:
+        # Importar do Cifra Club exige permissão de análise (traz conteúdo externo).
+        try:
+            await band_service.require_analyze_access(band_id, user.id)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        if not is_cifra_club_url(url):
+            raise HTTPException(status_code=400, detail="URL do Cifra Club inválida")
+        try:
+            variation = await service.add_cifra_variation_from_cifra_club(song_id, url, band_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"variation": variation}
 
-    try:
-        variation = await service.add_cifra_variation_from_cifra_club(song_id, url, band_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if body.name and body.snapshot is not None:
+        # Salvar variação fica disponível para qualquer membro da banda —
+        # o snapshot é compartilhado com todos via band_id.
+        try:
+            variation = await service.upsert_cifra_variation(
+                song_id,
+                body.name,
+                body.snapshot,
+                band_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"variation": variation}
 
-    return {"variation": variation}
+    raise HTTPException(
+        status_code=400,
+        detail="Informe cifra_club_url para importar, ou name e snapshot para salvar a variação",
+    )
 
 
 @router.get("/songs/{song_id}/chords")
