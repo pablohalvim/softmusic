@@ -5,6 +5,9 @@
  * e sobe python-ai/worker/scheduler. As MIGRATIONS do banco são aplicadas no
  * entrypoint do python-ai (alembic upgrade head) — este é o job que migra o
  * schema. Segredos: credenciais "Secret text".
+ *
+ * MySQL: por padrão reusa INSTALL_MYSQL/MYSQL_* do .env gerado pela infra.
+ * Preencha os parâmetros abaixo para apontar (ou corrigir) o banco DigitalOcean.
  */
 pipeline {
   agent any
@@ -14,6 +17,36 @@ pipeline {
       name: 'IA_COMPUTE',
       choices: ['gpu', 'cpu'],
       description: 'gpu = python-ai/worker com runtime NVIDIA (USE_GPU=1) · cpu = só CPU (USE_GPU=0)'
+    )
+    choice(
+      name: 'INSTALL_MYSQL',
+      choices: ['', '0', '1'],
+      description: 'Vazio = manter o .env da infra | 0 = banco EXTERNO (DigitalOcean) | 1 = MySQL local no Docker'
+    )
+    string(
+      name: 'MYSQL_HOST',
+      defaultValue: '',
+      description: 'Host DigitalOcean (ex.: db-mysql-nyc3-xxxxx.db.ondigitalocean.com). Vazio = mantém o .env da infra'
+    )
+    string(
+      name: 'MYSQL_PORT',
+      defaultValue: '',
+      description: 'Porta MySQL. DigitalOcean: 25060. Vazio = mantém o .env da infra'
+    )
+    string(
+      name: 'MYSQL_DATABASE',
+      defaultValue: '',
+      description: 'Nome do database. Vazio = mantém o .env / default softmusic'
+    )
+    string(
+      name: 'MYSQL_USER',
+      defaultValue: '',
+      description: 'Usuário MySQL da app. Vazio = mantém o .env / default softmusic'
+    )
+    choice(
+      name: 'MYSQL_SSL',
+      choices: ['', 'auto', '1', '0'],
+      description: 'Vazio = manter .env | auto = SSL se banco externo | 1/0 força'
     )
   }
 
@@ -52,6 +85,23 @@ pipeline {
     stage('Gerar .env de produção') {
       steps {
         script {
+          // Só exporta overrides preenchidos; vazio = render-env reusa .env da infra
+          if (params.INSTALL_MYSQL?.trim()) { env.INSTALL_MYSQL = params.INSTALL_MYSQL.trim() }
+          if (params.MYSQL_HOST?.trim()) {
+            env.MYSQL_HOST = params.MYSQL_HOST.trim()
+            if (!params.INSTALL_MYSQL?.trim()) { env.INSTALL_MYSQL = '0' }
+          }
+          if (params.MYSQL_PORT?.trim()) { env.MYSQL_PORT = params.MYSQL_PORT.trim() }
+          if (params.MYSQL_DATABASE?.trim()) { env.MYSQL_DATABASE = params.MYSQL_DATABASE.trim() }
+          if (params.MYSQL_USER?.trim()) { env.MYSQL_USER = params.MYSQL_USER.trim() }
+          if (params.MYSQL_SSL?.trim()) { env.MYSQL_SSL = params.MYSQL_SSL.trim() }
+
+          if (env.MYSQL_HOST) {
+            echo "MySQL override: host=${env.MYSQL_HOST} port=${env.MYSQL_PORT ?: '(default)'} install=${env.INSTALL_MYSQL ?: '0'} ssl=${env.MYSQL_SSL ?: 'auto'}"
+          } else {
+            echo 'MySQL: reusando INSTALL_MYSQL/MYSQL_* do .env.production (infra)'
+          }
+
           def requiredCreds = [
             string(credentialsId: 'softmusic-mysql-root-password',      variable: 'MYSQL_ROOT_PASSWORD'),
             string(credentialsId: 'softmusic-mysql-password',           variable: 'MYSQL_PASSWORD'),

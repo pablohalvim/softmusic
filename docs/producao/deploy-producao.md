@@ -150,7 +150,9 @@ Crie **infra OU infra-legacy** — não os dois. O `softmusic-admin` é opcional
    rodar de novo se mudar algo de infra.
 2. **`softmusic-ia`** — builda a imagem, sobe python-ai + worker e **aplica as
    migrations** (`alembic upgrade head` no entrypoint). Toda mudança de schema
-   entra aqui.
+   entra aqui. Em *Build with Parameters* dá para informar/corrigir o MySQL
+   DigitalOcean (`MYSQL_HOST`, `MYSQL_PORT`, `INSTALL_MYSQL=0`, etc.); se deixar
+   vazio, reusa o `.env` gerado pela infra.
 3. **`softmusic-api`** — builda e sobe a API.
 4. **`softmusic-web`** — builda e sobe web + landing page (portas **4100**, **4101**).
 5. **`softmusic-admin`** *(opcional)* — builda e sobe o painel `admin-web` (porta **4102**).
@@ -170,9 +172,11 @@ Se o MySQL já está na DigitalOcean (Managed Database):
 4. Crie o database/usuário no painel se ainda não existirem (o container local
    não roda o `mysql/init` quando `INSTALL_MYSQL=0`).
 5. Rode **`softmusic-ia`** em seguida para aplicar as migrations no banco remoto.
+   No *Build with Parameters* da IA também dá para informar `MYSQL_HOST` /
+   `MYSQL_PORT` / `INSTALL_MYSQL=0` (se deixar vazio, reusa o `.env` da infra).
 
-Os jobs `api`/`ia`/`web`/`admin` reaproveitam `INSTALL_MYSQL`/`MYSQL_HOST` do
-`.env.production` gerado pela infra — não precisam reconfigurar o host.
+A senha do usuário do banco continua na credencial Jenkins
+`softmusic-mysql-password` (Secret text) — não vai no parâmetro do job.
 
 > **Regra de ouro sobre migrations:** o banco só é migrado pelo job
 > **`softmusic-ia`**. A API não aplica migrations. Se um deploy depende de
