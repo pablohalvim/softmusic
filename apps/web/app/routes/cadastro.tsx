@@ -214,16 +214,26 @@ export default function CadastroPage() {
             <span>Nome da banda</span>
             <input className={fieldClass} value={form.band_name} onChange={(e) => updateField("band_name", e.target.value)} />
           </label>
-          <label className={labelClass}>
-            <span>Plano</span>
-            <select className={fieldClass} value={form.plan_code} onChange={(e) => updateField("plan_code", e.target.value)}>
-              {PLANS.map((plan) => (
-                <option key={plan.code} value={plan.code}>
-                  {plan.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <fieldset className="space-y-2">
+            <legend className="text-sm text-slate-300">Plano</legend>
+            <div className="grid gap-2" role="radiogroup" aria-label="Plano">
+              {PLANS.map((plan) => {
+                const active = form.plan_code === plan.code;
+                return (
+                  <button
+                    key={plan.code}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => updateField("plan_code", plan.code)}
+                    className={`sm-plan-option ${active ? "sm-plan-option-active" : ""}`}
+                  >
+                    {plan.label}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
         </div>
         {error ? <p className="text-sm text-red-400 sm:col-span-2">{error}</p> : null}
         <button

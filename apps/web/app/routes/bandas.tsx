@@ -80,20 +80,26 @@ export default function BandasPage() {
             className={inputClass}
           />
         </label>
-        <label className={labelClass}>
-          <span>Plano</span>
-          <select
-            value={planCode}
-            onChange={(e) => setPlanCode(e.target.value)}
-            className={inputClass}
-          >
-            {PLANS_LIST.map((plan) => (
-              <option key={plan.code} value={plan.code}>
-                {plan.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <fieldset className="space-y-2">
+          <legend className="text-sm text-slate-300">Plano</legend>
+          <div className="grid gap-2" role="radiogroup" aria-label="Plano">
+            {PLANS_LIST.map((plan) => {
+              const active = planCode === plan.code;
+              return (
+                <button
+                  key={plan.code}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => setPlanCode(plan.code)}
+                  className={`sm-plan-option ${active ? "sm-plan-option-active" : ""}`}
+                >
+                  {plan.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
         <button type="submit" disabled={submitting} className={`${btnPrimary} disabled:opacity-60`}>
           {submitting ? "Criando..." : "Criar banda"}
