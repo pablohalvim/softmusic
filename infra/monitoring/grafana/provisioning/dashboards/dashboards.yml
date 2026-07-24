@@ -9,5 +9,6 @@ providers:
     updateIntervalSeconds: 30
     allowUiUpdates: true
     options:
-      path: /var/lib/grafana/dashboards
+      # Mesmo path do bind mount em docker-compose (fora do named volume).
+      path: /etc/grafana/dashboards
       foldersFromFilesStructure: false

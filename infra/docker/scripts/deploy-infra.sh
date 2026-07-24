@@ -101,6 +101,8 @@ if [[ "${SKIP_PULL:-0}" != "1" ]]; then
 fi
 
 # Sem --remove-orphans: a infra compartilha o projeto `softmusic` com os apps.
+# force-recreate no Grafana: troca de bind mount / JSONs não entra com up -d simples.
+docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" up -d --force-recreate grafana
 docker_compose "${COMPOSE_FILES[@]}" --env-file "${ENV_FILE}" "${PROFILES[@]}" up -d
 
 # Se migrou para banco externo, derruba o MySQL local antigo (se existir).
@@ -140,6 +142,18 @@ done
 if [[ "${fail}" -ne 0 ]]; then
   echo "ERRO: nem todos os serviços subiram. Cheque os logs acima."
   exit 1
+fi
+
+# --- Verificação: dashboards Grafana no bind mount ---------------------------
+if [[ "${OBSERVABILITY}" == "1" ]]; then
+  host_dash_dir="${DEPLOY_DIR}/monitoring/grafana/dashboards"
+  host_json="$(find "${host_dash_dir}" -maxdepth 1 -name '*.json' 2>/dev/null | wc -l | tr -d ' ')"
+  echo ">> Grafana dashboards no host (${host_dash_dir}): ${host_json} JSON"
+  if [[ "${host_json}" == "0" ]]; then
+    echo ">> AVISO: nenhum *.json em monitoring/grafana/dashboards — pasta SoftMusic ficará vazia."
+  fi
+  echo ">> Grafana dashboards no container (/etc/grafana/dashboards):"
+  docker exec softmusic-grafana ls -la /etc/grafana/dashboards 2>&1 || true
 fi
 
 echo ">> Servidor preparado."

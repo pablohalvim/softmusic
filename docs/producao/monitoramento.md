@@ -41,7 +41,7 @@ Pasta Grafana **SoftMusic** (JSONs em `infra/monitoring/grafana/dashboards/`):
 | SoftMusic Logs | `softmusic-logs` | Volume + stream Loki (`service=~softmusic-.*`) |
 | SoftMusic Prometheus Targets | `softmusic-targets` | Tabela `up` + scrape duration/samples |
 
-Para alterar: edite o JSON no repo e re-rode `softmusic-infra` (ou reinicie o Grafana). O provider recarrega a cada 30s.
+Para alterar: edite o JSON no repo e re-rode `softmusic-infra` (force-recreate do Grafana). Os JSONs são montados em `/etc/grafana/dashboards` (não sob o volume de dados). O provider recarrega a cada 30s.
 
 ## Métricas expostas (hoje)
 
