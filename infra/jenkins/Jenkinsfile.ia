@@ -15,8 +15,8 @@ pipeline {
   parameters {
     choice(
       name: 'IA_COMPUTE',
-      choices: ['gpu', 'cpu'],
-      description: 'gpu = python-ai/worker com runtime NVIDIA (USE_GPU=1) · cpu = só CPU (USE_GPU=0)'
+      choices: ['cpu', 'gpu'],
+      description: 'cpu = padrão (sem NVIDIA) · gpu = runtime nvidia (exige driver + NVIDIA Container Toolkit no host)'
     )
     choice(
       name: 'INSTALL_MYSQL',
@@ -60,7 +60,7 @@ pipeline {
     DEPLOY_DIR_HOST = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
     IMAGE_TAG       = "${env.BUILD_NUMBER ?: 'latest'}"
     IMAGE_PREFIX    = 'softmusic'
-    USE_GPU         = "${(params.IA_COMPUTE ?: 'gpu') == 'gpu' ? '1' : '0'}"
+    USE_GPU         = "${(params.IA_COMPUTE ?: 'cpu') == 'gpu' ? '1' : '0'}"
     // Object storage (Cloudflare R2). Endpoint = https://<account_id>.r2.cloudflarestorage.com
     S3_ENDPOINT_URL = "${env.S3_ENDPOINT_URL ?: 'https://9939081e6ba254ac6535099e21fbab2a.r2.cloudflarestorage.com'}"
     STORAGE_BUCKET  = "${env.STORAGE_BUCKET ?: 'softmusic'}"

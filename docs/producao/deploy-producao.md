@@ -279,8 +279,11 @@ docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all \
 ```
 
 Se o teste acima funcionar, re-rode o job **`softmusic-ia`**. Para subir **sem
-GPU**, no job escolha o parâmetro **`IA_COMPUTE = cpu`** (equivale a
-`USE_GPU=0`). Com **`IA_COMPUTE = gpu`** (padrão) entra o overlay
+GPU**, no job o padrão é **`IA_COMPUTE = cpu`** (`USE_GPU=0`). Com
+**`IA_COMPUTE = gpu`** o deploy tenta o overlay nvidia; se o driver não
+estiver carregado (`NVML: Driver Not Loaded`), cai automaticamente para
+CPU. Só use GPU depois de validar `nvidia-smi` e o teste abaixo. Com GPU
+ativa entra o overlay
 `docker-compose.gpu.yml`.
 
 ## E-mail (Resend)
