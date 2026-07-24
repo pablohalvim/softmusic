@@ -37,20 +37,33 @@ pipeline {
 
     stage('Gerar .env de produção') {
       steps {
-        withCredentials([
-          string(credentialsId: 'softmusic-mysql-root-password',      variable: 'MYSQL_ROOT_PASSWORD'),
-          string(credentialsId: 'softmusic-mysql-password',           variable: 'MYSQL_PASSWORD'),
-          string(credentialsId: 'softmusic-redis-password',           variable: 'REDIS_PASSWORD'),
-          string(credentialsId: 'softmusic-rabbitmq-password',        variable: 'RABBITMQ_PASSWORD'),
-          string(credentialsId: 'softmusic-jwt-private-key',          variable: 'JWT_PRIVATE_KEY'),
-          string(credentialsId: 'softmusic-admin-jwt-private-key',    variable: 'ADMIN_JWT_PRIVATE_KEY'),
-          string(credentialsId: 'softmusic-admin-bootstrap-password', variable: 'ADMIN_BOOTSTRAP_PASSWORD'),
-          string(credentialsId: 'softmusic-asaas-api-key',            variable: 'ASAAS_API_KEY'),
-          string(credentialsId: 'softmusic-asaas-webhook-token',      variable: 'ASAAS_WEBHOOK_TOKEN'),
-          string(credentialsId: 'softmusic-grafana-admin-password',   variable: 'GRAFANA_ADMIN_PASSWORD'),
-          string(credentialsId: 'softmusic-resend-api-key',          variable: 'RESEND_API_KEY'),
-        ]) {
-          sh 'bash infra/docker/scripts/render-env.sh'
+        script {
+          def requiredCreds = [
+            string(credentialsId: 'softmusic-mysql-root-password',      variable: 'MYSQL_ROOT_PASSWORD'),
+            string(credentialsId: 'softmusic-mysql-password',           variable: 'MYSQL_PASSWORD'),
+            string(credentialsId: 'softmusic-redis-password',           variable: 'REDIS_PASSWORD'),
+            string(credentialsId: 'softmusic-rabbitmq-password',        variable: 'RABBITMQ_PASSWORD'),
+            string(credentialsId: 'softmusic-jwt-private-key',          variable: 'JWT_PRIVATE_KEY'),
+            string(credentialsId: 'softmusic-admin-jwt-private-key',    variable: 'ADMIN_JWT_PRIVATE_KEY'),
+            string(credentialsId: 'softmusic-admin-bootstrap-password', variable: 'ADMIN_BOOTSTRAP_PASSWORD'),
+            string(credentialsId: 'softmusic-asaas-api-key',            variable: 'ASAAS_API_KEY'),
+            string(credentialsId: 'softmusic-asaas-webhook-token',      variable: 'ASAAS_WEBHOOK_TOKEN'),
+            string(credentialsId: 'softmusic-grafana-admin-password',   variable: 'GRAFANA_ADMIN_PASSWORD'),
+          ]
+          withCredentials(requiredCreds) {
+            def rendered = false
+            try {
+              withCredentials([string(credentialsId: 'softmusic-resend-api-key', variable: 'RESEND_API_KEY')]) {
+                sh 'bash infra/docker/scripts/render-env.sh'
+                rendered = true
+              }
+            } catch (Exception e) {
+              echo "AVISO: softmusic-resend-api-key ausente — e-mails desabilitados. Cadastre a credencial quando for usar Resend."
+            }
+            if (!rendered) {
+              sh 'bash infra/docker/scripts/render-env.sh'
+            }
+          }
         }
       }
     }
