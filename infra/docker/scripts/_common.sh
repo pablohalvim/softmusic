@@ -191,8 +191,12 @@ wait_container_healthy() {
       echo ">> OK: ${name} healthy"
       return 0
     fi
+    if [[ "$status" == "exited" || "$status" == "dead" ]]; then
+      echo ">> ERRO: ${name} está ${status}"
+      return 1
+    fi
     sleep 2
   done
-  echo ">> AVISO: ${name} não ficou healthy a tempo. Verifique 'docker logs ${name}'."
-  return 0
+  echo ">> ERRO: ${name} não ficou healthy a tempo (último status=${status:-unknown})."
+  return 1
 }

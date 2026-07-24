@@ -51,19 +51,37 @@ app.include_router(internal_router)
 app.include_router(saas_router)
 
 
+@app.get("/health/live")
+async def health_live() -> dict[str, str]:
+    """Liveness — sem DB/torch (usado pelo Docker healthcheck)."""
+    return {"status": "ok", "service": "python-ai"}
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
-    from app.infrastructure.ml.device import device_info_as_dict
-
+    """Readiness — DB obrigatório; GPU é best-effort (não pode derrubar o check)."""
     async with engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
-    gpu = device_info_as_dict()
+    gpu: dict[str, str] = {
+        "gpu_available": "false",
+        "gpu_device": "",
+        "gpu_backend": "unknown",
+    }
+    try:
+        from app.infrastructure.ml.device import device_info_as_dict
+
+        info = device_info_as_dict()
+        gpu = {
+            "gpu_available": str(info["available"]).lower(),
+            "gpu_device": info["device_name"] or "",
+            "gpu_backend": str(info["backend"]),
+        }
+    except Exception:
+        pass
     return {
         "status": "healthy",
         "service": "python-ai",
-        "gpu_available": str(gpu["available"]).lower(),
-        "gpu_device": gpu["device_name"] or "",
-        "gpu_backend": gpu["backend"],
+        **gpu,
     }
 
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,14 +16,7 @@ class ComputeDeviceInfo:
     torch_version: str | None
 
 
-def _configure_cuda_visibility() -> None:
-    cuda_devices = os.getenv("CUDA_VISIBLE_DEVICES")
-    if cuda_devices is not None and cuda_devices.strip() == "":
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
-
 def get_compute_device_info() -> ComputeDeviceInfo:
-    _configure_cuda_visibility()
     try:
         import torch
     except ImportError:
