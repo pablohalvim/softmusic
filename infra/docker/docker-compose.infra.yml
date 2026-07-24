@@ -1,10 +1,13 @@
 # =============================================================================
-# SoftMusic — Infraestrutura apenas (MySQL 8.4, Redis, RabbitMQ, Observabilidade)
+# SoftMusic — Infraestrutura apenas (MySQL 8.4 opcional, Redis, RabbitMQ, Observabilidade)
 # =============================================================================
 # Uso:
 #   docker compose -f infra/docker/docker-compose.infra.yml \
 #     --env-file /opt/softmusic/.env.production \
-#     --profile infra --profile observability up -d
+#     --profile infra --profile mysql --profile observability up -d
+#
+# Banco externo (DigitalOcean etc.): omita --profile mysql e configure
+# INSTALL_MYSQL=0 + MYSQL_HOST/MYSQL_PORT no .env (via render-env.sh).
 # =============================================================================
 
 name: softmusic
@@ -23,7 +26,7 @@ x-healthcheck-defaults: &healthcheck-defaults
 
 services:
   mysql:
-    profiles: [infra]
+    profiles: [mysql]
     image: mysql:8.4
     container_name: softmusic-mysql
     restart: unless-stopped

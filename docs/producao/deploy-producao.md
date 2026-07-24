@@ -22,7 +22,7 @@ flowchart TB
         NGINX[nginx + TLS] --> WEB[web / lp / admin-web]
         NGINX --> API[api BFF]
         API --> AI[python-ai + worker]
-        API --> MYSQL[(MySQL)]
+        API --> MYSQL[(MySQL local ou DigitalOcean)]
         API --> REDIS[(Redis)]
         AI --> RMQ[RabbitMQ]
         OBS[Prometheus · Loki · Promtail · Grafana · OTel]
@@ -96,8 +96,8 @@ e proxy para as portas publicadas pelos containers — ver
 
 | ID | Obrigatória | Conteúdo |
 |----|-------------|----------|
-| `softmusic-mysql-root-password` | Sim | Senha root do MySQL |
-| `softmusic-mysql-password` | Sim | Senha do usuário `softmusic` |
+| `softmusic-mysql-root-password` | Sim (MySQL local) | Senha root do MySQL (só se `INSTALL_MYSQL=1`) |
+| `softmusic-mysql-password` | Sim | Senha do usuário da app no MySQL (local ou DigitalOcean) |
 | `softmusic-redis-password` | Sim | Senha do Redis |
 | `softmusic-rabbitmq-password` | Sim | Senha do RabbitMQ |
 | `softmusic-jwt-private-key` | Sim | Chave JWT da API (mín. 32 chars) |
@@ -131,14 +131,35 @@ Crie **infra OU infra-legacy** — não os dois. O `softmusic-admin` é opcional
 
 ## Passo 3 — Deploy (ordem para subir a versão)
 
-1. **`softmusic-infra`** (ou `-legacy`) — provisiona MySQL + Redis + RabbitMQ +
-   toda a observabilidade. Só precisa rodar de novo se mudar algo de infra.
+1. **`softmusic-infra`** (ou `-legacy`) — provisiona Redis + RabbitMQ +
+   observabilidade. **MySQL** sobe no Docker se `INSTALL_MYSQL=1` (padrão); com
+   `INSTALL_MYSQL=0` usa banco externo (`MYSQL_HOST`/`MYSQL_PORT`). Só precisa
+   rodar de novo se mudar algo de infra.
 2. **`softmusic-ia`** — builda a imagem, sobe python-ai + worker e **aplica as
    migrations** (`alembic upgrade head` no entrypoint). Toda mudança de schema
    entra aqui.
 3. **`softmusic-api`** — builda e sobe a API.
 4. **`softmusic-web`** — builda e sobe web + landing page (portas **4100**, **4101**).
 5. **`softmusic-admin`** *(opcional)* — builda e sobe o painel `admin-web` (porta **4102**).
+
+### Banco MySQL externo (DigitalOcean)
+
+Se o MySQL já está na DigitalOcean (Managed Database):
+
+1. No job **`softmusic-infra`**, em *Build with Parameters*:
+   - `INSTALL_MYSQL` = **`0`**
+   - `MYSQL_HOST` = hostname do cluster (ex.: `db-mysql-nyc3-xxxxx.db.ondigitalocean.com`)
+   - `MYSQL_PORT` = **`25060`** (padrão DO; confirme no painel)
+   - `MYSQL_DATABASE` / `MYSQL_USER` = database e usuário criados no DO
+   - `MYSQL_SSL` = **`auto`** (liga `?ssl=true` na `DATABASE_URL`)
+2. Credencial Jenkins `softmusic-mysql-password` = senha do usuário do banco.
+3. Em *Trusted Sources* do banco na DO, autorize o **IP público da VPS**.
+4. Crie o database/usuário no painel se ainda não existirem (o container local
+   não roda o `mysql/init` quando `INSTALL_MYSQL=0`).
+5. Rode **`softmusic-ia`** em seguida para aplicar as migrations no banco remoto.
+
+Os jobs `api`/`ia`/`web`/`admin` reaproveitam `INSTALL_MYSQL`/`MYSQL_HOST` do
+`.env.production` gerado pela infra — não precisam reconfigurar o host.
 
 > **Regra de ouro sobre migrations:** o banco só é migrado pelo job
 > **`softmusic-ia`**. A API não aplica migrations. Se um deploy depende de
@@ -276,7 +297,12 @@ Portas default: LP `4100`, Web `4101`, Admin `4102`, API `8081`, Grafana `4103`.
 
 ```bash
 # na VPS (host)
+# MySQL local (INSTALL_MYSQL=1):
 docker exec softmusic-mysql mysqladmin ping -h localhost --silent && echo "MySQL OK"
+# MySQL externo: teste a partir de um container na rede softmusic-network, ex.:
+# docker run --rm --network softmusic-network mysql:8.4 \
+#   mysqladmin ping -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u softmusic -p"$MYSQL_PASSWORD"
+
 docker inspect -f '{{.State.Health.Status}}' softmusic-python-ai
 docker inspect -f '{{.State.Health.Status}}' softmusic-api
 curl -sf http://127.0.0.1:8081/health/live && echo " API OK"
@@ -303,6 +329,7 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 | Coluna/tabela nova não existe | Migration não aplicada | Rodar o job **`softmusic-ia`** |
 | `image not found` no compose up | Job de app não buildou antes | Rodar o job de app (ele builda e sobe) |
 | MySQL em restart loop | CPU incompatível com MySQL 8.4 | Usar `softmusic-infra-legacy` |
+| App não conecta no MySQL DO | IP da VPS fora de Trusted Sources / host-porta errados | Liberar IP na DO; `INSTALL_MYSQL=0` + `MYSQL_HOST`/`MYSQL_PORT=25060` |
 | 502 nos domínios | App não subiu ou EasyPanel aponta porta errada | `curl http://127.0.0.1:4101/`; ver [reverse-proxy-vps](./reverse-proxy-vps.md) |
 | `Bind for 0.0.0.0:8080 failed` | Jenkins usa :8080 | API usa **8081** no host (`API_PORT`); re-rodar **`softmusic-api`** |
 | `failed to export image: lease does not exist` | Bug do **legacy builder** / estado do Docker no host | `sudo systemctl restart docker` na VPS; re-rodar o job |

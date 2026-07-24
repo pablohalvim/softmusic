@@ -61,8 +61,8 @@ como **Secret text** (evita o problema de upload de "Secret file"). O
 
 | ID | Obrigatória | Conteúdo |
 |----|-------------|----------|
-| `softmusic-mysql-root-password` | Sim | Senha root do MySQL |
-| `softmusic-mysql-password` | Sim | Senha do usuário `softmusic` no MySQL |
+| `softmusic-mysql-root-password` | Sim (MySQL local) | Senha root do MySQL (só com `INSTALL_MYSQL=1`) |
+| `softmusic-mysql-password` | Sim | Senha do usuário da app no MySQL (local ou externo) |
 | `softmusic-redis-password` | Sim | Senha do Redis |
 | `softmusic-rabbitmq-password` | Sim | Senha do RabbitMQ |
 | `softmusic-jwt-private-key` | Sim | Chave JWT da API (mín. 32 chars) |
@@ -92,14 +92,17 @@ openssl rand -base64 32
 O `withCredentials` do Jenkins **falha se qualquer ID não existir**. Por isso os
 jobs pedem apenas o que precisam:
 
-- **`softmusic-infra` / `-legacy`**: apenas as **6 obrigatórias** (mysql-root,
-  mysql, redis, rabbitmq, jwt-private-key, grafana-admin-password). **Não**
-  precisa de admin/Asaas para provisionar a infra.
+- **`softmusic-infra` / `-legacy`**: Redis/RabbitMQ/JWT/Grafana + MySQL.
+  Com **`INSTALL_MYSQL=1`** (padrão) exige `mysql-root` e sobe o container.
+  Com **`INSTALL_MYSQL=0`** (banco externo) use os parâmetros `MYSQL_HOST` /
+  `MYSQL_PORT` / `MYSQL_USER` / `MYSQL_DATABASE`; a senha continua sendo
+  `softmusic-mysql-password`. **Não** precisa de admin/Asaas para provisionar a infra.
 - **`softmusic-api` / `-ia` / `-web` / `-admin`**: exigem as 6 acima **+**
   `admin-jwt-private-key`, `admin-bootstrap-password`, `asaas-api-key` e
   `asaas-webhook-token`. Se ainda não usa Asaas, cadastre esses dois IDs com um
   valor placeholder (ex.: `disabled`) — o pagamento só é ativado quando a chave
-  real for informada.
+  real for informada. Reaproveitam `INSTALL_MYSQL`/`MYSQL_HOST` do `.env`
+  gerado pela infra.
 - **`softmusic-ia`** exige **também** `r2-access-key-id` e
   `r2-secret-access-key` (storage das músicas no Cloudflare R2). O endpoint do R2
   (`S3_ENDPOINT_URL`) e o bucket (`STORAGE_BUCKET`) ficam no `Jenkinsfile.ia`
@@ -116,8 +119,8 @@ respectivo caminho. **Não há credencial de registry** (build é local).
 
 | Job Jenkins | Jenkinsfile | O que faz |
 |-------------|-------------|-----------|
-| `softmusic-infra` | `infra/jenkins/Jenkinsfile.infra` | MySQL **8.4** + Redis + RabbitMQ + observabilidade |
-| `softmusic-infra-legacy` | `infra/jenkins/Jenkinsfile.infra-legacy` | Igual, com **MariaDB 10.5.28** (CPU antiga) |
+| `softmusic-infra` | `infra/jenkins/Jenkinsfile.infra` | Redis + RabbitMQ + observabilidade (+ MySQL 8.4 se `INSTALL_MYSQL=1`) |
+| `softmusic-infra-legacy` | `infra/jenkins/Jenkinsfile.infra-legacy` | Igual; MariaDB 10.5.28 se `INSTALL_MYSQL=1` (CPU antiga) |
 | `softmusic-api` | `infra/jenkins/Jenkinsfile.api` | Builda e sobe a API (BFF) |
 | `softmusic-ia` | `infra/jenkins/Jenkinsfile.ia` | Builda e sobe python-ai + worker (**aplica migrations**). Parâmetro **`IA_COMPUTE`**: `gpu` (padrão) ou `cpu`. |
 | `softmusic-web` | `infra/jenkins/Jenkinsfile.web` | Builda e sobe web + landing page (+ nginx) |

@@ -93,11 +93,27 @@ Referência completa de configuração por serviço. Copie `infra/docker/.env.ex
 
 | Variável | Obrigatória | Padrão (dev) | Descrição |
 |----------|-------------|--------------|-----------|
-| `MYSQL_ROOT_PASSWORD` | Sim | — | Senha root |
+| `INSTALL_MYSQL` | Não | `1` | `1` = sobe MySQL no Docker; `0` = usa banco externo |
+| `MYSQL_HOST` | Sim (se externo) | `mysql` | Host do MySQL (`mysql` no compose local; host DO em produção externa) |
+| `MYSQL_PORT` | Não | `3307` (local) / `25060` (externo) | Porta do MySQL |
+| `MYSQL_SSL` | Não | `auto` | `auto` liga SSL quando `INSTALL_MYSQL=0`; `1`/`0` força |
+| `MYSQL_ROOT_PASSWORD` | Sim (MySQL local) | — | Senha root (só container local) |
 | `MYSQL_DATABASE` | Sim | `softmusic` | Nome do database |
 | `MYSQL_USER` | Sim | `softmusic` | Usuário da aplicação |
 | `MYSQL_PASSWORD` | Sim | — | Senha da aplicação |
-| `MYSQL_PORT` | Não | `3306` | Porta exposta (dev only) |
+| `DATABASE_URL` | Sim | — | Montada pelo `render-env.sh` a partir de host/porta/user/senha |
+
+### Banco externo (DigitalOcean Managed MySQL)
+
+No job **`softmusic-infra`**, escolha `INSTALL_MYSQL=0` e preencha:
+
+- `MYSQL_HOST` — hostname do cluster (ex.: `db-mysql-nyc3-xxxxx.db.ondigitalocean.com`)
+- `MYSQL_PORT` — em geral `25060`
+- `MYSQL_USER` / `MYSQL_DATABASE` — usuário e database criados no painel DO
+- Credencial Jenkins `softmusic-mysql-password` = senha desse usuário
+- Libere o **IP da VPS** em *Trusted Sources* do banco na DigitalOcean
+
+Com `MYSQL_SSL=auto` (padrão), a `DATABASE_URL` sai com `?ssl=true`.
 
 ---
 

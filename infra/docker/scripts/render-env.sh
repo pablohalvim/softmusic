@@ -16,15 +16,73 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_common.sh
 source "${SCRIPT_DIR}/_common.sh"
 
+# Se o .env já existe (ex.: job de app após softmusic-infra), reaproveita
+# INSTALL_MYSQL / MYSQL_* quando o job atual não os passou explicitamente.
+# Assim api/ia/web não sobrescrevem um banco externo configurado na infra.
+if [[ -f "${ENV_FILE}" ]]; then
+  _load_env_default() {
+    local key="$1"
+    local current="${!key:-}"
+    if [[ -n "${current}" ]]; then
+      return 0
+    fi
+    local value
+    value="$(grep -E "^${key}=" "${ENV_FILE}" | tail -n1 | cut -d= -f2- || true)"
+    if [[ -n "${value}" ]]; then
+      printf -v "${key}" '%s' "${value}"
+      export "${key}"
+    fi
+  }
+  _load_env_default INSTALL_MYSQL
+  _load_env_default MYSQL_HOST
+  _load_env_default MYSQL_PORT
+  _load_env_default MYSQL_SSL
+  _load_env_default MYSQL_DATABASE
+  _load_env_default MYSQL_USER
+fi
+
+# --- MySQL: local (Docker) vs externo (DigitalOcean etc.) -------------------
+# INSTALL_MYSQL=1 (padrão) → sobe softmusic-mysql e aponta DATABASE_URL para ele.
+# INSTALL_MYSQL=0 → não instala MySQL; use MYSQL_HOST / MYSQL_PORT externos.
+INSTALL_MYSQL="${INSTALL_MYSQL:-1}"
+MYSQL_DATABASE="${MYSQL_DATABASE:-softmusic}"
+MYSQL_USER="${MYSQL_USER:-softmusic}"
+
+if [[ "${INSTALL_MYSQL}" == "0" ]]; then
+  MYSQL_HOST="${MYSQL_HOST:-}"
+  MYSQL_PORT="${MYSQL_PORT:-25060}"
+  if [[ -z "${MYSQL_HOST}" || "${MYSQL_HOST}" == "mysql" ]]; then
+    echo "ERRO: com INSTALL_MYSQL=0 defina MYSQL_HOST (host externo do banco)." >&2
+    echo "      Ex.: db-mysql-nyc3-xxxxx.db.ondigitalocean.com" >&2
+    exit 1
+  fi
+  # SSL: DigitalOcean Managed MySQL exige TLS. auto → liga em banco externo.
+  MYSQL_SSL="${MYSQL_SSL:-auto}"
+  if [[ "${MYSQL_SSL}" == "auto" ]]; then
+    MYSQL_SSL=1
+  fi
+  # Root só é usado pelo container local; em externo pode ficar vazio.
+  MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-unused-external-mysql}"
+else
+  MYSQL_HOST="${MYSQL_HOST:-mysql}"
+  MYSQL_PORT="${MYSQL_PORT:-3307}"
+  MYSQL_SSL="${MYSQL_SSL:-auto}"
+  if [[ "${MYSQL_SSL}" == "auto" ]]; then
+    MYSQL_SSL=0
+  fi
+fi
+
 # --- Segredos obrigatórios (Secret text) ------------------------------------
 required_secrets=(
-  MYSQL_ROOT_PASSWORD
   MYSQL_PASSWORD
   REDIS_PASSWORD
   RABBITMQ_PASSWORD
   JWT_PRIVATE_KEY
   GRAFANA_ADMIN_PASSWORD
 )
+if [[ "${INSTALL_MYSQL}" != "0" ]]; then
+  required_secrets+=(MYSQL_ROOT_PASSWORD)
+fi
 missing=()
 for s in "${required_secrets[@]}"; do
   if [[ -z "${!s:-}" ]]; then
@@ -57,8 +115,6 @@ LP_ORIGIN="${LP_ORIGIN:-https://softmusic.com.br}"
 ADMIN_ORIGIN="${ADMIN_ORIGIN:-https://admin.softmusic.com.br}"
 VITE_ADMIN_API_URL="${VITE_ADMIN_API_URL:-${ADMIN_ORIGIN}/api}"
 
-MYSQL_DATABASE="${MYSQL_DATABASE:-softmusic}"
-MYSQL_USER="${MYSQL_USER:-softmusic}"
 RABBITMQ_USER="${RABBITMQ_USER:-softmusic}"
 
 JWT_ALGORITHM="${JWT_ALGORITHM:-HS256}"
@@ -135,10 +191,21 @@ MYSQL_PASSWORD_ENC="$(urlenc "${MYSQL_PASSWORD}")"
 REDIS_PASSWORD_ENC="$(urlenc "${REDIS_PASSWORD}")"
 RABBITMQ_PASSWORD_ENC="$(urlenc "${RABBITMQ_PASSWORD}")"
 
-DATABASE_URL="${DATABASE_URL:-mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD_ENC}@mysql:3307/${MYSQL_DATABASE}}"
+DATABASE_SSL_QUERY=""
+if [[ "${MYSQL_SSL}" == "1" || "${MYSQL_SSL}" == "true" ]]; then
+  DATABASE_SSL_QUERY="?ssl=true"
+fi
+
+DATABASE_URL="${DATABASE_URL:-mysql+aiomysql://${MYSQL_USER}:${MYSQL_PASSWORD_ENC}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}${DATABASE_SSL_QUERY}}"
 REDIS_URL="${REDIS_URL:-redis://:${REDIS_PASSWORD_ENC}@redis:6379/0}"
 CELERY_BROKER_URL="${CELERY_BROKER_URL:-amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD_ENC}@rabbitmq:5672//}"
 CELERY_RESULT_BACKEND="${CELERY_RESULT_BACKEND:-redis://:${REDIS_PASSWORD_ENC}@redis:6379/1}"
+
+if [[ "${INSTALL_MYSQL}" == "0" ]]; then
+  echo ">> MySQL: EXTERNO → ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE} (ssl=${MYSQL_SSL})"
+else
+  echo ">> MySQL: LOCAL (container) → ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}"
+fi
 
 # --- Escreve o arquivo (permissão restrita) ---------------------------------
 mkdir -p "$(dirname "${ENV_FILE}")"
@@ -163,6 +230,10 @@ LP_ORIGIN=${LP_ORIGIN}
 ADMIN_ORIGIN=${ADMIN_ORIGIN}
 VITE_ADMIN_API_URL=${VITE_ADMIN_API_URL}
 
+INSTALL_MYSQL=${INSTALL_MYSQL}
+MYSQL_HOST=${MYSQL_HOST}
+MYSQL_PORT=${MYSQL_PORT}
+MYSQL_SSL=${MYSQL_SSL}
 MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
 MYSQL_DATABASE=${MYSQL_DATABASE}
 MYSQL_USER=${MYSQL_USER}

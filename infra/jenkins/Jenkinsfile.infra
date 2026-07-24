@@ -1,9 +1,14 @@
 /**
- * SoftMusic — Deploy INFRA (MySQL 8.4 + Redis + RabbitMQ + Observabilidade)
+ * SoftMusic — Deploy INFRA (MySQL opcional + Redis + RabbitMQ + Observabilidade)
  *
  * Cenário: o Jenkins roda DENTRO de um container e fala com o daemon do HOST
  * via /var/run/docker.sock. Os assets de deploy são copiados para DEPLOY_DIR
  * (no host, DEPLOY_DIR_HOST), de onde o docker compose sobe os serviços.
+ *
+ * Parâmetros (Build with Parameters):
+ *   INSTALL_MYSQL = 1 → sobe MySQL 8.4 no Docker (padrão)
+ *   INSTALL_MYSQL = 0 → usa banco externo (DigitalOcean etc.)
+ *     → preencha MYSQL_HOST / MYSQL_PORT / MYSQL_USER / MYSQL_DATABASE
  *
  * Segredos: credenciais "Secret text" (ver infra/jenkins/credentials.md).
  * Para CPUs antigas sem MySQL 8.4, use Jenkinsfile.infra-legacy.
@@ -16,11 +21,50 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '20'))
   }
 
+  parameters {
+    choice(
+      name: 'INSTALL_MYSQL',
+      choices: ['1', '0'],
+      description: '1 = instalar MySQL 8.4 no Docker | 0 = usar banco MySQL externo (DigitalOcean etc.)'
+    )
+    string(
+      name: 'MYSQL_HOST',
+      defaultValue: 'mysql',
+      description: 'Host do MySQL. Local: mysql. Externo: ex. db-mysql-nyc3-xxxxx.db.ondigitalocean.com'
+    )
+    string(
+      name: 'MYSQL_PORT',
+      defaultValue: '3307',
+      description: 'Porta do MySQL. Local: 3307. DigitalOcean Managed MySQL: costuma ser 25060'
+    )
+    string(
+      name: 'MYSQL_DATABASE',
+      defaultValue: 'softmusic',
+      description: 'Nome do database'
+    )
+    string(
+      name: 'MYSQL_USER',
+      defaultValue: 'softmusic',
+      description: 'Usuário da aplicação no MySQL'
+    )
+    choice(
+      name: 'MYSQL_SSL',
+      choices: ['auto', '1', '0'],
+      description: 'SSL na DATABASE_URL. auto = liga quando INSTALL_MYSQL=0 (recomendado na DigitalOcean)'
+    )
+  }
+
   environment {
     DEPLOY_DIR         = "${env.DEPLOY_DIR ?: '/var/jenkins_home/deploy/softmusic'}"
     DEPLOY_DIR_HOST    = "${env.DEPLOY_DIR_HOST ?: '/dados/jenkins_home/deploy/softmusic'}"
     WITH_OBSERVABILITY = '1'
     LEGACY_MYSQL       = '0'
+    INSTALL_MYSQL      = "${params.INSTALL_MYSQL}"
+    MYSQL_HOST         = "${params.MYSQL_HOST}"
+    MYSQL_PORT         = "${params.MYSQL_PORT}"
+    MYSQL_DATABASE     = "${params.MYSQL_DATABASE}"
+    MYSQL_USER         = "${params.MYSQL_USER}"
+    MYSQL_SSL          = "${params.MYSQL_SSL}"
   }
 
   stages {
@@ -45,7 +89,7 @@ pipeline {
       }
     }
 
-    stage('Deploy infra (MySQL 8.4)') {
+    stage('Deploy infra') {
       steps {
         sh 'bash infra/docker/scripts/deploy-infra.sh'
       }
@@ -53,7 +97,15 @@ pipeline {
   }
 
   post {
-    success { echo 'Infra SoftMusic (MySQL 8.4) provisionada com sucesso.' }
+    success {
+      script {
+        if (params.INSTALL_MYSQL == '0') {
+          echo "Infra SoftMusic provisionada (MySQL EXTERNO: ${params.MYSQL_HOST}:${params.MYSQL_PORT})."
+        } else {
+          echo 'Infra SoftMusic (MySQL 8.4 local) provisionada com sucesso.'
+        }
+      }
+    }
     failure { echo 'Falha no deploy de infra. Veja o ERRO acima: credencial ausente no estágio ".env" ou imagem/compose com problema.' }
   }
 }
