@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 
 import { PendingInvitesCard } from "../components/PendingInvitesCard";
+import { UpcomingScheduleCards } from "../components/UpcomingScheduleCards";
 import { useAuth } from "../lib/auth-context";
 import { btnAccent, btnGhost, btnPrimary } from "../lib/ui-classes";
 
@@ -10,6 +11,7 @@ export default function Home() {
   return (
     <section className="space-y-6">
       {user ? <PendingInvitesCard /> : null}
+      {user ? <UpcomingScheduleCards /> : null}
 
       <div className="glass-panel relative overflow-hidden p-6 sm:p-8 md:p-10">
         <div

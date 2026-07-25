@@ -4,6 +4,7 @@ import { Link } from "react-router";
 
 import { StatusBadge } from "../components/analysis/StatusBadge";
 import { PendingInvitesCard } from "../components/PendingInvitesCard";
+import { UpcomingScheduleCards } from "../components/UpcomingScheduleCards";
 import { fetchDashboardStats } from "../lib/api";
 import { useBand } from "../lib/band-context";
 import { btnPrimary, linkClass, listItemHoverClass, panelClass } from "../lib/ui-classes";
@@ -28,6 +29,7 @@ export default function Dashboard() {
       <section className="space-y-4">
         <h1 className="sm-page-title">Dashboard</h1>
         <PendingInvitesCard />
+        <UpcomingScheduleCards />
         <p className="sm-page-subtitle">
           {bands.length === 0
             ? "Crie uma banda para acompanhar suas análises."
@@ -43,6 +45,7 @@ export default function Dashboard() {
   return (
     <section className="space-y-6">
       <PendingInvitesCard />
+      <UpcomingScheduleCards />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>

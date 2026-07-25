@@ -22,13 +22,15 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   // Sem banda ainda: permite home/dashboard (convites) e gestão de conta.
-  const allowedWithoutBand = new Set(["/", "/dashboard", "/bandas", "/faturas", "/convite"]);
-  if (
-    user &&
-    !bandLoading &&
-    bands.length === 0 &&
-    !allowedWithoutBand.has(location.pathname)
-  ) {
+  const path = location.pathname;
+  const allowedWithoutBand =
+    path === "/" ||
+    path === "/dashboard" ||
+    path === "/bandas" ||
+    path === "/faturas" ||
+    path === "/convite" ||
+    path.startsWith("/bandas/");
+  if (user && !bandLoading && bands.length === 0 && !allowedWithoutBand) {
     return <Navigate to="/bandas" replace />;
   }
 

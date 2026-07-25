@@ -169,51 +169,58 @@ function BandCard({
         ) : null}
       </button>
 
-      {band.is_owner ? (
-        <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
+      <div className="mt-3 flex flex-col gap-2 border-t border-white/10 pt-3 sm:flex-row sm:flex-wrap">
+        <Link
+          to={`/bandas/${band.id}`}
+          className={`${btnPrimary} px-3 py-2 text-center text-sm`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          Gerenciar Banda
+        </Link>
+        {band.is_owner || band.can_invite_members ? (
           <button
             type="button"
             onClick={onToggleInvite}
-            className={`${btnGhost} w-full px-3 py-2 text-sm sm:w-auto`}
+            className={`${btnGhost} px-3 py-2 text-sm`}
           >
             {inviting ? "Fechar convite" : "Convidar por e-mail"}
           </button>
+        ) : null}
+      </div>
 
-          {inviting ? (
-            <form onSubmit={(e) => void handleInvite(e)} className="space-y-3">
-              <label className={labelClass}>
-                <span>E-mail do convidado</span>
-                <input
-                  required
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className={inputClass}
-                  placeholder="pessoa@email.com"
-                  autoComplete="email"
-                />
-              </label>
-              <label className="flex items-start gap-2 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={canAnalyze}
-                  onChange={(e) => setCanAnalyze(e.target.checked)}
-                  className="mt-1"
-                />
-                <span>Permitir analisar músicas nesta banda</span>
-              </label>
-              {inviteError ? <p className="text-sm text-red-400">{inviteError}</p> : null}
-              {inviteOk ? <p className="text-sm text-green-300">{inviteOk}</p> : null}
-              <button
-                type="submit"
-                disabled={sending}
-                className={`${btnPrimary} w-full disabled:opacity-60 sm:w-auto`}
-              >
-                {sending ? "Enviando..." : "Enviar convite"}
-              </button>
-            </form>
-          ) : null}
-        </div>
+      {inviting && (band.is_owner || band.can_invite_members) ? (
+        <form onSubmit={(e) => void handleInvite(e)} className="mt-3 space-y-3">
+          <label className={labelClass}>
+            <span>E-mail do convidado</span>
+            <input
+              required
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={inputClass}
+              placeholder="pessoa@email.com"
+              autoComplete="email"
+            />
+          </label>
+          <label className="flex items-start gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={canAnalyze}
+              onChange={(e) => setCanAnalyze(e.target.checked)}
+              className="mt-1"
+            />
+            <span>Permitir analisar músicas nesta banda</span>
+          </label>
+          {inviteError ? <p className="text-sm text-red-400">{inviteError}</p> : null}
+          {inviteOk ? <p className="text-sm text-green-300">{inviteOk}</p> : null}
+          <button
+            type="submit"
+            disabled={sending}
+            className={`${btnPrimary} w-full disabled:opacity-60 sm:w-auto`}
+          >
+            {sending ? "Enviando..." : "Enviar convite"}
+          </button>
+        </form>
       ) : null}
     </div>
   );

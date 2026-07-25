@@ -47,7 +47,56 @@ export const BandSummarySchema = z.object({
   member_limit: z.number().int(),
   billing_exempt: z.boolean(),
   can_analyze_songs: z.boolean(),
+  can_invite_members: z.boolean().optional(),
+  can_manage_members: z.boolean().optional(),
   is_owner: z.boolean(),
+});
+
+export const BandRoleSchema = z.object({
+  id: z.string(),
+  band_id: z.string(),
+  name: z.string(),
+  sort_order: z.number().int(),
+  is_default: z.boolean(),
+});
+
+export const BandMemberDetailSchema = z.object({
+  id: z.string(),
+  user_id: z.string(),
+  full_name: z.string(),
+  email: z.string().email(),
+  is_owner: z.boolean(),
+  joined_at: z.string().nullable(),
+  roles: z.array(BandRoleSchema),
+  can_analyze_songs: z.boolean(),
+  can_invite_members: z.boolean(),
+  can_manage_members: z.boolean(),
+});
+
+export const SavedAddressSchema = z.object({
+  id: z.string(),
+  band_id: z.string(),
+  label: z.string(),
+  formatted_address: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  place_id: z.string().nullable().optional(),
+  maps_url: z.string().optional(),
+});
+
+export const UpcomingOccurrenceSchema = z.object({
+  id: z.string(),
+  schedule_id: z.string(),
+  kind: z.enum(["event", "rehearsal"]),
+  title: z.string().nullable().optional(),
+  band_id: z.string(),
+  band_name: z.string(),
+  starts_at: z.string(),
+  ends_at: z.string(),
+  formatted_address: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  maps_url: z.string(),
 });
 
 export const InvoiceSummarySchema = z.object({
@@ -82,3 +131,7 @@ export type RegisterUser = z.infer<typeof RegisterUserSchema>;
 export type LoginRequest = z.infer<typeof LoginSchema>;
 export type BandSummary = z.infer<typeof BandSummarySchema>;
 export type PendingInvite = z.infer<typeof PendingInviteSchema>;
+export type BandRole = z.infer<typeof BandRoleSchema>;
+export type BandMemberDetail = z.infer<typeof BandMemberDetailSchema>;
+export type SavedAddress = z.infer<typeof SavedAddressSchema>;
+export type UpcomingOccurrence = z.infer<typeof UpcomingOccurrenceSchema>;

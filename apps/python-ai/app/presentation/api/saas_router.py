@@ -12,6 +12,7 @@ from app.application.services.auth_service import AuthService
 from app.application.services.band_service import BandService
 from app.application.services.billing_service import BillingService
 from app.application.services.email_service import EmailService
+from app.application.services.schedule_service import ScheduleService
 from app.config import get_settings
 from app.infrastructure.database.models import User
 from app.infrastructure.database.session import get_session
@@ -65,7 +66,46 @@ class DeclineInviteBody(BaseModel):
 
 
 class MemberPermissionBody(BaseModel):
-    can_analyze_songs: bool
+    can_analyze_songs: bool | None = None
+    can_invite_members: bool | None = None
+    can_manage_members: bool | None = None
+    role_ids: list[str] | None = None
+
+
+class RoleBody(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class ChangePlanBody(BaseModel):
+    plan_code: str
+
+
+class SavedAddressBody(BaseModel):
+    label: str = Field(min_length=1, max_length=120)
+    formatted_address: str = Field(min_length=1, max_length=500)
+    lat: float
+    lng: float
+    place_id: str | None = None
+
+
+class ScheduleOccurrenceBody(BaseModel):
+    starts_at: str
+    ends_at: str
+    formatted_address: str | None = None
+    lat: float | None = None
+    lng: float | None = None
+    place_id: str | None = None
+    saved_address_id: str | None = None
+
+
+class CreateScheduleBody(BaseModel):
+    title: str | None = None
+    member_ids: list[str]
+    event: ScheduleOccurrenceBody
+    rehearsal: ScheduleOccurrenceBody
+    rehearsal_same_as_event_address: bool = False
+    save_event_address: bool = False
+    save_event_address_label: str | None = None
 
 
 class AdminLoginBody(BaseModel):
@@ -203,6 +243,78 @@ async def decline_invite(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/bands/{band_id}/roles")
+async def list_roles(
+    band_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        items = await BandService(session).list_roles(band_id, user.id)
+        return {"items": items}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+@router.post("/bands/{band_id}/roles")
+async def create_role(
+    band_id: str,
+    body: RoleBody,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await BandService(session).create_role(band_id, user.id, body.name)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/bands/{band_id}/roles/{role_id}")
+async def update_role(
+    band_id: str,
+    role_id: str,
+    body: RoleBody,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await BandService(session).update_role(band_id, user.id, role_id, body.name)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/bands/{band_id}/roles/{role_id}")
+async def delete_role(
+    band_id: str,
+    role_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        return await BandService(session).delete_role(band_id, user.id, role_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/bands/{band_id}/members")
+async def list_members(
+    band_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        items = await BandService(session).list_members(band_id, user.id)
+        return {"items": items}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
 @router.patch("/bands/{band_id}/members/{member_id}")
 async def update_member(
     band_id: str,
@@ -212,12 +324,130 @@ async def update_member(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     try:
-        return await BandService(session).update_member_permissions(
-            band_id, user.id, member_id, body.can_analyze_songs
+        return await BandService(session).update_member(
+            band_id, user.id, member_id, body.model_dump(exclude_unset=True)
         )
     except (PermissionError, ValueError) as exc:
         status = 403 if isinstance(exc, PermissionError) else 400
         raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+@router.delete("/bands/{band_id}/members/{member_id}")
+async def remove_member(
+    band_id: str,
+    member_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        return await BandService(session).remove_member(band_id, user.id, member_id)
+    except (PermissionError, ValueError) as exc:
+        status = 403 if isinstance(exc, PermissionError) else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+
+@router.patch("/bands/{band_id}/plan")
+async def change_plan(
+    band_id: str,
+    body: ChangePlanBody,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await BandService(session).change_plan(band_id, user.id, body.plan_code)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/bands/{band_id}/addresses")
+async def list_addresses(
+    band_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        items = await ScheduleService(session).list_addresses(band_id, user.id)
+        return {"items": items}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+@router.post("/bands/{band_id}/addresses")
+async def create_address(
+    band_id: str,
+    body: SavedAddressBody,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await ScheduleService(session).create_address(
+            band_id,
+            user.id,
+            label=body.label,
+            formatted_address=body.formatted_address,
+            lat=body.lat,
+            lng=body.lng,
+            place_id=body.place_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/bands/{band_id}/addresses/{address_id}")
+async def delete_address(
+    band_id: str,
+    address_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        return await ScheduleService(session).delete_address(band_id, user.id, address_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/bands/{band_id}/schedules")
+async def list_schedules(
+    band_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        items = await ScheduleService(session).list_schedules(band_id, user.id)
+        return {"items": items}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
+@router.post("/bands/{band_id}/schedules")
+async def create_schedule(
+    band_id: str,
+    body: CreateScheduleBody,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await ScheduleService(session).create_schedule(
+            band_id, user, body.model_dump()
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/schedule/upcoming")
+async def upcoming_schedule(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    return await ScheduleService(session).upcoming_for_user(user)
 
 
 @router.get("/billing/invoices")

@@ -6,6 +6,7 @@ export default [
   route("cadastro", "routes/cadastro.tsx"),
   route("convite", "routes/convite.tsx"),
   route("bandas", "routes/bandas.tsx"),
+  route("bandas/:bandId", "routes/bandas.$bandId.tsx"),
   route("faturas", "routes/faturas.tsx"),
   route("dashboard", "routes/dashboard.tsx"),
   route("library", "routes/library.tsx"),

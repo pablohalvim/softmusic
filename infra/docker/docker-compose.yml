@@ -291,6 +291,7 @@ services:
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
         VITE_PWA_ENABLED: ${VITE_PWA_ENABLED:-true}
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
     container_name: softmusic-web
     restart: unless-stopped
     logging: *default-logging

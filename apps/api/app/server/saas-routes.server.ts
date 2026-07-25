@@ -48,3 +48,14 @@ export async function saasJsonAction<T>(
     request,
   );
 }
+
+export async function saasDeleteAction(request: Request, path: string): Promise<Response> {
+  const options = saasOptions(request);
+  if (options) {
+    return options;
+  }
+  if (request.method !== "DELETE") {
+    return errorResponse("METHOD_NOT_ALLOWED", "Method not allowed", 405, request);
+  }
+  return proxyJson(path, { method: "DELETE" }, request);
+}

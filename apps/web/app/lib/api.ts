@@ -228,6 +228,203 @@ export async function inviteBandMember(
   }
 }
 
+export interface BandRole {
+  id: string;
+  band_id: string;
+  name: string;
+  sort_order: number;
+  is_default: boolean;
+}
+
+export interface BandMemberDetail {
+  id: string;
+  user_id: string;
+  full_name: string;
+  email: string;
+  is_owner: boolean;
+  joined_at: string | null;
+  roles: BandRole[];
+  can_analyze_songs: boolean;
+  can_invite_members: boolean;
+  can_manage_members: boolean;
+}
+
+export interface SavedAddress {
+  id: string;
+  band_id: string;
+  label: string;
+  formatted_address: string;
+  lat: number;
+  lng: number;
+  place_id?: string | null;
+  maps_url?: string;
+}
+
+export interface ScheduleOccurrence {
+  id: string;
+  kind: "event" | "rehearsal";
+  starts_at: string;
+  ends_at: string;
+  formatted_address: string;
+  lat: number;
+  lng: number;
+  place_id?: string | null;
+  maps_url: string;
+}
+
+export interface BandSchedule {
+  id: string;
+  band_id: string;
+  title: string | null;
+  created_at: string;
+  occurrences: ScheduleOccurrence[];
+  members: Array<{ member_id: string; full_name: string }>;
+}
+
+export interface UpcomingOccurrence {
+  id: string;
+  schedule_id: string;
+  kind: "event" | "rehearsal";
+  title?: string | null;
+  band_id: string;
+  band_name: string;
+  starts_at: string;
+  ends_at: string;
+  formatted_address: string;
+  lat: number;
+  lng: number;
+  maps_url: string;
+}
+
+async function readJsonOrThrow(response: Response, fallback: string) {
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(errorDetail(payload, fallback));
+  }
+  return response.json();
+}
+
+export async function fetchBandRoles(bandId: string): Promise<BandRole[]> {
+  const response = await authFetch(`/bands/${bandId}/roles`);
+  const payload = await readJsonOrThrow(response, "Não foi possível carregar funções");
+  return payload.items ?? [];
+}
+
+export async function createBandRole(bandId: string, name: string): Promise<BandRole> {
+  const response = await authFetch(`/bands/${bandId}/roles`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return readJsonOrThrow(response, "Não foi possível criar a função");
+}
+
+export async function updateBandRole(bandId: string, roleId: string, name: string): Promise<BandRole> {
+  const response = await authFetch(`/bands/${bandId}/roles/${roleId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return readJsonOrThrow(response, "Não foi possível atualizar a função");
+}
+
+export async function deleteBandRole(bandId: string, roleId: string): Promise<void> {
+  const response = await authFetch(`/bands/${bandId}/roles/${roleId}`, { method: "DELETE" });
+  await readJsonOrThrow(response, "Não foi possível excluir a função");
+}
+
+export async function fetchBandMembers(bandId: string): Promise<BandMemberDetail[]> {
+  const response = await authFetch(`/bands/${bandId}/members`);
+  const payload = await readJsonOrThrow(response, "Não foi possível carregar membros");
+  return payload.items ?? [];
+}
+
+export async function updateBandMember(
+  bandId: string,
+  memberId: string,
+  body: {
+    can_analyze_songs?: boolean;
+    can_invite_members?: boolean;
+    can_manage_members?: boolean;
+    role_ids?: string[];
+  },
+): Promise<BandMemberDetail> {
+  const response = await authFetch(`/bands/${bandId}/members/${memberId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJsonOrThrow(response, "Não foi possível atualizar o membro");
+}
+
+export async function removeBandMember(bandId: string, memberId: string): Promise<void> {
+  const response = await authFetch(`/bands/${bandId}/members/${memberId}`, { method: "DELETE" });
+  await readJsonOrThrow(response, "Não foi possível remover o membro");
+}
+
+export async function changeBandPlan(bandId: string, planCode: string) {
+  const response = await authFetch(`/bands/${bandId}/plan`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan_code: planCode }),
+  });
+  return readJsonOrThrow(response, "Não foi possível alterar o plano");
+}
+
+export async function fetchBandAddresses(bandId: string): Promise<SavedAddress[]> {
+  const response = await authFetch(`/bands/${bandId}/addresses`);
+  const payload = await readJsonOrThrow(response, "Não foi possível carregar endereços");
+  return payload.items ?? [];
+}
+
+export async function createBandAddress(
+  bandId: string,
+  body: {
+    label: string;
+    formatted_address: string;
+    lat: number;
+    lng: number;
+    place_id?: string | null;
+  },
+): Promise<SavedAddress> {
+  const response = await authFetch(`/bands/${bandId}/addresses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJsonOrThrow(response, "Não foi possível salvar o endereço");
+}
+
+export async function deleteBandAddress(bandId: string, addressId: string): Promise<void> {
+  const response = await authFetch(`/bands/${bandId}/addresses/${addressId}`, {
+    method: "DELETE",
+  });
+  await readJsonOrThrow(response, "Não foi possível excluir o endereço");
+}
+
+export async function fetchBandSchedules(bandId: string): Promise<BandSchedule[]> {
+  const response = await authFetch(`/bands/${bandId}/schedules`);
+  const payload = await readJsonOrThrow(response, "Não foi possível carregar a agenda");
+  return payload.items ?? [];
+}
+
+export async function createBandSchedule(bandId: string, body: unknown): Promise<BandSchedule> {
+  const response = await authFetch(`/bands/${bandId}/schedules`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJsonOrThrow(response, "Não foi possível criar a escala");
+}
+
+export async function fetchUpcomingSchedule(): Promise<{
+  next_rehearsal: UpcomingOccurrence | null;
+  next_event: UpcomingOccurrence | null;
+}> {
+  const response = await authFetch("/schedule/upcoming");
+  return readJsonOrThrow(response, "Não foi possível carregar a agenda");
+}
+
 export async function fetchJob(jobId: string): Promise<Job> {
   const response = await authFetch(`/jobs/${jobId}`);
   if (!response.ok) {

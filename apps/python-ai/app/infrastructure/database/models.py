@@ -226,6 +226,8 @@ class BandMember(Base):
     user_id: Mapped[str] = mapped_column(String(32), index=True)
     role: Mapped[str] = mapped_column(String(32), default="member")
     can_analyze_songs: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_invite_members: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_manage_members: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(32), default="active")
     invited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     joined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -236,6 +238,93 @@ class BandMember(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+
+DEFAULT_BAND_ROLE_NAMES: tuple[str, ...] = (
+    "Ministro",
+    "Vocalista Principal",
+    "Back Vocal",
+    "Baixo",
+    "Guitarra",
+    "Baterista",
+    "Tecladista",
+    "Violinista",
+    "Saxofonista",
+    "Percussionista",
+)
+
+
+class BandRole(Base):
+    __tablename__ = "band_roles"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    band_id: Mapped[str] = mapped_column(String(32), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class BandMemberRole(Base):
+    __tablename__ = "band_member_roles"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    member_id: Mapped[str] = mapped_column(String(32), index=True)
+    role_id: Mapped[str] = mapped_column(String(32), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class BandSavedAddress(Base):
+    __tablename__ = "band_saved_addresses"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    band_id: Mapped[str] = mapped_column(String(32), index=True)
+    label: Mapped[str] = mapped_column(String(120))
+    formatted_address: Mapped[str] = mapped_column(String(500))
+    lat: Mapped[float] = mapped_column(Float)
+    lng: Mapped[float] = mapped_column(Float)
+    place_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class BandSchedule(Base):
+    __tablename__ = "band_schedules"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    band_id: Mapped[str] = mapped_column(String(32), index=True)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class BandScheduleOccurrence(Base):
+    __tablename__ = "band_schedule_occurrences"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    schedule_id: Mapped[str] = mapped_column(String(32), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # event | rehearsal
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    formatted_address: Mapped[str] = mapped_column(String(500))
+    lat: Mapped[float] = mapped_column(Float)
+    lng: Mapped[float] = mapped_column(Float)
+    place_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    saved_address_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class BandScheduleMember(Base):
+    __tablename__ = "band_schedule_members"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    schedule_id: Mapped[str] = mapped_column(String(32), index=True)
+    member_id: Mapped[str] = mapped_column(String(32), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
 class BandInvite(Base):

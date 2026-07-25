@@ -11,9 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.services.billing_service import BillingService
 from app.logging import logger
 from app.infrastructure.database.models import (
+    DEFAULT_BAND_ROLE_NAMES,
     Band,
     BandInvite,
     BandMember,
+    BandMemberRole,
+    BandRole,
     BandSong,
     BandStatus,
     BillingAccount,
@@ -91,17 +94,38 @@ class BandService:
             user_id=owner.id,
             role="owner",
             can_analyze_songs=True,
+            can_invite_members=True,
+            can_manage_members=True,
             status="active",
             joined_at=datetime.now(UTC),
         )
         self.session.add(band)
         self.session.add(owner_member)
+        await self.session.flush()
+        await self.seed_default_roles(band.id)
         await self.session.commit()
         await self.session.refresh(band)
         await self.session.refresh(owner_member)
 
         # Assinatura Asaas é sincronizada no checkout; no trial a banda já funciona.
         return self._serialize_band(band, owner_member, 1)
+
+    async def seed_default_roles(self, band_id: str) -> None:
+        existing = await self.session.execute(
+            select(func.count()).select_from(BandRole).where(BandRole.band_id == band_id)
+        )
+        if int(existing.scalar_one()) > 0:
+            return
+        for idx, name in enumerate(DEFAULT_BAND_ROLE_NAMES):
+            self.session.add(
+                BandRole(
+                    id=_new_id("rol"),
+                    band_id=band_id,
+                    name=name,
+                    sort_order=idx,
+                    is_default=True,
+                )
+            )
 
     async def get_member(self, band_id: str, user_id: str) -> BandMember | None:
         result = await self.session.execute(
@@ -130,6 +154,18 @@ class BandService:
             raise PermissionError("No período de trial não é possível enviar músicas para análise")
         if member.role != "owner" and not member.can_analyze_songs:
             raise PermissionError("Sem permissão para analisar músicas nesta banda")
+        return band, member
+
+    async def require_invite_access(self, band_id: str, user_id: str) -> tuple[Band, BandMember]:
+        band, member = await self.require_view_access(band_id, user_id)
+        if member.role != "owner" and not member.can_invite_members:
+            raise PermissionError("Sem permissão para convidar membros")
+        return band, member
+
+    async def require_manage_access(self, band_id: str, user_id: str) -> tuple[Band, BandMember]:
+        band, member = await self.require_view_access(band_id, user_id)
+        if member.role != "owner" and not member.can_manage_members:
+            raise PermissionError("Sem permissão para gerenciar a banda")
         return band, member
 
     async def get_band(self, band_id: str) -> Band | None:
@@ -244,11 +280,9 @@ class BandService:
         return list(result.scalars().all()), total
 
     async def invite_member(
-        self, band_id: str, owner_id: str, email: str, can_analyze: bool
+        self, band_id: str, actor_user_id: str, email: str, can_analyze: bool
     ) -> dict[str, Any]:
-        band = await self.get_band(band_id)
-        if band is None or band.owner_user_id != owner_id:
-            raise PermissionError("Apenas o responsável pode convidar membros")
+        band, _actor = await self.require_invite_access(band_id, actor_user_id)
         email_norm = email.strip().lower()
         if not email_norm:
             raise ValueError("E-mail inválido")
@@ -407,18 +441,239 @@ class BandService:
     async def update_member_permissions(
         self, band_id: str, owner_id: str, member_id: str, can_analyze: bool
     ) -> dict[str, Any]:
-        band = await self.get_band(band_id)
-        if band is None or band.owner_user_id != owner_id:
-            raise PermissionError("Apenas o responsável pode alterar permissões")
+        """Compat: atualiza só can_analyze_songs."""
+        return await self.update_member(
+            band_id,
+            owner_id,
+            member_id,
+            {"can_analyze_songs": can_analyze},
+        )
+
+    async def list_roles(self, band_id: str, user_id: str) -> list[dict[str, Any]]:
+        await self.require_view_access(band_id, user_id)
+        result = await self.session.execute(
+            select(BandRole)
+            .where(BandRole.band_id == band_id)
+            .order_by(BandRole.sort_order.asc(), BandRole.name.asc())
+        )
+        return [self._serialize_role(role) for role in result.scalars().all()]
+
+    async def create_role(self, band_id: str, user_id: str, name: str) -> dict[str, Any]:
+        await self.require_manage_access(band_id, user_id)
+        clean = name.strip()
+        if not clean:
+            raise ValueError("Nome da função é obrigatório")
+        dup = await self.session.execute(
+            select(BandRole).where(BandRole.band_id == band_id, BandRole.name == clean)
+        )
+        if dup.scalar_one_or_none():
+            raise ValueError("Já existe uma função com este nome")
+        max_order = await self.session.execute(
+            select(func.coalesce(func.max(BandRole.sort_order), -1)).where(BandRole.band_id == band_id)
+        )
+        role = BandRole(
+            id=_new_id("rol"),
+            band_id=band_id,
+            name=clean,
+            sort_order=int(max_order.scalar_one()) + 1,
+            is_default=False,
+        )
+        self.session.add(role)
+        await self.session.commit()
+        return self._serialize_role(role)
+
+    async def update_role(
+        self, band_id: str, user_id: str, role_id: str, name: str
+    ) -> dict[str, Any]:
+        await self.require_manage_access(band_id, user_id)
+        role = await self._get_role(band_id, role_id)
+        clean = name.strip()
+        if not clean:
+            raise ValueError("Nome da função é obrigatório")
+        dup = await self.session.execute(
+            select(BandRole).where(
+                BandRole.band_id == band_id,
+                BandRole.name == clean,
+                BandRole.id != role_id,
+            )
+        )
+        if dup.scalar_one_or_none():
+            raise ValueError("Já existe uma função com este nome")
+        role.name = clean
+        await self.session.commit()
+        return self._serialize_role(role)
+
+    async def delete_role(self, band_id: str, user_id: str, role_id: str) -> dict[str, str]:
+        await self.require_manage_access(band_id, user_id)
+        role = await self._get_role(band_id, role_id)
+        links = await self.session.execute(
+            select(BandMemberRole).where(BandMemberRole.role_id == role_id)
+        )
+        for link in links.scalars().all():
+            await self.session.delete(link)
+        await self.session.delete(role)
+        await self.session.commit()
+        return {"status": "deleted", "id": role_id}
+
+    async def list_members(self, band_id: str, user_id: str) -> list[dict[str, Any]]:
+        await self.require_view_access(band_id, user_id)
+        result = await self.session.execute(
+            select(BandMember, User)
+            .join(User, User.id == BandMember.user_id)
+            .where(BandMember.band_id == band_id, BandMember.status == "active")
+            .order_by(User.full_name.asc())
+        )
+        items: list[dict[str, Any]] = []
+        for member, user in result.all():
+            roles = await self._member_roles(member.id)
+            items.append(self._serialize_member(member, user, roles))
+        return items
+
+    async def update_member(
+        self,
+        band_id: str,
+        actor_user_id: str,
+        member_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        await self.require_manage_access(band_id, actor_user_id)
+        result = await self.session.execute(
+            select(BandMember, User)
+            .join(User, User.id == BandMember.user_id)
+            .where(BandMember.id == member_id, BandMember.band_id == band_id)
+        )
+        row = result.one_or_none()
+        if row is None:
+            raise ValueError("Membro inválido")
+        member, user = row
+        if member.status != "active":
+            raise ValueError("Membro inválido")
+
+        if member.role == "owner":
+            # Owner: só funções musicais
+            if "role_ids" in payload:
+                await self._set_member_roles(band_id, member.id, list(payload.get("role_ids") or []))
+        else:
+            if "can_analyze_songs" in payload and payload["can_analyze_songs"] is not None:
+                member.can_analyze_songs = bool(payload["can_analyze_songs"])
+            if "can_invite_members" in payload and payload["can_invite_members"] is not None:
+                member.can_invite_members = bool(payload["can_invite_members"])
+            if "can_manage_members" in payload and payload["can_manage_members"] is not None:
+                member.can_manage_members = bool(payload["can_manage_members"])
+            if "role_ids" in payload:
+                await self._set_member_roles(band_id, member.id, list(payload.get("role_ids") or []))
+
+        await self.session.commit()
+        roles = await self._member_roles(member.id)
+        return self._serialize_member(member, user, roles)
+
+    async def remove_member(
+        self, band_id: str, actor_user_id: str, member_id: str
+    ) -> dict[str, str]:
+        await self.require_manage_access(band_id, actor_user_id)
         result = await self.session.execute(
             select(BandMember).where(BandMember.id == member_id, BandMember.band_id == band_id)
         )
         member = result.scalar_one_or_none()
-        if member is None or member.role == "owner":
+        if member is None or member.status != "active":
             raise ValueError("Membro inválido")
-        member.can_analyze_songs = can_analyze
+        if member.role == "owner":
+            raise ValueError("Não é possível remover o responsável da banda")
+        member.status = "removed"
+        member.removed_at = datetime.now(UTC)
         await self.session.commit()
-        return {"id": member.id, "can_analyze_songs": member.can_analyze_songs}
+        return {"status": "removed", "id": member_id}
+
+    async def change_plan(
+        self, band_id: str, user_id: str, plan_code: str
+    ) -> dict[str, Any]:
+        band, member = await self.require_view_access(band_id, user_id)
+        if band.owner_user_id != user_id:
+            raise PermissionError("Apenas o responsável pode alterar o plano")
+        if band.billing_exempt:
+            raise PermissionError("Banda isenta não altera plano por esta tela")
+        if plan_code not in PLAN_LIMITS:
+            raise ValueError("Plano inválido")
+        _base, member_limit, extra_cents = PLAN_LIMITS[plan_code]
+        count = await self._active_member_count(band_id)
+        if count > member_limit:
+            raise ValueError(
+                f"A banda tem {count} membros; o plano escolhido permite no máximo {member_limit}"
+            )
+        band.plan_code = plan_code
+        band.member_limit = member_limit
+        band.extra_member_price_cents = extra_cents
+        await self.session.commit()
+        return self._serialize_band(band, member, count)
+
+    async def _get_role(self, band_id: str, role_id: str) -> BandRole:
+        result = await self.session.execute(
+            select(BandRole).where(BandRole.id == role_id, BandRole.band_id == band_id)
+        )
+        role = result.scalar_one_or_none()
+        if role is None:
+            raise ValueError("Função não encontrada")
+        return role
+
+    async def _member_roles(self, member_id: str) -> list[dict[str, Any]]:
+        result = await self.session.execute(
+            select(BandRole)
+            .join(BandMemberRole, BandMemberRole.role_id == BandRole.id)
+            .where(BandMemberRole.member_id == member_id)
+            .order_by(BandRole.sort_order.asc(), BandRole.name.asc())
+        )
+        return [self._serialize_role(role) for role in result.scalars().all()]
+
+    async def _set_member_roles(self, band_id: str, member_id: str, role_ids: list[str]) -> None:
+        unique_ids = list(dict.fromkeys(role_ids))
+        if unique_ids:
+            roles_result = await self.session.execute(
+                select(BandRole).where(BandRole.band_id == band_id, BandRole.id.in_(unique_ids))
+            )
+            found = {r.id for r in roles_result.scalars().all()}
+            if found != set(unique_ids):
+                raise ValueError("Função inválida para esta banda")
+
+        existing = await self.session.execute(
+            select(BandMemberRole).where(BandMemberRole.member_id == member_id)
+        )
+        for link in existing.scalars().all():
+            await self.session.delete(link)
+        await self.session.flush()
+        for role_id in unique_ids:
+            self.session.add(
+                BandMemberRole(
+                    id=_new_id("mrl"),
+                    member_id=member_id,
+                    role_id=role_id,
+                )
+            )
+
+    def _serialize_role(self, role: BandRole) -> dict[str, Any]:
+        return {
+            "id": role.id,
+            "band_id": role.band_id,
+            "name": role.name,
+            "sort_order": role.sort_order,
+            "is_default": role.is_default,
+        }
+
+    def _serialize_member(
+        self, member: BandMember, user: User, roles: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        is_owner = member.role == "owner"
+        return {
+            "id": member.id,
+            "user_id": user.id,
+            "full_name": user.full_name,
+            "email": user.email,
+            "is_owner": is_owner,
+            "joined_at": member.joined_at.isoformat() if member.joined_at else None,
+            "roles": roles,
+            "can_analyze_songs": is_owner or member.can_analyze_songs,
+            "can_invite_members": is_owner or member.can_invite_members,
+            "can_manage_members": is_owner or member.can_manage_members,
+        }
 
     async def _active_member_count(self, band_id: str) -> int:
         result = await self.session.execute(
@@ -429,6 +684,7 @@ class BandService:
         return int(result.scalar_one())
 
     def _serialize_band(self, band: Band, member: BandMember, member_count: int) -> dict[str, Any]:
+        is_owner = member.role == "owner"
         return {
             "id": band.id,
             "name": band.name,
@@ -437,7 +693,9 @@ class BandService:
             "member_count": member_count,
             "member_limit": band.member_limit,
             "billing_exempt": band.billing_exempt,
-            "can_analyze_songs": member.role == "owner" or member.can_analyze_songs,
-            "is_owner": member.role == "owner",
+            "can_analyze_songs": is_owner or member.can_analyze_songs,
+            "can_invite_members": is_owner or member.can_invite_members,
+            "can_manage_members": is_owner or member.can_manage_members,
+            "is_owner": is_owner,
             "trial_ends_at": band.trial_ends_at.isoformat() if band.trial_ends_at else None,
         }

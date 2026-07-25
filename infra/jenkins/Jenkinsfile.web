@@ -18,6 +18,7 @@ pipeline {
     IMAGE_TAG        = "${env.BUILD_NUMBER ?: 'latest'}"
     IMAGE_PREFIX     = 'softmusic'
     WEB_VITE_API_URL = "${env.WEB_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
+    WEB_VITE_GOOGLE_MAPS_API_KEY = "${env.VITE_GOOGLE_MAPS_API_KEY ?: ''}"
     LP_VITE_APP_URL  = "${env.LP_VITE_APP_URL ?: 'https://app.softmusic.com.br'}"
     DEPLOY_ADMIN_WEB = '0'
     LP_PORT          = "${env.LP_PORT ?: '4100'}"
@@ -35,6 +36,7 @@ pipeline {
           bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.web \
             --build-arg VITE_API_URL="${WEB_VITE_API_URL}" \
             --build-arg VITE_PWA_ENABLED=true \
+            --build-arg VITE_GOOGLE_MAPS_API_KEY="${WEB_VITE_GOOGLE_MAPS_API_KEY}" \
             -t ${IMAGE_PREFIX}/web:${IMAGE_TAG} \
             -t ${IMAGE_PREFIX}/web:latest \
             .
