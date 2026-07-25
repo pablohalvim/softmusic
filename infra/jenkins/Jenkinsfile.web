@@ -18,7 +18,6 @@ pipeline {
     IMAGE_TAG        = "${env.BUILD_NUMBER ?: 'latest'}"
     IMAGE_PREFIX     = 'softmusic'
     WEB_VITE_API_URL = "${env.WEB_VITE_API_URL ?: 'https://app.softmusic.com.br/api'}"
-    WEB_VITE_GOOGLE_MAPS_API_KEY = "${env.VITE_GOOGLE_MAPS_API_KEY ?: ''}"
     LP_VITE_APP_URL  = "${env.LP_VITE_APP_URL ?: 'https://app.softmusic.com.br'}"
     DEPLOY_ADMIN_WEB = '0'
     LP_PORT          = "${env.LP_PORT ?: '4100'}"
@@ -32,21 +31,46 @@ pipeline {
 
     stage('Build imagens (local)') {
       steps {
-        sh '''
-          bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.web \
-            --build-arg VITE_API_URL="${WEB_VITE_API_URL}" \
-            --build-arg VITE_PWA_ENABLED=true \
-            --build-arg VITE_GOOGLE_MAPS_API_KEY="${WEB_VITE_GOOGLE_MAPS_API_KEY}" \
-            -t ${IMAGE_PREFIX}/web:${IMAGE_TAG} \
-            -t ${IMAGE_PREFIX}/web:latest \
-            .
+        script {
+          // Secret Text: softmusic-google-maps-api-key (não é parâmetro de pipeline).
+          // Vite embute a chave no bundle no build — precisa estar no withCredentials desta stage.
+          try {
+            withCredentials([string(credentialsId: 'softmusic-google-maps-api-key', variable: 'VITE_GOOGLE_MAPS_API_KEY')]) {
+              sh '''
+                bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.web \
+                  --build-arg VITE_API_URL="${WEB_VITE_API_URL}" \
+                  --build-arg VITE_PWA_ENABLED=true \
+                  --build-arg VITE_GOOGLE_MAPS_API_KEY="${VITE_GOOGLE_MAPS_API_KEY}" \
+                  -t ${IMAGE_PREFIX}/web:${IMAGE_TAG} \
+                  -t ${IMAGE_PREFIX}/web:latest \
+                  .
 
-          bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.lp \
-            --build-arg VITE_APP_URL="${LP_VITE_APP_URL}" \
-            -t ${IMAGE_PREFIX}/lp:${IMAGE_TAG} \
-            -t ${IMAGE_PREFIX}/lp:latest \
-            .
-        '''
+                bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.lp \
+                  --build-arg VITE_APP_URL="${LP_VITE_APP_URL}" \
+                  -t ${IMAGE_PREFIX}/lp:${IMAGE_TAG} \
+                  -t ${IMAGE_PREFIX}/lp:latest \
+                  .
+              '''
+            }
+          } catch (Exception e) {
+            echo "AVISO: credential softmusic-google-maps-api-key ausente — Places desabilitado na Agenda."
+            sh '''
+              bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.web \
+                --build-arg VITE_API_URL="${WEB_VITE_API_URL}" \
+                --build-arg VITE_PWA_ENABLED=true \
+                --build-arg VITE_GOOGLE_MAPS_API_KEY="" \
+                -t ${IMAGE_PREFIX}/web:${IMAGE_TAG} \
+                -t ${IMAGE_PREFIX}/web:latest \
+                .
+
+              bash infra/docker/scripts/docker-build.sh -f infra/docker/Dockerfile.lp \
+                --build-arg VITE_APP_URL="${LP_VITE_APP_URL}" \
+                -t ${IMAGE_PREFIX}/lp:${IMAGE_TAG} \
+                -t ${IMAGE_PREFIX}/lp:latest \
+                .
+            '''
+          }
+        }
       }
     }
 
@@ -68,12 +92,25 @@ pipeline {
           withCredentials(requiredCreds) {
             def rendered = false
             try {
-              withCredentials([string(credentialsId: 'softmusic-resend-api-key', variable: 'RESEND_API_KEY')]) {
+              withCredentials([
+                string(credentialsId: 'softmusic-resend-api-key', variable: 'RESEND_API_KEY'),
+                string(credentialsId: 'softmusic-google-maps-api-key', variable: 'VITE_GOOGLE_MAPS_API_KEY'),
+              ]) {
                 sh 'bash infra/docker/scripts/render-env.sh'
                 rendered = true
               }
             } catch (Exception e) {
-              echo "AVISO: softmusic-resend-api-key ausente — e-mails desabilitados. Cadastre a credencial quando for usar Resend."
+              echo "AVISO: alguma credential opcional ausente (resend/maps) — renderiza o que der."
+            }
+            if (!rendered) {
+              try {
+                withCredentials([string(credentialsId: 'softmusic-google-maps-api-key', variable: 'VITE_GOOGLE_MAPS_API_KEY')]) {
+                  sh 'bash infra/docker/scripts/render-env.sh'
+                  rendered = true
+                }
+              } catch (Exception e2) {
+                echo "AVISO: softmusic-google-maps-api-key ausente no .env de produção."
+              }
             }
             if (!rendered) {
               sh 'bash infra/docker/scripts/render-env.sh'
