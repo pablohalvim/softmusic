@@ -354,6 +354,7 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 | 502 nos domínios | App não subiu ou EasyPanel aponta porta errada | `curl http://127.0.0.1:4101/`; ver [reverse-proxy-vps](./reverse-proxy-vps.md) |
 | `Bind for 0.0.0.0:8080 failed` | Jenkins usa :8080 | API usa **8081** no host (`API_PORT`); re-rodar **`softmusic-api`** |
 | `failed to export image: lease does not exist` / `failed to write compressed diff` / `failed to create diff tar stream` / `failed to apply diff` / `failed to Lchown … libLLVM` | Bug do **legacy builder**/containerd (layer grande ou snapshot corrompido) | Na VPS: `sudo systemctl restart docker && docker system prune -af`; re-rodar o job. Pipelines fazem retry automático nesses erros. |
+| `can't set distinct values on 'cpus' and 'deploy.resources.limits.cpus'` | Limite duplicado no merge `docker-compose.yml` + `.prod.yml` | Manter só `deploy.resources` (não misturar com `cpus`/`mem_limit` no mesmo serviço). |
 | `Connection refused` nos domínios | EasyPanel sem rotas para as portas | Configurar domínios → `IP:4100/4101/8081` — ver [reverse-proxy-vps](./reverse-proxy-vps.md) |
 | `BuildKit is enabled but the buildx component is missing` | Jenkins sem plugin buildx | Pipelines detectam buildx automaticamente; ou instale buildx no host (ver abaixo) |
 

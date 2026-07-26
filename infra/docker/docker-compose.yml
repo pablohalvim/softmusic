@@ -221,8 +221,13 @@ services:
     restart: unless-stopped
     logging: *default-logging
     # Reserva CPU/RAM para API/MySQL/UI no mesmo host (Demucs em CPU satura tudo sem isso).
-    cpus: ${WORKER_CPUS:-2.0}
-    mem_limit: ${WORKER_MEM_LIMIT:-6g}
+    # Usar só deploy.resources — misturar com cpus/mem_limit quebra o merge com
+    # docker-compose.prod.yml ("can't set distinct values on cpus and deploy...").
+    deploy:
+      resources:
+        limits:
+          cpus: "${WORKER_CPUS:-2.0}"
+          memory: ${WORKER_MEM_LIMIT:-6g}
     command: ["celery", "-A", "app.worker", "worker", "--loglevel=info", "--concurrency=${CELERY_CONCURRENCY:-1}", "-Q", "analysis,billing"]
     depends_on:
       mysql:
