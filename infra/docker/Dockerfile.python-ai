@@ -6,11 +6,22 @@ ENV PYTHONUNBUFFERED=1
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
+# ffmpeg via apt puxa mesa/LLVM (~100MB+) e no Jenkins (legacy builder +
+# containerd) costuma falhar com: failed to apply diff / Lchown libLLVM-*.so.
+# Binário estático + libsndfile (pequeno) evita essa layer.
+ARG FFMPEG_STATIC_URL=https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    libsndfile1 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+      ca-certificates \
+      curl \
+      xz-utils \
+      libsndfile1 \
+    && curl -fsSL "$FFMPEG_STATIC_URL" -o /tmp/ffmpeg.tar.xz \
+    && mkdir -p /tmp/ffmpeg \
+    && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg --strip-components=1 \
+    && install -m 0755 /tmp/ffmpeg/bin/ffmpeg /tmp/ffmpeg/bin/ffprobe /usr/local/bin/ \
+    && rm -rf /tmp/ffmpeg /tmp/ffmpeg.tar.xz /var/lib/apt/lists/* \
+    && ffmpeg -version >/dev/null \
+    && ffprobe -version >/dev/null
 
 # entrypoint antes do pip: evita COPY depois da layer enorme do site-packages
 # (legacy builder/containerd costuma falhar no export dessa layer).

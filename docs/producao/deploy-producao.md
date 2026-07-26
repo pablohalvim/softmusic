@@ -353,7 +353,7 @@ daemon do host marcadas por `BUILD_NUMBER` até o `docker image prune`.
 | App não conecta no MySQL DO | IP da VPS fora de Trusted Sources / host-porta errados | Liberar IP na DO; `INSTALL_MYSQL=0` + `MYSQL_HOST`/`MYSQL_PORT=25060` |
 | 502 nos domínios | App não subiu ou EasyPanel aponta porta errada | `curl http://127.0.0.1:4101/`; ver [reverse-proxy-vps](./reverse-proxy-vps.md) |
 | `Bind for 0.0.0.0:8080 failed` | Jenkins usa :8080 | API usa **8081** no host (`API_PORT`); re-rodar **`softmusic-api`** |
-| `failed to export image: lease does not exist` / `failed to write compressed diff` / `failed to create diff tar stream` | Bug do **legacy builder**/containerd (layer grande do python-ai) | Na VPS: `sudo systemctl restart docker`; re-rodar **`softmusic-ia`**. Pipelines fazem retry automático. |
+| `failed to export image: lease does not exist` / `failed to write compressed diff` / `failed to create diff tar stream` / `failed to apply diff` / `failed to Lchown … libLLVM` | Bug do **legacy builder**/containerd (layer grande ou snapshot corrompido) | Na VPS: `sudo systemctl restart docker && docker system prune -af`; re-rodar o job. Pipelines fazem retry automático nesses erros. |
 | `Connection refused` nos domínios | EasyPanel sem rotas para as portas | Configurar domínios → `IP:4100/4101/8081` — ver [reverse-proxy-vps](./reverse-proxy-vps.md) |
 | `BuildKit is enabled but the buildx component is missing` | Jenkins sem plugin buildx | Pipelines detectam buildx automaticamente; ou instale buildx no host (ver abaixo) |
 
