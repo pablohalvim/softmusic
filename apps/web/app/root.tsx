@@ -87,7 +87,7 @@ function AppHeader() {
   const closeMenu = () => setMenuOpen(false);
 
   return (
-    <header className="sticky top-0 z-40 -mx-4 mb-6 border-b border-white/[0.06] bg-[#020806]/90 px-4 py-3 backdrop-blur-xl sm:mb-8 sm:py-4">
+    <header className="sticky top-0 z-40 -mx-4 mb-6 border-b border-white/[0.06] bg-[#020806]/90 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-3 backdrop-blur-xl sm:mb-8 sm:pt-[calc(1rem+env(safe-area-inset-top))] sm:pb-4">
       <div className="flex items-center justify-between gap-3">
         <Link to="/" className="group flex min-w-0 items-center gap-2" onClick={closeMenu}>
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-green-400 to-green-600 text-sm font-bold text-green-950 shadow-lg shadow-green-500/20">
@@ -207,7 +207,7 @@ function AppHeader() {
 
 function AppShell() {
   return (
-    <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 py-4 sm:py-6">
+    <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 pb-4 pt-0 sm:pb-6">
       <div
         className="pointer-events-none fixed inset-0 -z-10 opacity-40"
         aria-hidden

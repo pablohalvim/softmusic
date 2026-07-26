@@ -172,7 +172,7 @@ export function SongAudioPlayer({
   if (isFixedFooter && minimized) {
     return (
       <div
-        className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#020806]/90 backdrop-blur-xl ${className ?? ""}`}
+        className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#020806]/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl ${className ?? ""}`}
       >
         <div className="mx-auto max-w-6xl px-4 py-2.5">
           <div className="flex items-center gap-3">
@@ -222,7 +222,7 @@ export function SongAudioPlayer({
   if (isFixedFooter) {
     return (
       <div
-        className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#020806]/90 backdrop-blur-xl ${className ?? ""}`}
+        className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#020806]/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl ${className ?? ""}`}
       >
         <div className="mx-auto max-w-6xl space-y-3 px-4 py-4">
           {panelBody}
