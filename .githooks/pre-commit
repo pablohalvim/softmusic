@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+# SoftMusic — bump automático de APP_VERSION (patch) em todo commit.
+set -e
+
+# Merge/rebase: não bumpa para não gerar ruído em commits de integração.
+if [ -f "$(git rev-parse --git-path MERGE_HEAD)" ] || [ -d "$(git rev-parse --git-path rebase-merge)" ] || [ -d "$(git rev-parse --git-path rebase-apply)" ]; then
+  echo ">> pre-commit: merge/rebase — skip bump de versão"
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+node scripts/bump-app-version.mjs
+git add packages/shared/src/version.ts
