@@ -156,7 +156,12 @@ async def analyze(
                 "variation": None,
             }
 
-    song, job = await service.create_from_source(str(source_type), str(source_ref), body.options)
+    song, job = await service.create_from_source(
+        str(source_type),
+        str(source_ref),
+        body.options,
+        created_by_user_id=user.id,
+    )
     await band_service.link_song(band_id, song.id, user.id)
     run_analysis.delay(job.id)
     return {
@@ -193,7 +198,12 @@ async def upload_song(
 
         if not is_cifra_club_url(str(parsed_options["cifra_club_url"])):
             raise HTTPException(status_code=400, detail="URL do Cifra Club inválida")
-    song, job = await service.create_from_upload(file.filename or "upload.bin", content, parsed_options)
+    song, job = await service.create_from_upload(
+        file.filename or "upload.bin",
+        content,
+        parsed_options,
+        created_by_user_id=user.id,
+    )
     await band_service.link_song(band_id, song.id, user.id)
     run_analysis.delay(job.id)
     return {"duplicate": False, "job_id": job.id, "song_id": song.id, "variation": None}
@@ -204,6 +214,7 @@ class CreateCifraDraftBody(BaseModel):
     artist: str | None = Field(default=None, max_length=200)
     cifra_club_url: str | None = None
     tempo_bpm: int = Field(default=120, ge=40, le=240)
+    share_to_global: bool = True
 
 
 @router.post("/songs/cifra-draft")
@@ -236,6 +247,8 @@ async def create_cifra_draft(
             cifra_club_url=body.cifra_club_url,
             tempo_bpm=body.tempo_bpm,
             band_id=band_id,
+            created_by_user_id=user.id,
+            share_to_global=body.share_to_global,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -357,6 +370,8 @@ def _serialize_song(song: Any) -> dict[str, Any]:
         "youtube_url": song.youtube_url,
         "cifra_club_url": song.cifra_club_url,
         "has_audio": has_audio,
+        "is_global": bool(getattr(song, "is_global", False)),
+        "created_by_user_id": getattr(song, "created_by_user_id", None),
         "created_at": song.created_at.isoformat(),
         "updated_at": song.updated_at.isoformat(),
     }
@@ -505,6 +520,42 @@ async def link_song_to_band(
     return _serialize_song(song)
 
 
+@router.post("/songs/{song_id}/share")
+async def share_song_to_global(
+    song_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    await _ensure_song_access(session, band_id, user.id, song_id)
+    band_service = BandService(session)
+    try:
+        song = await band_service.set_song_global_share(song_id, user.id, is_global=True)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _serialize_song(song)
+
+
+@router.post("/songs/{song_id}/unshare")
+async def unshare_song_from_global(
+    song_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    await _ensure_song_access(session, band_id, user.id, song_id)
+    band_service = BandService(session)
+    try:
+        song = await band_service.set_song_global_share(song_id, user.id, is_global=False)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _serialize_song(song)
+
+
 @router.get("/jobs/{job_id}")
 async def get_job(
     job_id: str,
@@ -570,9 +621,13 @@ async def delete_song(
 
     try:
         # Música já analisada: só remove o vínculo com a banda.
-        # A análise/arquivos ficam no catálogo global para revinculação futura
-        # (ex.: reimportar o mesmo YouTube sem reprocessar).
+        # Se estiver compartilhada (is_global), continua na Biblioteca global.
         if song.status == SongStatus.COMPLETED.value:
+            # Legado sem dono: assume o usuário atual e disponibiliza na global.
+            if not getattr(song, "created_by_user_id", None):
+                song.created_by_user_id = user.id
+                song.is_global = True
+                await session.commit()
             await band_service.unlink_song(band_id, song_id)
             logger.info("song_unlinked_from_band", song_id=song_id, band_id=band_id)
             return {"status": "unlinked", "song_id": song_id}

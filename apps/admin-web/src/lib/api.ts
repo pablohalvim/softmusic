@@ -143,6 +143,7 @@ export interface AsaasSettings {
   asaas_api_key_configured: boolean;
   asaas_environment: string;
   asaas_webhook_token_configured: boolean;
+  asaas_webhook_url: string;
 }
 
 export async function fetchAsaasSettings(): Promise<AsaasSettings> {

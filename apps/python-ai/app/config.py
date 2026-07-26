@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     asaas_api_key: str = ""
     asaas_environment: str = "sandbox"
     asaas_webhook_token: str = ""
+    # URL pública do BFF (ex.: https://app.softmusic.com.br/api). Usada no webhook Asaas.
+    public_api_base_url: str = ""
 
     smtp_host: str = ""
     smtp_port: int = 587

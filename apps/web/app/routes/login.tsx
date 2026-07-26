@@ -26,8 +26,10 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(loginValue.trim(), password);
-      // Home por padrão; ?next= só para fluxos específicos (ex.: convite).
-      navigate(safeNextPath(searchParams.get("next")));
+      // Home (/) por padrão. Nunca usa location.state.from (costumava mandar para /bandas).
+      // ?next= só para fluxos explícitos (ex.: convite) — e nunca /bandas.
+      const next = safeNextPath(searchParams.get("next"));
+      navigate(next === "/bandas" ? "/" : next, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");
     } finally {

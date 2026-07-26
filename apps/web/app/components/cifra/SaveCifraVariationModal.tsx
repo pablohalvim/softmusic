@@ -54,7 +54,7 @@ export function SaveCifraVariationModal({
     try {
       await onSave(trimmed);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Falha ao salvar variação");
+      setError(saveError instanceof Error ? saveError.message : "Falha ao criar variação");
       setPending(false);
     }
   };
@@ -68,16 +68,16 @@ export function SaveCifraVariationModal({
         aria-labelledby="save-variation-title"
       >
         <h2 id="save-variation-title" className="text-lg font-semibold text-slate-100">
-          Salvar variação
+          Criar Nova Variação
         </h2>
         <p className="mt-1 text-sm text-slate-400">
-          Guarde tom, capo e edições da cifra. A variação fica disponível para todos os membros
-          da banda, em qualquer dispositivo.
+          Copia a cifra que está aberta (tom, capo e edições) e já carrega a nova variação para
+          continuar editando.
         </p>
 
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
           <label className="block text-sm text-slate-300">
-            Nome da variação
+            Nome da nova variação
             <input
               autoFocus
               className={`${inputClass} mt-1.5`}
@@ -105,7 +105,7 @@ export function SaveCifraVariationModal({
               disabled={!name.trim() || pending}
               className="sm-btn-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {pending ? "Salvando..." : "Salvar"}
+              {pending ? "Criando..." : "Criar e abrir"}
             </button>
           </div>
         </form>

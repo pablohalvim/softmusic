@@ -60,6 +60,8 @@ export default [
   route("songs/global", "routes/songs.global.tsx"),
   route("songs", "routes/songs._index.tsx"),
   route("songs/:songId/link", "routes/songs.$songId.link.tsx"),
+  route("songs/:songId/share", "routes/songs.$songId.share.tsx"),
+  route("songs/:songId/unshare", "routes/songs.$songId.unshare.tsx"),
   route("songs/:songId", "routes/songs.$songId.tsx"),
   route("songs/:songId/cancel", "routes/songs.$songId.cancel.tsx"),
   route("songs/:songId/job", "routes/songs.$songId.job.tsx"),

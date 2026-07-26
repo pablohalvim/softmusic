@@ -63,7 +63,8 @@ export function GlobalLibraryModal({ open, bandId, onClose }: GlobalLibraryModal
             Biblioteca global
           </h2>
           <p className="mt-1 text-sm text-slate-400">
-            Músicas já analisadas em outras bandas suas que ainda não estão nesta banda.
+            Músicas que você compartilhou na Biblioteca global (ou de outras bandas suas) e que
+            ainda não estão nesta banda.
           </p>
         </div>
 
@@ -74,8 +75,8 @@ export function GlobalLibraryModal({ open, bandId, onClose }: GlobalLibraryModal
             <p className="text-red-400">Não foi possível carregar a biblioteca global.</p>
           ) : songs.length === 0 ? (
             <p className="text-slate-400">
-              Nenhuma música disponível para adicionar. Analise músicas em outras bandas ou conclua
-              análises pendentes.
+              Nenhuma música disponível. Compartilhe músicas na biblioteca da banda (“Compartilhar
+              na global”) ou exclua uma música compartilhada para ela aparecer aqui.
             </p>
           ) : (
             <ul className="space-y-3">

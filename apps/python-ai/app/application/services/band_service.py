@@ -5,7 +5,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.billing_service import BillingService
@@ -280,6 +280,18 @@ class BandService:
         return [row[0] for row in result.all()]
 
     async def user_can_access_song(self, user_id: str, song_id: str) -> bool:
+        # Compartilhada na biblioteca global do próprio usuário.
+        owned = await self.session.execute(
+            select(Song.id).where(
+                Song.id == song_id,
+                Song.created_by_user_id == user_id,
+                Song.is_global.is_(True),
+                Song.deleted_at.is_(None),
+            ).limit(1)
+        )
+        if owned.scalar_one_or_none() is not None:
+            return True
+
         user_band_ids = await self._user_band_ids(user_id)
         if not user_band_ids:
             return False
@@ -293,29 +305,56 @@ class BandService:
         )
         return result.scalar_one_or_none() is not None
 
+    async def set_song_global_share(
+        self, song_id: str, user_id: str, *, is_global: bool
+    ) -> Song:
+        result = await self.session.execute(
+            select(Song).where(Song.id == song_id, Song.deleted_at.is_(None))
+        )
+        song = result.scalar_one_or_none()
+        if song is None:
+            raise ValueError("Música não encontrada")
+        if song.created_by_user_id and song.created_by_user_id != user_id:
+            # Quem criou controla o compartilhamento; se órfã, assume o ator.
+            raise PermissionError("Apenas quem cadastrou a música pode alterar o compartilhamento")
+        if not song.created_by_user_id:
+            song.created_by_user_id = user_id
+        song.is_global = is_global
+        song.updated_at = datetime.now(UTC)
+        await self.session.commit()
+        await self.session.refresh(song)
+        return song
+
     async def list_global_library_songs(
         self, user_id: str, exclude_band_id: str, limit: int = 50, offset: int = 0
     ) -> tuple[list[Song], int]:
         user_band_ids = await self._user_band_ids(user_id)
-        if not user_band_ids:
-            return [], 0
-
         safe_limit = max(1, min(limit, 100))
         safe_offset = max(0, offset)
-        accessible_songs = (
-            select(BandSong.song_id)
-            .where(BandSong.band_id.in_(user_band_ids))
-            .distinct()
-            .scalar_subquery()
-        )
+
         in_current_band = exists(
             select(BandSong.id).where(
                 BandSong.band_id == exclude_band_id,
                 BandSong.song_id == Song.id,
             )
         )
+        shared_by_user = and_(
+            Song.is_global.is_(True),
+            Song.created_by_user_id == user_id,
+        )
+        if user_band_ids:
+            accessible_songs = (
+                select(BandSong.song_id)
+                .where(BandSong.band_id.in_(user_band_ids))
+                .distinct()
+                .scalar_subquery()
+            )
+            visibility = or_(Song.id.in_(accessible_songs), shared_by_user)
+        else:
+            visibility = shared_by_user
+
         filters = (
-            Song.id.in_(accessible_songs),
+            visibility,
             Song.status == SongStatus.COMPLETED.value,
             Song.deleted_at.is_(None),
             Song.moderation_status != "blocked",

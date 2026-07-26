@@ -113,9 +113,15 @@ class ScheduleOccurrenceBody(BaseModel):
     save_address_label: str | None = None
 
 
+class ScheduleMemberSelectionBody(BaseModel):
+    member_id: str
+    role_ids: list[str] = Field(default_factory=list)
+
+
 class CreateScheduleBody(BaseModel):
     title: str
-    member_ids: list[str]
+    member_ids: list[str] = Field(default_factory=list)
+    members: list[ScheduleMemberSelectionBody] = Field(default_factory=list)
     event: ScheduleOccurrenceBody
     rehearsals: list[ScheduleOccurrenceBody] = Field(default_factory=list)
     # Compat payloads antigos
@@ -135,6 +141,7 @@ class UpdateOccurrenceBody(BaseModel):
     place_id: str | None = None
     saved_address_id: str | None = None
     member_ids: list[str] | None = None
+    members: list[ScheduleMemberSelectionBody] | None = None
 
 
 class AdminLoginBody(BaseModel):

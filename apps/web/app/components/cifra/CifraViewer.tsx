@@ -25,7 +25,6 @@ import { useCifraScroll } from "./cifra-scroll-context";
 import {
   fetchCifraVariations,
   importCifraVariationFromUrl,
-  OFFICIAL_CIFRA_VARIATION_NAME,
   saveCifraVariationToServer,
   type CifraVariation,
   type CifraVariationSnapshot,
@@ -201,8 +200,6 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
   const [activeVariationId, setActiveVariationId] = useState<string>("");
   const [saveVariationOpen, setSaveVariationOpen] = useState(false);
   const [importVariationOpen, setImportVariationOpen] = useState(false);
-  const [savingOfficial, setSavingOfficial] = useState(false);
-  const [officialSaveError, setOfficialSaveError] = useState<string | null>(null);
   const [keyOverride, setKeyOverride] = useState<CifraKeyOverride | null>(null);
   const [showKeyPicker, setShowKeyPicker] = useState(false);
   const [pickKey, setPickKey] = useState("C");
@@ -456,37 +453,29 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
     setCifraEditMode(true);
   };
 
-  const handleSaveVariation = async (name: string) => {
-    const saved = await saveCifraVariationToServer(
-      chordData.song_id,
-      name,
-      buildVariationSnapshot(),
-    );
+  const suggestNewVariationName = () => {
+    const sourceName = activeVariationId
+      ? (variations.find((entry) => entry.id === activeVariationId)?.name ?? "Edição atual")
+      : "Edição atual";
+    const base = `Cópia de ${sourceName}`;
+    const taken = new Set(variations.map((entry) => entry.name.toLowerCase()));
+    if (!taken.has(base.toLowerCase())) return base;
+    let index = 2;
+    while (taken.has(`${base} (${index})`.toLowerCase())) {
+      index += 1;
+    }
+    return `${base} (${index})`;
+  };
+
+  const handleCreateVariation = async (name: string) => {
+    const snapshot = buildVariationSnapshot();
+    const saved = await saveCifraVariationToServer(chordData.song_id, name, snapshot);
     const items = await fetchCifraVariations(chordData.song_id);
     setVariations(items.length > 0 ? items : [saved]);
     setActiveVariationId(saved.id);
+    applyVariationSnapshot(saved.snapshot);
     setSaveVariationOpen(false);
-  };
-
-  const handleSaveOfficialVariation = async () => {
-    setSavingOfficial(true);
-    setOfficialSaveError(null);
-    try {
-      const saved = await saveCifraVariationToServer(
-        chordData.song_id,
-        OFFICIAL_CIFRA_VARIATION_NAME,
-        buildVariationSnapshot(),
-      );
-      const items = await fetchCifraVariations(chordData.song_id);
-      setVariations(items.length > 0 ? items : [saved]);
-      setActiveVariationId(saved.id);
-    } catch (error) {
-      setOfficialSaveError(
-        error instanceof Error ? error.message : "Falha ao salvar versão oficial",
-      );
-    } finally {
-      setSavingOfficial(false);
-    }
+    toast.success(`Variação “${saved.name}” criada e carregada.`);
   };
 
   const handleImportVariation = async (cifraClubUrl: string) => {
@@ -497,10 +486,6 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
     applyVariationSnapshot(variation.snapshot);
     setImportVariationOpen(false);
   };
-
-  const hasOfficialVariation = variations.some(
-    (variation) => variation.name.toLowerCase() === OFFICIAL_CIFRA_VARIATION_NAME.toLowerCase(),
-  );
 
   const handleVariationSelect = (variationId: string) => {
     setActiveVariationId(variationId);
@@ -771,30 +756,13 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                 </option>
               ))}
             </select>
-            {importedSheet ? (
-              <button
-                type="button"
-                className={`${controlClass} mt-2 w-full text-center text-green-300 hover:text-green-200 disabled:cursor-not-allowed disabled:opacity-40`}
-                onClick={() => void handleSaveOfficialVariation()}
-                disabled={savingOfficial}
-                title="Salva a cifra atual com todas as edições (tom, capo, acordes e letra) para a banda"
-              >
-                {savingOfficial
-                  ? "Gravando..."
-                  : hasOfficialVariation
-                    ? "Atualizar cifra original"
-                    : "Gravar cifra original"}
-              </button>
-            ) : null}
-            {officialSaveError ? (
-              <p className="mt-2 text-xs text-red-400">{officialSaveError}</p>
-            ) : null}
             <button
               type="button"
               className={`${controlClass} mt-2 w-full text-center text-green-300 hover:text-green-200`}
               onClick={() => setSaveVariationOpen(true)}
+              title="Cria uma nova variação a partir da cifra que está aberta e já a carrega"
             >
-              Salvar variação
+              Criar Nova Variação
             </button>
             <button
               type="button"
@@ -1170,13 +1138,9 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
 
       <SaveCifraVariationModal
         open={saveVariationOpen}
-        defaultName={
-          activeVariationId
-            ? (variations.find((variation) => variation.id === activeVariationId)?.name ?? "")
-            : ""
-        }
+        defaultName={suggestNewVariationName()}
         onClose={() => setSaveVariationOpen(false)}
-        onSave={handleSaveVariation}
+        onSave={handleCreateVariation}
       />
 
       <ImportCifraVariationModal

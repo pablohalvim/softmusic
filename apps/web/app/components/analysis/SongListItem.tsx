@@ -9,8 +9,11 @@ import {
   fetchSongJob,
   isActiveSong,
   isJobFinished,
+  shareSongToGlobal,
+  unshareSongFromGlobal,
   type SongSummary,
 } from "../../lib/api";
+import { useAuth } from "../../lib/auth-context";
 import { useBand } from "../../lib/band-context";
 import { useConfirm } from "../../lib/confirm";
 import { labelSongStatus } from "../../lib/status-labels";
@@ -19,11 +22,15 @@ import { JobProgressDetails, ProgressBar, StatusBadge } from "./StatusBadge";
 
 export function SongListItem({ song }: { song: SongSummary }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { activeBand } = useBand();
   const { confirm } = useConfirm();
   const isActive = isActiveSong(song.status);
   const blocked = Boolean(activeBand?.is_blocked);
   const canDelete = Boolean(activeBand?.is_owner || activeBand?.can_delete_songs);
+  const canManageShare =
+    song.status === "completed" &&
+    (!song.created_by_user_id || song.created_by_user_id === user?.id);
 
   const jobQuery = useQuery({
     queryKey: ["song-job", song.id],
@@ -35,6 +42,7 @@ export function SongListItem({ song }: { song: SongSummary }) {
 
   const invalidateLibrary = () => {
     queryClient.invalidateQueries({ queryKey: ["songs"] });
+    queryClient.invalidateQueries({ queryKey: ["songs-global"] });
     queryClient.invalidateQueries({ queryKey: ["song", song.id] });
     queryClient.invalidateQueries({ queryKey: ["song-job", song.id] });
   };
@@ -46,6 +54,12 @@ export function SongListItem({ song }: { song: SongSummary }) {
 
   const cancelMutation = useMutation({
     mutationFn: () => cancelSongAnalysis(song.id),
+    onSuccess: invalidateLibrary,
+  });
+
+  const shareMutation = useMutation({
+    mutationFn: () =>
+      song.is_global ? unshareSongFromGlobal(song.id) : shareSongToGlobal(song.id),
     onSuccess: invalidateLibrary,
   });
 
@@ -62,7 +76,8 @@ export function SongListItem({ song }: { song: SongSummary }) {
   const displayStatus =
     job?.status === "cancelled" || job?.status === "failed" ? "failed" : song.status;
   const showProgress = isActive && job && !isJobFinished(job.status);
-  const isBusy = deleteMutation.isPending || cancelMutation.isPending;
+  const isBusy =
+    deleteMutation.isPending || cancelMutation.isPending || shareMutation.isPending;
 
   return (
     <article className={panelClass}>
@@ -71,6 +86,11 @@ export function SongListItem({ song }: { song: SongSummary }) {
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="truncate font-medium">{title}</h2>
             <StatusBadge status={displayStatus} kind="song" />
+            {song.status === "completed" && song.is_global ? (
+              <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] text-green-200">
+                Global
+              </span>
+            ) : null}
           </div>
           <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
           <p className="mt-1 text-xs text-slate-500">{labelSongStatus(displayStatus)}</p>
@@ -105,6 +125,25 @@ export function SongListItem({ song }: { song: SongSummary }) {
                 <Link to={`/songs/${song.id}`} className={`${btnGhost} px-3 py-1.5 text-sm`}>
                   Detalhes
                 </Link>
+                {canManageShare ? (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => shareMutation.mutate()}
+                    className={`${btnGhost} px-3 py-1.5 text-sm disabled:opacity-50`}
+                    title={
+                      song.is_global
+                        ? "Remove da Biblioteca global (continua nesta banda)"
+                        : "Disponibiliza na Biblioteca global ao excluir desta banda"
+                    }
+                  >
+                    {shareMutation.isPending
+                      ? "Salvando..."
+                      : song.is_global
+                        ? "Remover da global"
+                        : "Compartilhar na global"}
+                  </button>
+                ) : null}
               </>
             ) : !isActive ? (
               <Link to={`/songs/${song.id}`} className={`${btnGhost} px-3 py-1.5 text-sm`}>
@@ -126,7 +165,9 @@ export function SongListItem({ song }: { song: SongSummary }) {
                 onClick={async () => {
                   const ok = await confirm({
                     title: "Excluir música",
-                    message: "Excluir esta música da biblioteca?",
+                    message: song.is_global
+                      ? "Remover esta música desta banda? Ela continuará na Biblioteca global."
+                      : "Excluir esta música da banda? Se não estiver na Biblioteca global, não poderá readicionar depois.",
                     confirmLabel: "Excluir",
                     danger: true,
                   });
@@ -148,6 +189,9 @@ export function SongListItem({ song }: { song: SongSummary }) {
       ) : null}
       {cancelMutation.isError ? (
         <p className="mt-3 text-sm text-red-400">{cancelMutation.error.message}</p>
+      ) : null}
+      {shareMutation.isError ? (
+        <p className="mt-3 text-sm text-red-400">{shareMutation.error.message}</p>
       ) : null}
 
       {showProgress ? (

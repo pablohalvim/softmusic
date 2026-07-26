@@ -38,6 +38,19 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(8)}"
 
 
+def _option_bool(options: dict[str, Any], key: str, *, default: bool) -> bool:
+    if key not in options:
+        return default
+    value = options.get(key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "sim", "on"}
+    return default
+
+
 def _normalize_variation_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(snapshot, dict):
         raise ValueError("Snapshot da variação inválido")
@@ -82,6 +95,8 @@ class AnalysisService:
         filename: str,
         content: bytes,
         options: dict[str, Any] | None = None,
+        *,
+        created_by_user_id: str | None = None,
     ) -> tuple[Song, AnalysisJob]:
         song_id = _new_id("song")
         job_id = _new_id("job")
@@ -93,6 +108,9 @@ class AnalysisService:
         cifra_club_url = cifra_url.strip() if isinstance(cifra_url, str) and cifra_url.strip() else None
         title_raw = opts.get("title")
         title = title_raw.strip() if isinstance(title_raw, str) and title_raw.strip() else None
+        artist_raw = opts.get("artist")
+        artist = artist_raw.strip() if isinstance(artist_raw, str) and artist_raw.strip() else None
+        is_global = _option_bool(opts, "share_to_global", default=True)
 
         song = Song(
             id=song_id,
@@ -100,8 +118,11 @@ class AnalysisService:
             source_ref=filename,
             file_path=file_path,
             title=title,
+            artist=artist,
             cifra_club_url=cifra_club_url,
             status=SongStatus.PENDING.value,
+            created_by_user_id=created_by_user_id,
+            is_global=is_global,
         )
         job = AnalysisJob(
             id=job_id,
@@ -122,6 +143,8 @@ class AnalysisService:
         source_type: str,
         source_ref: str,
         options: dict[str, Any] | None = None,
+        *,
+        created_by_user_id: str | None = None,
     ) -> tuple[Song, AnalysisJob]:
         song_id = _new_id("song")
         job_id = _new_id("job")
@@ -134,6 +157,7 @@ class AnalysisService:
         if source_type == "youtube":
             youtube_url = source_ref
             youtube_video_id = extract_youtube_video_id(source_ref)
+        is_global = _option_bool(opts, "share_to_global", default=True)
 
         song = Song(
             id=song_id,
@@ -143,6 +167,8 @@ class AnalysisService:
             youtube_video_id=youtube_video_id,
             cifra_club_url=cifra_club_url,
             status=SongStatus.PENDING.value,
+            created_by_user_id=created_by_user_id,
+            is_global=is_global,
         )
         job = AnalysisJob(
             id=job_id,
@@ -166,6 +192,8 @@ class AnalysisService:
         cifra_club_url: str | None = None,
         tempo_bpm: int = 120,
         band_id: str | None = None,
+        created_by_user_id: str | None = None,
+        share_to_global: bool = True,
     ) -> dict[str, Any]:
         """Cria música completed sem job de áudio (Cifra Club ou cifra em branco)."""
         trimmed_title = title.strip() if isinstance(title, str) and title.strip() else None
@@ -201,6 +229,8 @@ class AnalysisService:
             source_ref=url or "manual",
             cifra_club_url=url,
             status=SongStatus.COMPLETED.value,
+            created_by_user_id=created_by_user_id,
+            is_global=bool(share_to_global),
         )
         self.session.add(song)
 

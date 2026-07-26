@@ -212,6 +212,8 @@ export interface SongSummary {
   duration_seconds: number | null;
   status: "pending" | "processing" | "completed" | "failed";
   source_type?: string;
+  is_global?: boolean;
+  created_by_user_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -395,6 +397,7 @@ export interface ScheduleOccurrence {
 export interface ScheduleMember {
   member_id: string;
   full_name: string;
+  role_ids?: string[];
   role_names?: string[];
   label?: string;
 }
@@ -654,6 +657,22 @@ export async function linkSongToBand(songId: string): Promise<SongSummary> {
   const response = await authFetch(`/songs/${songId}/link`, { method: "POST" });
   if (!response.ok) {
     throw new Error(await parseError(response, "Não foi possível adicionar a música à banda"));
+  }
+  return response.json();
+}
+
+export async function shareSongToGlobal(songId: string): Promise<SongSummary> {
+  const response = await authFetch(`/songs/${songId}/share`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível compartilhar na biblioteca global"));
+  }
+  return response.json();
+}
+
+export async function unshareSongFromGlobal(songId: string): Promise<SongSummary> {
+  const response = await authFetch(`/songs/${songId}/unshare`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível remover da biblioteca global"));
   }
   return response.json();
 }

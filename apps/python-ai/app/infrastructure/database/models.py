@@ -49,6 +49,8 @@ class Song(Base):
         onupdate=lambda: datetime.now(UTC),
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    is_global: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     moderation_status: Mapped[str] = mapped_column(String(32), default="active")
     blocked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     blocked_by_admin_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -335,6 +337,16 @@ class BandScheduleMember(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     schedule_id: Mapped[str] = mapped_column(String(32), index=True)
     member_id: Mapped[str] = mapped_column(String(32), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class BandScheduleMemberRole(Base):
+    __tablename__ = "band_schedule_member_roles"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    schedule_id: Mapped[str] = mapped_column(String(32), index=True)
+    member_id: Mapped[str] = mapped_column(String(32), index=True)
+    role_id: Mapped[str] = mapped_column(String(32), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 

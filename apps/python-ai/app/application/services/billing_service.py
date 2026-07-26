@@ -102,6 +102,19 @@ class BillingService:
         await self.session.commit()
         self._asaas = None
 
+    def _public_webhook_url(self) -> str:
+        from app.config import get_settings
+
+        settings = get_settings()
+        base = (settings.public_api_base_url or "").strip().rstrip("/")
+        if not base:
+            origin = (settings.web_origin or "").strip().rstrip("/")
+            if origin and "localhost" not in origin and "127.0.0.1" not in origin:
+                base = f"{origin}/api"
+            else:
+                base = "http://localhost:8080"
+        return f"{base}/webhooks/asaas"
+
     async def get_asaas_settings(self) -> dict[str, Any]:
         api_key = await self.get_setting("asaas_api_key")
         masked = ""
@@ -112,6 +125,7 @@ class BillingService:
             "asaas_api_key_configured": bool(api_key),
             "asaas_environment": await self.get_setting("asaas_environment") or "sandbox",
             "asaas_webhook_token_configured": bool(await self.get_setting("asaas_webhook_token")),
+            "asaas_webhook_url": self._public_webhook_url(),
         }
 
     async def holiday_dates(self, year: int | None = None) -> set[date]:

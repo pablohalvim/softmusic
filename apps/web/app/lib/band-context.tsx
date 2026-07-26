@@ -25,6 +25,7 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
   const refreshBands = useCallback(async () => {
     if (!getAccessToken()) {
       setBands([]);
+      setActiveBandIdState(null);
       setLoading(false);
       return;
     }
@@ -37,6 +38,7 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
       const payload = await response.json();
       const items: BandSummary[] = payload.items ?? [];
       setBands(items);
+      // Aplica localStorage assim que a lista chega — antes de qualquer tela decidir redirect.
       const stored = loadActiveBandId();
       if (stored && items.some((b) => b.id === stored)) {
         setActiveBandIdState(stored);
@@ -47,6 +49,8 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
         clearActiveBandId();
         setActiveBandIdState(null);
       }
+    } catch {
+      // Não zera bands em falha transitória — evita AuthGuard mandar para /bandas.
     } finally {
       setLoading(false);
     }

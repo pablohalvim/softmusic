@@ -309,6 +309,30 @@ export function App() {
               Webhook: {settings.asaas_webhook_token_configured ? "configurado" : "não configurado"}
             </p>
           ) : null}
+          {settings?.asaas_webhook_url ? (
+            <div className="webhook-url-box">
+              <div className="webhook-url-label">URL do webhook (cadastrar na Asaas)</div>
+              <div className="webhook-url-row">
+                <code className="webhook-url">{settings.asaas_webhook_url}</code>
+                <button
+                  type="button"
+                  className="webhook-copy-btn"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(settings.asaas_webhook_url).then(
+                      () => setStatus("URL do webhook copiada"),
+                      () => setStatus("Não foi possível copiar a URL"),
+                    );
+                  }}
+                >
+                  Copiar
+                </button>
+              </div>
+              <p className="muted small">
+                Em Integrações → Webhooks na Asaas, use esta URL e o mesmo token do campo abaixo no header{" "}
+                <code>asaas-access-token</code>.
+              </p>
+            </div>
+          ) : null}
           <form onSubmit={(e) => void saveSettings(e)} className="stack">
             <label>
               Token Asaas (API key)

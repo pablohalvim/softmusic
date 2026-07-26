@@ -17,6 +17,7 @@ from app.infrastructure.database.models import (
     BandSavedAddress,
     BandSchedule,
     BandScheduleMember,
+    BandScheduleMemberRole,
     BandScheduleOccurrence,
     User,
 )
@@ -45,6 +46,32 @@ def format_member_with_roles(full_name: str, role_names: list[str]) -> str:
     if role_names:
         return f"{full_name} ({', '.join(role_names)})"
     return full_name
+
+
+def _normalize_members_payload(payload: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    """Aceita `members[{member_id,role_ids}]` ou legado `member_ids`."""
+    raw_members = payload.get("members")
+    if isinstance(raw_members, list) and len(raw_members) > 0:
+        out: list[tuple[str, list[str]]] = []
+        seen: set[str] = set()
+        for entry in raw_members:
+            if not isinstance(entry, dict):
+                continue
+            member_id = str(entry.get("member_id") or "").strip()
+            if not member_id or member_id in seen:
+                continue
+            seen.add(member_id)
+            role_ids = [
+                str(role_id).strip()
+                for role_id in (entry.get("role_ids") or [])
+                if str(role_id).strip()
+            ]
+            out.append((member_id, role_ids))
+        return out
+
+    member_ids = [str(mid).strip() for mid in (payload.get("member_ids") or []) if str(mid).strip()]
+    # role_ids vazios = fallback para todas as funções do perfil
+    return [(member_id, []) for member_id in dict.fromkeys(member_ids)]
 
 
 class ScheduleService:
@@ -142,7 +169,13 @@ class ScheduleService:
         if not title:
             raise ValueError("Informe o título da escala")
 
-        members = await self._load_active_members(band_id, list(payload.get("member_ids") or []))
+        member_selections = _normalize_members_payload(payload)
+        if not member_selections:
+            raise ValueError("Selecione ao menos um integrante")
+        members = await self._load_active_members(
+            band_id, [member_id for member_id, _ in member_selections]
+        )
+        role_ids_by_member = await self._validate_member_role_selection(band_id, member_selections)
         event = payload.get("event") or {}
         event_addr = await self._resolve_address(band_id, event)
         event_start = _parse_dt(str(event.get("starts_at", "")))
@@ -212,14 +245,7 @@ class ScheduleService:
                         )
                     )
 
-        for member in members:
-            self.session.add(
-                BandScheduleMember(
-                    id=_new_id("scm"),
-                    schedule_id=schedule.id,
-                    member_id=member.id,
-                )
-            )
+        await self._replace_schedule_members(schedule.id, members, role_ids_by_member)
 
         if bool(payload.get("save_event_address")) and (payload.get("save_event_address_label") or "").strip():
             if not event_addr.get("saved_address_id"):
@@ -239,7 +265,7 @@ class ScheduleService:
 
         band = await self.bands.get_band(band_id)
         if band is not None:
-            roster = await self._schedule_member_roster(members)
+            roster = await self._roster_for_schedule(schedule.id)
             await self._notify_occurrences(
                 band=band,
                 occurrences=created_occurrences,
@@ -311,9 +337,15 @@ class ScheduleService:
 
         removed_members: list[BandMember] = []
         current_members: list[BandMember] = []
-        if "member_ids" in payload:
-            member_ids = list(payload.get("member_ids") or [])
-            current_members = await self._load_active_members(band_id, member_ids)
+        members_touched = "members" in payload or "member_ids" in payload
+        if members_touched:
+            member_selections = _normalize_members_payload(payload)
+            if not member_selections:
+                raise ValueError("Selecione ao menos um integrante")
+            current_members = await self._load_active_members(
+                band_id, [member_id for member_id, _ in member_selections]
+            )
+            role_ids_by_member = await self._validate_member_role_selection(band_id, member_selections)
             new_ids = {m.id for m in current_members}
             left_ids = previous_member_ids - new_ids
             if left_ids:
@@ -322,20 +354,7 @@ class ScheduleService:
                 )
                 removed_members = list(left_result.scalars().all())
 
-            existing = await self.session.execute(
-                select(BandScheduleMember).where(BandScheduleMember.schedule_id == schedule.id)
-            )
-            for link in existing.scalars().all():
-                await self.session.delete(link)
-            await self.session.flush()
-            for member in current_members:
-                self.session.add(
-                    BandScheduleMember(
-                        id=_new_id("scm"),
-                        schedule_id=schedule.id,
-                        member_id=member.id,
-                    )
-                )
+            await self._replace_schedule_members(schedule.id, current_members, role_ids_by_member)
         else:
             current_members = await self._members_for_schedule(schedule.id)
 
@@ -344,7 +363,7 @@ class ScheduleService:
 
         band = await self.bands.get_band(band_id)
         if band is not None:
-            roster = await self._schedule_member_roster(current_members)
+            roster = await self._roster_for_schedule(schedule.id)
             if removed_members:
                 await self._notify_occurrences(
                     band=band,
@@ -384,7 +403,7 @@ class ScheduleService:
         members = await self._members_for_schedule(schedule.id)
         band = await self.bands.get_band(band_id)
         if band is not None and members:
-            roster = await self._schedule_member_roster(members)
+            roster = await self._roster_for_schedule(schedule.id)
             await self._notify_occurrences(
                 band=band,
                 occurrences=[occ],
@@ -676,12 +695,15 @@ class ScheduleService:
         return await self._schedule_member_roster(
             [member for member, _ in pairs],
             users={member.id: user for member, user in pairs},
+            schedule_id=schedule_id,
         )
 
     async def _schedule_member_roster(
         self,
         members: list[BandMember],
         users: dict[str, User] | None = None,
+        *,
+        schedule_id: str | None = None,
     ) -> list[dict[str, Any]]:
         if not members:
             return []
@@ -692,17 +714,30 @@ class ScheduleService:
             by_user_id = {u.id: u for u in users_result.scalars().all()}
             users = {m.id: by_user_id[m.user_id] for m in members if m.user_id in by_user_id}
 
-        roles_by_member = await self._role_names_by_member_ids([m.id for m in members])
+        member_ids = [m.id for m in members]
+        profile_roles = await self._roles_by_member_ids(member_ids)
+        schedule_roles = (
+            await self._schedule_roles_by_member_ids(schedule_id, member_ids)
+            if schedule_id
+            else {}
+        )
+
         roster: list[dict[str, Any]] = []
         for member in members:
             user = users.get(member.id)
             if user is None:
                 continue
-            role_names = roles_by_member.get(member.id, [])
+            selected = schedule_roles.get(member.id) or []
+            profile = profile_roles.get(member.id) or []
+            # Escala com funções explícitas → só essas; senão fallback do perfil.
+            roles = selected if selected else profile
+            role_ids = [role_id for role_id, _ in roles]
+            role_names = [name for _, name in roles]
             roster.append(
                 {
                     "member_id": member.id,
                     "full_name": user.full_name,
+                    "role_ids": role_ids,
                     "role_names": role_names,
                     "label": format_member_with_roles(user.full_name, role_names),
                 }
@@ -710,19 +745,107 @@ class ScheduleService:
         roster.sort(key=lambda item: item["full_name"].casefold())
         return roster
 
-    async def _role_names_by_member_ids(self, member_ids: list[str]) -> dict[str, list[str]]:
+    async def _replace_schedule_members(
+        self,
+        schedule_id: str,
+        members: list[BandMember],
+        role_ids_by_member: dict[str, list[str]],
+    ) -> None:
+        existing_members = await self.session.execute(
+            select(BandScheduleMember).where(BandScheduleMember.schedule_id == schedule_id)
+        )
+        for link in existing_members.scalars().all():
+            await self.session.delete(link)
+
+        existing_roles = await self.session.execute(
+            select(BandScheduleMemberRole).where(BandScheduleMemberRole.schedule_id == schedule_id)
+        )
+        for link in existing_roles.scalars().all():
+            await self.session.delete(link)
+        await self.session.flush()
+
+        for member in members:
+            self.session.add(
+                BandScheduleMember(
+                    id=_new_id("scm"),
+                    schedule_id=schedule_id,
+                    member_id=member.id,
+                )
+            )
+            for role_id in role_ids_by_member.get(member.id, []):
+                self.session.add(
+                    BandScheduleMemberRole(
+                        id=_new_id("smr"),
+                        schedule_id=schedule_id,
+                        member_id=member.id,
+                        role_id=role_id,
+                    )
+                )
+
+    async def _validate_member_role_selection(
+        self,
+        band_id: str,
+        selections: list[tuple[str, list[str]]],
+    ) -> dict[str, list[str]]:
+        member_ids = [member_id for member_id, _ in selections]
+        allowed = await self._roles_by_member_ids(member_ids, band_id=band_id)
+
+        out: dict[str, list[str]] = {}
+        for member_id, selected_role_ids in selections:
+            allowed_ids = {role_id for role_id, _ in allowed.get(member_id, [])}
+            # Se o membro tem funções no perfil, exige ao menos uma na escala.
+            if allowed_ids and not selected_role_ids:
+                raise ValueError("Escolha a função de cada integrante marcado na escala")
+            unknown = [role_id for role_id in selected_role_ids if role_id not in allowed_ids]
+            if unknown:
+                raise ValueError("Função inválida para um dos integrantes da escala")
+            out[member_id] = list(dict.fromkeys(selected_role_ids))
+        return out
+
+    async def _roles_by_member_ids(
+        self,
+        member_ids: list[str],
+        *,
+        band_id: str | None = None,
+    ) -> dict[str, list[tuple[str, str]]]:
         if not member_ids:
             return {}
-        result = await self.session.execute(
-            select(BandMemberRole.member_id, BandRole.name)
+        query = (
+            select(BandMemberRole.member_id, BandRole.id, BandRole.name)
             .join(BandRole, BandRole.id == BandMemberRole.role_id)
             .where(BandMemberRole.member_id.in_(member_ids))
             .order_by(BandRole.sort_order.asc(), BandRole.name.asc())
         )
-        out: dict[str, list[str]] = {mid: [] for mid in member_ids}
-        for member_id, name in result.all():
-            out.setdefault(member_id, []).append(name)
+        if band_id:
+            query = query.where(BandRole.band_id == band_id)
+        result = await self.session.execute(query)
+        out: dict[str, list[tuple[str, str]]] = {mid: [] for mid in member_ids}
+        for member_id, role_id, name in result.all():
+            out.setdefault(member_id, []).append((role_id, name))
         return out
+
+    async def _schedule_roles_by_member_ids(
+        self, schedule_id: str, member_ids: list[str]
+    ) -> dict[str, list[tuple[str, str]]]:
+        if not member_ids:
+            return {}
+        result = await self.session.execute(
+            select(BandScheduleMemberRole.member_id, BandRole.id, BandRole.name)
+            .join(BandRole, BandRole.id == BandScheduleMemberRole.role_id)
+            .where(
+                BandScheduleMemberRole.schedule_id == schedule_id,
+                BandScheduleMemberRole.member_id.in_(member_ids),
+            )
+            .order_by(BandRole.sort_order.asc(), BandRole.name.asc())
+        )
+        out: dict[str, list[tuple[str, str]]] = {mid: [] for mid in member_ids}
+        for member_id, role_id, name in result.all():
+            out.setdefault(member_id, []).append((role_id, name))
+        return out
+
+    async def _role_names_by_member_ids(self, member_ids: list[str]) -> dict[str, list[str]]:
+        roles = await self._roles_by_member_ids(member_ids)
+        return {member_id: [name for _, name in items] for member_id, items in roles.items()}
 
     @staticmethod
     def _serialize_address(addr: BandSavedAddress) -> dict[str, Any]:

@@ -92,6 +92,7 @@ export const SavedAddressSchema = z.object({
 export const ScheduleMemberSchema = z.object({
   member_id: z.string(),
   full_name: z.string(),
+  role_ids: z.array(z.string()).optional(),
   role_names: z.array(z.string()).optional(),
   label: z.string().optional(),
 });

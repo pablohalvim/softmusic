@@ -46,8 +46,10 @@ export default function Analyze() {
   const [mode, setMode] = useState<AnalyzeMode>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [songTitle, setSongTitle] = useState("");
+  const [songArtist, setSongArtist] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [cifraClubUrl, setCifraClubUrl] = useState("");
+  const [shareToGlobal, setShareToGlobal] = useState(true);
   const [jobId, setJobId] = useState<string | null>(null);
   const [songId, setSongId] = useState<string | null>(null);
   const [duplicateInfo, setDuplicateInfo] = useState<{
@@ -82,8 +84,9 @@ export default function Analyze() {
   };
 
   const buildOptions = (extra?: Record<string, string>) => {
-    const options: Record<string, string> = {
+    const options: Record<string, string | boolean> = {
       educational_level: "intermediate",
+      share_to_global: shareToGlobal,
       ...extra,
     };
     if (cifraClubUrl.trim()) {
@@ -93,10 +96,22 @@ export default function Analyze() {
   };
 
   const uploadMutation = useMutation({
-    mutationFn: async ({ selected, title }: { selected: File; title: string }) => {
+    mutationFn: async ({
+      selected,
+      title,
+      artist,
+    }: {
+      selected: File;
+      title: string;
+      artist: string;
+    }) => {
       const formData = new FormData();
       formData.set("file", selected);
-      formData.set("options", JSON.stringify(buildOptions({ title })));
+      const options = buildOptions({ title });
+      if (artist.trim()) {
+        options.artist = artist.trim();
+      }
+      formData.set("options", JSON.stringify(options));
       let response: Response;
       try {
         response = await authFetch("/songs/upload", {
@@ -220,6 +235,23 @@ export default function Analyze() {
           Se informado, a cifra com letra será importada do Cifra Club e usada na página de cifra em
           vez da detecção automática.
         </p>
+        <label className="flex items-start gap-2 pt-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={shareToGlobal}
+            disabled={isPending}
+            onChange={(event) => setShareToGlobal(event.target.checked)}
+          />
+          <span>
+            <span className="block font-medium text-slate-200">
+              Compartilhar na Biblioteca global
+            </span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Se excluir da banda depois, a música continua disponível para adicionar de novo.
+            </span>
+          </span>
+        </label>
       </div>
 
       {mode === "upload" ? (
@@ -237,7 +269,11 @@ export default function Analyze() {
               return;
             }
             if (file) {
-              uploadMutation.mutate({ selected: file, title });
+              uploadMutation.mutate({
+                selected: file,
+                title,
+                artist: songArtist.trim(),
+              });
             }
           }}
         >
@@ -250,6 +286,18 @@ export default function Analyze() {
               placeholder="Ex.: Grande É o Senhor"
               value={songTitle}
               onChange={(event) => setSongTitle(event.target.value)}
+              disabled={isPending}
+              className={inputClass}
+            />
+          </label>
+          <label className={labelClass}>
+            <span>Nome do Artista</span>
+            <input
+              type="text"
+              maxLength={200}
+              placeholder="Ex.: Fernandinho"
+              value={songArtist}
+              onChange={(event) => setSongArtist(event.target.value)}
               disabled={isPending}
               className={inputClass}
             />

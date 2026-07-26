@@ -59,6 +59,8 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
   const [saveEventLabel, setSaveEventLabel] = useState("");
   const [rehearsals, setRehearsals] = useState<RehearsalDraft[]>([newRehearsal()]);
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  /** Funções escolhidas por integrante nesta escala. */
+  const [selectedRoles, setSelectedRoles] = useState<Map<string, Set<string>>>(() => new Map());
 
   // Edit mode: single occurrence fields
   const [editStart, setEditStart] = useState("");
@@ -84,8 +86,33 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
   useEffect(() => {
     if (mode !== "edit" || !scheduleQuery.data) return;
     const schedule = scheduleQuery.data;
+    const catalog = membersQuery.data ?? [];
     setTitle(schedule.title || "");
     setSelectedMembers(new Set(schedule.members.map((m) => m.member_id)));
+
+    const rolesMap = new Map<string, Set<string>>();
+    for (const entry of schedule.members) {
+      if (entry.role_ids && entry.role_ids.length > 0) {
+        rolesMap.set(entry.member_id, new Set(entry.role_ids));
+        continue;
+      }
+      const profile = catalog.find((member) => member.id === entry.member_id);
+      if (!profile) continue;
+      if (entry.role_names && entry.role_names.length > 0) {
+        const matched = profile.roles
+          .filter((role) => entry.role_names!.includes(role.name))
+          .map((role) => role.id);
+        if (matched.length > 0) {
+          rolesMap.set(entry.member_id, new Set(matched));
+          continue;
+        }
+      }
+      if (profile.roles.length === 1) {
+        rolesMap.set(entry.member_id, new Set([profile.roles[0]!.id]));
+      }
+    }
+    setSelectedRoles(rolesMap);
+
     const occ =
       schedule.occurrences.find((o) => o.id === occurrenceId) ?? schedule.occurrences[0];
     if (!occ) return;
@@ -104,10 +131,81 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
         place_id: occ.place_id ?? null,
       });
     }
-  }, [mode, scheduleQuery.data, occurrenceId]);
+  }, [mode, scheduleQuery.data, occurrenceId, membersQuery.data]);
+
+  function buildMembersPayload() {
+    const catalog = membersQuery.data ?? [];
+    return [...selectedMembers].map((memberId) => {
+      const profile = catalog.find((member) => member.id === memberId);
+      const picked = selectedRoles.get(memberId);
+      let roleIds = picked ? [...picked] : [];
+      if (roleIds.length === 0 && profile?.roles.length === 1) {
+        roleIds = [profile.roles[0]!.id];
+      }
+      return { member_id: memberId, role_ids: roleIds };
+    });
+  }
+
+  function assertMembersReady() {
+    if (selectedMembers.size === 0) {
+      throw new Error("Selecione ao menos um integrante");
+    }
+    const catalog = membersQuery.data ?? [];
+    for (const memberId of selectedMembers) {
+      const profile = catalog.find((member) => member.id === memberId);
+      if (!profile || profile.roles.length === 0) continue;
+      const picked = selectedRoles.get(memberId);
+      const count = picked?.size ?? (profile.roles.length === 1 ? 1 : 0);
+      if (count === 0) {
+        throw new Error(`Escolha a função de ${profile.full_name} nesta escala`);
+      }
+    }
+  }
+
+  function toggleMember(memberId: string, roleIds: string[]) {
+    const willSelect = !selectedMembers.has(memberId);
+    setSelectedMembers((prev) => {
+      const next = new Set(prev);
+      if (willSelect) next.add(memberId);
+      else next.delete(memberId);
+      return next;
+    });
+    setSelectedRoles((prev) => {
+      const next = new Map(prev);
+      if (!willSelect) {
+        next.delete(memberId);
+      } else if (roleIds.length === 1) {
+        next.set(memberId, new Set(roleIds));
+      } else if (roleIds.length > 1) {
+        // Multi-função: começa sem seleção para o usuário escolher.
+        next.set(memberId, new Set());
+      } else {
+        next.delete(memberId);
+      }
+      return next;
+    });
+  }
+
+  function toggleMemberRole(memberId: string, roleId: string) {
+    setSelectedRoles((prev) => {
+      const next = new Map(prev);
+      const current = new Set(next.get(memberId) ?? []);
+      if (current.has(roleId)) current.delete(roleId);
+      else current.add(roleId);
+      next.set(memberId, current);
+      return next;
+    });
+    setSelectedMembers((prev) => {
+      if (prev.has(memberId)) return prev;
+      const next = new Set(prev);
+      next.add(memberId);
+      return next;
+    });
+  }
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      assertMembersReady();
       const saved = addressesQuery.data?.find((a) => a.id === savedEventId);
       if (!saved && !eventPlace) throw new Error("Informe o endereço do evento");
       if (!title.trim()) throw new Error("Informe o título");
@@ -160,7 +258,7 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
 
       return createBandSchedule(bandId, {
         title: title.trim(),
-        member_ids: [...selectedMembers],
+        members: buildMembersPayload(),
         event: eventBlock,
         rehearsals: rehearsalsPayload,
         save_event_address: saveEventAddress && !saved,
@@ -178,12 +276,13 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
 
   const editMutation = useMutation({
     mutationFn: async () => {
+      assertMembersReady();
       if (!occurrenceId) throw new Error("Ocorrência inválida");
       const saved = addressesQuery.data?.find((a) => a.id === editSavedId);
       const body: Record<string, unknown> = {
         starts_at: fromDatetimeLocalValue(editStart),
         ends_at: fromDatetimeLocalValue(editEnd),
-        member_ids: [...selectedMembers],
+        members: buildMembersPayload(),
       };
       if (editKind === "event") {
         body.title = title.trim();
@@ -468,35 +567,57 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
 
       <div className={`${panelClass} space-y-3 p-4`}>
         <h3 className="font-medium">Integrantes</h3>
+        <p className="text-xs text-slate-500">
+          Marque quem toca e escolha a função desta escala (ex.: só Violão).
+        </p>
         <div className="grid gap-2 sm:grid-cols-2">
           {(membersQuery.data ?? []).map((member) => {
             const checked = selectedMembers.has(member.id);
-            const rolesLabel = member.roles.map((r) => r.name).join(", ");
+            const roleIds = member.roles.map((role) => role.id);
+            const picked = selectedRoles.get(member.id) ?? new Set<string>();
+            const multiRole = member.roles.length > 1;
             return (
-              <label
+              <div
                 key={member.id}
-                className="flex items-start gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-slate-300"
+                className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-slate-300"
               >
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={checked}
-                  onChange={() => {
-                    setSelectedMembers((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(member.id)) next.delete(member.id);
-                      else next.add(member.id);
-                      return next;
-                    });
-                  }}
-                />
-                <span className="min-w-0">
-                  <span className="block font-medium text-slate-200">{member.full_name}</span>
-                  <span className="mt-0.5 block text-xs text-slate-500">
-                    {rolesLabel || "Sem função definida"}
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={checked}
+                    onChange={() => toggleMember(member.id, roleIds)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-slate-200">{member.full_name}</span>
+                    {!multiRole ? (
+                      <span className="mt-0.5 block text-xs text-slate-500">
+                        {member.roles[0]?.name ?? "Sem função definida"}
+                      </span>
+                    ) : null}
                   </span>
-                </span>
-              </label>
+                </label>
+                {checked && multiRole ? (
+                  <div className="mt-2 ml-6 space-y-1.5 border-l border-white/10 pl-3">
+                    <p className="text-[11px] uppercase tracking-wide text-slate-500">
+                      Função nesta escala
+                    </p>
+                    {member.roles.map((role) => (
+                      <label
+                        key={role.id}
+                        className="flex items-center gap-2 text-xs text-slate-300"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={picked.has(role.id)}
+                          onChange={() => toggleMemberRole(member.id, role.id)}
+                        />
+                        <span>{role.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
