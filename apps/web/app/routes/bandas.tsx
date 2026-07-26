@@ -12,7 +12,6 @@ import {
   btnPrimary,
   inputClass,
   labelClass,
-  linkClass,
   panelClass,
   panelHoverClass,
 } from "../lib/ui-classes";
@@ -80,12 +79,6 @@ export default function BandasPage() {
           />
         ))}
       </div>
-
-      {bands.length > 0 ? (
-        <Link to="/library" className={`text-sm ${linkClass}`}>
-          Ir para biblioteca com &quot;{activeBand?.name}&quot;
-        </Link>
-      ) : null}
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center">
@@ -162,6 +155,9 @@ function BandCard({
 }) {
   const [email, setEmail] = useState("");
   const [canAnalyze, setCanAnalyze] = useState(false);
+  const [canInvite, setCanInvite] = useState(false);
+  const [canManage, setCanManage] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteOk, setInviteOk] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -173,10 +169,18 @@ function BandCard({
     setInviteError(null);
     setInviteOk(null);
     try {
-      await inviteBandMember(band.id, email.trim(), canAnalyze);
+      await inviteBandMember(band.id, email.trim(), {
+        can_analyze_songs: canAnalyze,
+        can_invite_members: canInvite,
+        can_manage_members: canManage,
+        can_delete_songs: canDelete,
+      });
       setInviteOk(`Convite enviado para ${email.trim()}`);
       setEmail("");
       setCanAnalyze(false);
+      setCanInvite(false);
+      setCanManage(false);
+      setCanDelete(false);
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : "Erro ao convidar");
     } finally {
@@ -206,8 +210,18 @@ function BandCard({
 
       <div className="mt-3 flex flex-col gap-2 border-t border-white/10 pt-3 sm:flex-row sm:flex-wrap">
         <Link
-          to={`/bandas/${band.id}`}
+          to="/library"
           className={`${btnPrimary} px-3 py-2 text-center text-sm`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+        >
+          Biblioteca
+        </Link>
+        <Link
+          to={`/bandas/${band.id}`}
+          className={`${btnGhost} px-3 py-2 text-center text-sm`}
           onClick={(e) => e.stopPropagation()}
         >
           Gerenciar Banda
@@ -231,10 +245,25 @@ function BandCard({
               className={inputClass}
             />
           </label>
-          <label className="flex items-center gap-2 text-sm text-slate-300">
-            <input type="checkbox" checked={canAnalyze} onChange={(e) => setCanAnalyze(e.target.checked)} />
-            Pode analisar músicas
-          </label>
+          <fieldset className="space-y-2">
+            <legend className="text-sm text-slate-300">Permissões do convidado</legend>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input type="checkbox" checked={canAnalyze} onChange={(e) => setCanAnalyze(e.target.checked)} />
+              Pode enviar/analisar músicas
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input type="checkbox" checked={canInvite} onChange={(e) => setCanInvite(e.target.checked)} />
+              Pode convidar membros
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input type="checkbox" checked={canManage} onChange={(e) => setCanManage(e.target.checked)} />
+              Pode gerenciar funções, membros e agenda
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input type="checkbox" checked={canDelete} onChange={(e) => setCanDelete(e.target.checked)} />
+              Pode excluir músicas da biblioteca
+            </label>
+          </fieldset>
           {inviteError ? <p className="text-sm text-red-400">{inviteError}</p> : null}
           {inviteOk ? <p className="text-sm text-green-300">{inviteOk}</p> : null}
           <button type="submit" disabled={sending} className={`${btnPrimary} disabled:opacity-60`}>

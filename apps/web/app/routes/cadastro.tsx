@@ -148,7 +148,7 @@ export default function CadastroPage() {
           body: JSON.stringify({ name: band_name.trim(), plan_code }),
         });
       }
-      navigate(inviteToken ? "/" : "/bandas");
+      navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no cadastro");
     } finally {

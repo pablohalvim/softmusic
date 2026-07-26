@@ -26,6 +26,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(loginValue.trim(), password);
+      // Home por padrão; ?next= só para fluxos específicos (ex.: convite).
       navigate(safeNextPath(searchParams.get("next")));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha no login");

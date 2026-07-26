@@ -45,6 +45,7 @@ import {
 } from "../../lib/ui-classes";
 import { SaveCifraVariationModal } from "./SaveCifraVariationModal";
 import { FoundChordsBar } from "./FoundChordsBar";
+import { useToast } from "../../lib/toast";
 
 interface ImportedCifraSheet {
   original_key: string;
@@ -208,15 +209,8 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
   const [pickMode, setPickMode] = useState<"major" | "minor">("major");
   const [toolsMinimizedMobile, setToolsMinimizedMobile] = useState(readToolsMinimizedMobile);
   const [cifraEditMode, setCifraEditMode] = useState(false);
-
-  const toggleCifraEditMode = () => {
-    setCifraEditMode((current) => {
-      if (current) {
-        setEditingKey(null);
-      }
-      return !current;
-    });
-  };
+  const [persistingVariation, setPersistingVariation] = useState(false);
+  const toast = useToast();
 
   const toggleToolsMinimizedMobile = () => {
     setToolsMinimizedMobile((current) => {
@@ -413,6 +407,55 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
     [chordData.song_id, importedSheet],
   );
 
+  const persistActiveVariation = useCallback(
+    async (snapshotPatch?: Partial<CifraVariationSnapshot>) => {
+      if (!activeVariationId) return null;
+      const active = variations.find((entry) => entry.id === activeVariationId);
+      if (!active) return null;
+
+      setPersistingVariation(true);
+      try {
+        const snapshot = { ...buildVariationSnapshot(), ...snapshotPatch };
+        const saved = await saveCifraVariationToServer(
+          chordData.song_id,
+          active.name,
+          snapshot,
+        );
+        const items = await fetchCifraVariations(chordData.song_id);
+        setVariations(items.length > 0 ? items : [saved]);
+        setActiveVariationId(saved.id);
+        return saved;
+      } finally {
+        setPersistingVariation(false);
+      }
+    },
+    [activeVariationId, variations, buildVariationSnapshot, chordData.song_id],
+  );
+
+  const toggleCifraEditMode = () => {
+    if (cifraEditMode) {
+      setEditingKey(null);
+      setCifraEditMode(false);
+      if (activeVariationId) {
+        void persistActiveVariation()
+          .then((saved) => {
+            if (saved) {
+              toast.success(`Alterações salvas em “${saved.name}”.`);
+            }
+          })
+          .catch((error) => {
+            toast.warn(
+              error instanceof Error
+                ? error.message
+                : "Não foi possível salvar a variação selecionada.",
+            );
+          });
+      }
+      return;
+    }
+    setCifraEditMode(true);
+  };
+
   const handleSaveVariation = async (name: string) => {
     const saved = await saveCifraVariationToServer(
       chordData.song_id,
@@ -558,12 +601,36 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
     setKeyOverride(next);
     saveCifraKeyOverride(chordData.song_id, next);
     setShowKeyPicker(false);
+    if (activeVariationId) {
+      void persistActiveVariation({ keyOverride: next })
+        .then((saved) => {
+          if (saved) {
+            toast.success(`Tom salvo em “${saved.name}”.`);
+          }
+        })
+        .catch((error) => {
+          toast.warn(
+            error instanceof Error
+              ? error.message
+              : "Tom aplicado, mas não foi possível salvar na variação.",
+          );
+        });
+    }
   };
 
   const handleClearKeyOverride = () => {
     setKeyOverride(null);
     clearCifraKeyOverride(chordData.song_id);
     setShowKeyPicker(false);
+    if (activeVariationId) {
+      void persistActiveVariation({ keyOverride: null }).catch((error) => {
+        toast.warn(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível atualizar a variação selecionada.",
+        );
+      });
+    }
   };
 
   const handleGlobalChordReplace = (fromDisplay: string, toDisplay: string) => {
@@ -884,14 +951,15 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
               <button
                 type="button"
                 onClick={toggleCifraEditMode}
-                className={`shrink-0 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                disabled={persistingVariation}
+                className={`shrink-0 rounded-lg border px-3 py-1.5 text-sm font-medium transition disabled:opacity-60 ${
                   cifraEditMode
                     ? "border-green-500/60 bg-green-500/15 text-green-200 hover:bg-green-500/25"
                     : "border-slate-700 bg-slate-950/50 text-slate-200 hover:border-slate-500 hover:bg-slate-900"
                 }`}
                 aria-pressed={cifraEditMode}
               >
-                {cifraEditMode ? "Concluir" : "Editar"}
+                {persistingVariation ? "Salvando..." : cifraEditMode ? "Concluir" : "Editar"}
               </button>
             </div>
             <div className="mt-3 space-y-2">
@@ -960,10 +1028,11 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                   </label>
                   <button
                     type="button"
-                    className="sm-btn-primary px-3 py-2 text-xs"
+                    className="sm-btn-primary px-3 py-2 text-xs disabled:opacity-60"
                     onClick={handleApplyKeyOverride}
+                    disabled={persistingVariation}
                   >
-                    Aplicar
+                    {persistingVariation ? "Salvando..." : "Aplicar"}
                   </button>
                   <button
                     type="button"

@@ -3,23 +3,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
-import { PlacesAddressInput } from "../components/PlacesAddressInput";
 import {
+  cancelScheduleOccurrence,
   changeBandPlan,
   createBandRole,
-  createBandSchedule,
   deleteBandRole,
-  fetchBandAddresses,
   fetchBandMembers,
   fetchBandRoles,
   fetchBandSchedules,
+  formatScheduleMemberLabel,
   removeBandMember,
   updateBandMember,
   updateBandRole,
   type BandMemberDetail,
+  type ScheduleGridRow,
+  type ScheduleMember,
 } from "../lib/api";
 import { useBand } from "../lib/band-context";
-import type { PlaceSelection } from "../lib/google-places";
 import {
   btnGhost,
   btnPrimary,
@@ -493,289 +493,176 @@ function MemberEditModal({
 
 function AgendaTab({ bandId, canManage }: { bandId: string; canManage: boolean }) {
   const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
-  const [title, setTitle] = useState("");
-  const [eventStart, setEventStart] = useState("");
-  const [eventEnd, setEventEnd] = useState("");
-  const [rehStart, setRehStart] = useState("");
-  const [rehEnd, setRehEnd] = useState("");
-  const [eventPlace, setEventPlace] = useState<PlaceSelection | null>(null);
-  const [rehPlace, setRehPlace] = useState<PlaceSelection | null>(null);
-  const [sameAddress, setSameAddress] = useState(true);
-  const [savedEventId, setSavedEventId] = useState("");
-  const [saveAddress, setSaveAddress] = useState(false);
-  const [saveLabel, setSaveLabel] = useState("");
-  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const [rosterRow, setRosterRow] = useState<ScheduleGridRow | null>(null);
+  const [cancelRow, setCancelRow] = useState<ScheduleGridRow | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const schedulesQuery = useQuery({
     queryKey: ["band-schedules", bandId],
     queryFn: () => fetchBandSchedules(bandId),
   });
-  const membersQuery = useQuery({
-    queryKey: ["band-members", bandId],
-    queryFn: () => fetchBandMembers(bandId),
-  });
-  const addressesQuery = useQuery({
-    queryKey: ["band-addresses", bandId],
-    queryFn: () => fetchBandAddresses(bandId),
-  });
 
-  const createMutation = useMutation({
-    mutationFn: () => {
-      const saved = addressesQuery.data?.find((a) => a.id === savedEventId);
-      const eventBlock = saved
-        ? {
-            starts_at: new Date(eventStart).toISOString(),
-            ends_at: new Date(eventEnd).toISOString(),
-            saved_address_id: saved.id,
-          }
-        : {
-            starts_at: new Date(eventStart).toISOString(),
-            ends_at: new Date(eventEnd).toISOString(),
-            formatted_address: eventPlace!.formatted_address,
-            lat: eventPlace!.lat,
-            lng: eventPlace!.lng,
-            place_id: eventPlace!.place_id,
-          };
-
-      const rehearsalBlock = sameAddress
-        ? {
-            starts_at: new Date(rehStart).toISOString(),
-            ends_at: new Date(rehEnd).toISOString(),
-          }
-        : rehPlace
-          ? {
-              starts_at: new Date(rehStart).toISOString(),
-              ends_at: new Date(rehEnd).toISOString(),
-              formatted_address: rehPlace.formatted_address,
-              lat: rehPlace.lat,
-              lng: rehPlace.lng,
-              place_id: rehPlace.place_id,
-            }
-          : null;
-
-      if (!rehearsalBlock) {
-        throw new Error("Informe o endereço do ensaio");
-      }
-      if (!saved && !eventPlace) {
-        throw new Error("Informe o endereço do evento");
-      }
-
-      return createBandSchedule(bandId, {
-        title: title.trim() || null,
-        member_ids: [...selectedMembers],
-        event: eventBlock,
-        rehearsal: rehearsalBlock,
-        rehearsal_same_as_event_address: sameAddress,
-        save_event_address: saveAddress && !saved,
-        save_event_address_label: saveLabel.trim() || null,
-      });
-    },
+  const cancelMutation = useMutation({
+    mutationFn: (occurrenceId: string) => cancelScheduleOccurrence(bandId, occurrenceId),
     onSuccess: async () => {
-      setError(null);
-      setTitle("");
-      setSelectedMembers(new Set());
+      setCancelRow(null);
+      setActionError(null);
       await queryClient.invalidateQueries({ queryKey: ["band-schedules", bandId] });
-      await queryClient.invalidateQueries({ queryKey: ["band-addresses", bandId] });
       await queryClient.invalidateQueries({ queryKey: ["schedule-upcoming"] });
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Erro"),
+    onError: (err) => setActionError(err instanceof Error ? err.message : "Erro ao cancelar"),
   });
 
+  const rows = schedulesQuery.data ?? [];
+
   return (
-    <div className="space-y-6">
-      {canManage ? (
-        <form
-          className={`${panelClass} space-y-4 p-4`}
-          onSubmit={(e) => {
-            e.preventDefault();
-            createMutation.mutate();
-          }}
-        >
-          <h2 className="font-medium">Nova escala</h2>
-          <label className={labelClass}>
-            <span>Título (opcional)</span>
-            <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />
-          </label>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className={labelClass}>
-              <span>Início do evento</span>
-              <input
-                type="datetime-local"
-                required
-                className={inputClass}
-                value={eventStart}
-                onChange={(e) => setEventStart(e.target.value)}
-              />
-            </label>
-            <label className={labelClass}>
-              <span>Fim do evento</span>
-              <input
-                type="datetime-local"
-                required
-                className={inputClass}
-                value={eventEnd}
-                onChange={(e) => setEventEnd(e.target.value)}
-              />
-            </label>
-            <label className={labelClass}>
-              <span>Início do ensaio</span>
-              <input
-                type="datetime-local"
-                required
-                className={inputClass}
-                value={rehStart}
-                onChange={(e) => setRehStart(e.target.value)}
-              />
-            </label>
-            <label className={labelClass}>
-              <span>Fim do ensaio</span>
-              <input
-                type="datetime-local"
-                required
-                className={inputClass}
-                value={rehEnd}
-                onChange={(e) => setRehEnd(e.target.value)}
-              />
-            </label>
-          </div>
-
-          <label className={labelClass}>
-            <span>Endereço salvo (evento)</span>
-            <select
-              className={inputClass}
-              value={savedEventId}
-              onChange={(e) => {
-                setSavedEventId(e.target.value);
-                if (e.target.value) setEventPlace(null);
-              }}
-            >
-              <option value="">Usar busca do Google</option>
-              {(addressesQuery.data ?? []).map((addr) => (
-                <option key={addr.id} value={addr.id}>
-                  {addr.label} — {addr.formatted_address}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {!savedEventId ? (
-            <PlacesAddressInput label="Endereço do evento" value={eventPlace} onChange={setEventPlace} />
-          ) : null}
-
-          <label className="flex items-center gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              checked={sameAddress}
-              onChange={(e) => setSameAddress(e.target.checked)}
-            />
-            Ensaio no mesmo endereço do evento
-          </label>
-
-          {!sameAddress ? (
-            <PlacesAddressInput label="Endereço do ensaio" value={rehPlace} onChange={setRehPlace} />
-          ) : null}
-
-          {!savedEventId ? (
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={saveAddress}
-                  onChange={(e) => setSaveAddress(e.target.checked)}
-                />
-                Salvar endereço do evento para reutilizar
-              </label>
-              {saveAddress ? (
-                <input
-                  className={inputClass}
-                  placeholder="Nome do local (ex.: Igreja Central)"
-                  value={saveLabel}
-                  onChange={(e) => setSaveLabel(e.target.value)}
-                  required={saveAddress}
-                />
-              ) : null}
-            </div>
-          ) : null}
-
-          <fieldset className="space-y-2">
-            <legend className="text-sm text-slate-300">Integrantes</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {(membersQuery.data ?? []).map((member) => {
-                const checked = selectedMembers.has(member.id);
-                return (
-                  <label key={member.id} className="flex items-center gap-2 text-sm text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        setSelectedMembers((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(member.id)) next.delete(member.id);
-                          else next.add(member.id);
-                          return next;
-                        });
-                      }}
-                    />
-                    {member.full_name}
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
-          <button
-            type="submit"
-            className={`${btnPrimary} disabled:opacity-60`}
-            disabled={createMutation.isPending || selectedMembers.size === 0}
-          >
-            {createMutation.isPending ? "Salvando..." : "Criar escala (evento + ensaio)"}
-          </button>
-        </form>
-      ) : (
-        <p className="text-sm text-slate-400">Somente gestores podem criar escalas.</p>
-      )}
-
-      <div className="space-y-3">
-        <h2 className="font-medium">Escalas recentes</h2>
-        {(schedulesQuery.data ?? []).length === 0 ? (
-          <p className="text-sm text-slate-500">Nenhuma escala cadastrada.</p>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-medium">Agenda</h2>
+          <p className="text-sm text-slate-500">Eventos e ensaios da banda</p>
+        </div>
+        {canManage ? (
+          <Link to={`/bandas/${bandId}/agenda/nova`} className={`${btnPrimary} px-4 py-2 text-sm`}>
+            Nova escala
+          </Link>
         ) : null}
-        {(schedulesQuery.data ?? []).map((schedule) => (
-          <article key={schedule.id} className={`${panelClass} space-y-2 p-4`}>
-            <p className="font-medium">{schedule.title || "Escala sem título"}</p>
-            <p className="text-sm text-slate-400">
-              Integrantes: {schedule.members.map((m) => m.full_name).join(", ") || "—"}
-            </p>
-            <ul className="space-y-2 text-sm text-slate-300">
-              {schedule.occurrences.map((occ) => (
-                <li key={occ.id} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-                  <p className="font-medium capitalize">
-                    {occ.kind === "event" ? "Evento" : "Ensaio"}
-                  </p>
-                  <p>
-                    {new Date(occ.starts_at).toLocaleString("pt-BR")} —{" "}
-                    {new Date(occ.ends_at).toLocaleTimeString("pt-BR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
+      </div>
+
+      {actionError ? <p className="text-sm text-red-400">{actionError}</p> : null}
+      {schedulesQuery.isLoading ? <p className="text-sm text-slate-400">Carregando...</p> : null}
+      {!schedulesQuery.isLoading && rows.length === 0 ? (
+        <p className="text-sm text-slate-500">Nenhuma escala cadastrada.</p>
+      ) : null}
+
+      {rows.length > 0 ? (
+        <div className={`${panelClass} overflow-x-auto`}>
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-3 py-3 font-medium">Título</th>
+                <th className="px-3 py-3 font-medium">Data</th>
+                <th className="px-3 py-3 font-medium">Tipo</th>
+                <th className="px-3 py-3 font-medium">Integrantes</th>
+                <th className="px-3 py-3 font-medium">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.occurrence_id} className="border-b border-white/5 last:border-0">
+                  <td className="px-3 py-3 text-slate-200">{row.title || "—"}</td>
+                  <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
+                    {new Date(row.starts_at).toLocaleString("pt-BR", {
+                      dateStyle: "short",
+                      timeStyle: "short",
                     })}
-                  </p>
-                  <p className="text-slate-400">{occ.formatted_address}</p>
-                  <a
-                    href={occ.maps_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`${linkClass} text-sm`}
-                  >
-                    Abrir localização
-                  </a>
-                </li>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs ${
+                        row.kind === "event"
+                          ? "bg-green-500/15 text-green-300"
+                          : "bg-amber-500/15 text-amber-300"
+                      }`}
+                    >
+                      {row.kind === "event" ? "Evento" : "Ensaio"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    <button
+                      type="button"
+                      className={linkClass}
+                      onClick={() => setRosterRow(row)}
+                    >
+                      {row.member_count}
+                    </button>
+                  </td>
+                  <td className="px-3 py-3">
+                    {canManage ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          to={`/bandas/${bandId}/agenda/${row.schedule_id}/editar?occurrenceId=${row.occurrence_id}`}
+                          className={`${btnGhost} px-2.5 py-1 text-xs`}
+                        >
+                          Editar
+                        </Link>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-red-500/30 px-2.5 py-1 text-xs text-red-300 hover:bg-red-500/10"
+                          onClick={() => setCancelRow(row)}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-500">—</span>
+                    )}
+                  </td>
+                </tr>
               ))}
-            </ul>
-          </article>
-        ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {rosterRow ? (
+        <MembersModal members={rosterRow.members} onClose={() => setRosterRow(null)} />
+      ) : null}
+
+      {cancelRow ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center">
+          <div className={`${panelClass} w-full max-w-md space-y-4 p-5`}>
+            <h3 className="text-lg font-semibold">Cancelar escala</h3>
+            <p className="text-sm text-slate-300">
+              Cancelar <strong>{cancelRow.title}</strong> (
+              {cancelRow.kind === "event" ? "Evento" : "Ensaio"})? Os integrantes receberão e-mail
+              com cancelamento no Google Agenda.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className={btnGhost} onClick={() => setCancelRow(null)}>
+                Voltar
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                disabled={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate(cancelRow.occurrence_id)}
+              >
+                {cancelMutation.isPending ? "Cancelando..." : "Confirmar cancelamento"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MembersModal({
+  members,
+  onClose,
+}: {
+  members: ScheduleMember[];
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center">
+      <div className={`${panelClass} w-full max-w-md space-y-4 p-5`}>
+        <h3 className="text-lg font-semibold">Integrantes escalados</h3>
+        {members.length === 0 ? (
+          <p className="text-sm text-slate-400">Nenhum integrante.</p>
+        ) : (
+          <ul className="space-y-2 text-sm text-slate-300">
+            {members.map((member) => (
+              <li key={member.member_id}>{formatScheduleMemberLabel(member)}</li>
+            ))}
+          </ul>
+        )}
+        <div className="flex justify-end">
+          <button type="button" className={btnGhost} onClick={onClose}>
+            Fechar
+          </button>
+        </div>
       </div>
     </div>
   );

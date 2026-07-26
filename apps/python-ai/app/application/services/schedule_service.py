@@ -12,6 +12,8 @@ from app.application.services.email_service import EmailService
 from app.infrastructure.database.models import (
     Band,
     BandMember,
+    BandMemberRole,
+    BandRole,
     BandSavedAddress,
     BandSchedule,
     BandScheduleMember,
@@ -25,6 +27,10 @@ def _new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(8)}"
 
 
+def _calendar_uid(occurrence_id: str) -> str:
+    return f"softmusic-{occurrence_id}-{secrets.token_hex(6)}@softmusic.com.br"
+
+
 def _parse_dt(value: str) -> datetime:
     raw = value.strip()
     if raw.endswith("Z"):
@@ -33,6 +39,12 @@ def _parse_dt(value: str) -> datetime:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)
+
+
+def format_member_with_roles(full_name: str, role_names: list[str]) -> str:
+    if role_names:
+        return f"{full_name} ({', '.join(role_names)})"
+    return full_name
 
 
 class ScheduleService:
@@ -93,16 +105,30 @@ class ScheduleService:
         return {"status": "deleted", "id": address_id}
 
     async def list_schedules(self, band_id: str, user_id: str) -> list[dict[str, Any]]:
+        """Grid achatado: uma linha por occurrence ativa."""
         await self.bands.require_view_access(band_id, user_id)
         result = await self.session.execute(
-            select(BandSchedule)
-            .where(BandSchedule.band_id == band_id)
-            .order_by(BandSchedule.created_at.desc())
+            select(BandScheduleOccurrence, BandSchedule)
+            .join(BandSchedule, BandSchedule.id == BandScheduleOccurrence.schedule_id)
+            .where(
+                BandSchedule.band_id == band_id,
+                BandScheduleOccurrence.removed_at.is_(None),
+            )
+            .order_by(BandScheduleOccurrence.starts_at.asc())
         )
         items: list[dict[str, Any]] = []
-        for schedule in result.scalars().all():
-            items.append(await self._serialize_schedule(schedule))
+        roster_cache: dict[str, list[dict[str, Any]]] = {}
+        for occ, schedule in result.all():
+            if schedule.id not in roster_cache:
+                roster_cache[schedule.id] = await self._roster_for_schedule(schedule.id)
+            roster = roster_cache[schedule.id]
+            items.append(self._serialize_grid_row(occ, schedule, roster))
         return items
+
+    async def get_schedule(self, band_id: str, user_id: str, schedule_id: str) -> dict[str, Any]:
+        await self.bands.require_view_access(band_id, user_id)
+        schedule = await self._get_schedule(band_id, schedule_id)
+        return await self._serialize_schedule(schedule)
 
     async def create_schedule(
         self,
@@ -112,73 +138,80 @@ class ScheduleService:
     ) -> dict[str, Any]:
         await self.bands.require_manage_access(band_id, user.id)
 
-        member_ids: list[str] = list(payload.get("member_ids") or [])
-        if not member_ids:
-            raise ValueError("Selecione ao menos um integrante")
+        title = (payload.get("title") or "").strip()
+        if not title:
+            raise ValueError("Informe o título da escala")
 
-        members_result = await self.session.execute(
-            select(BandMember).where(
-                BandMember.band_id == band_id,
-                BandMember.status == "active",
-                BandMember.id.in_(member_ids),
-            )
-        )
-        members = list(members_result.scalars().all())
-        if len(members) != len(set(member_ids)):
-            raise ValueError("Integrante inválido na escala")
-
+        members = await self._load_active_members(band_id, list(payload.get("member_ids") or []))
         event = payload.get("event") or {}
-        rehearsal = payload.get("rehearsal") or {}
         event_addr = await self._resolve_address(band_id, event)
-        if payload.get("rehearsal_same_as_event_address"):
-            rehearsal_addr = event_addr
-        else:
-            rehearsal_addr = await self._resolve_address(band_id, rehearsal)
-
         event_start = _parse_dt(str(event.get("starts_at", "")))
         event_end = _parse_dt(str(event.get("ends_at", "")))
-        reh_start = _parse_dt(str(rehearsal.get("starts_at", "")))
-        reh_end = _parse_dt(str(rehearsal.get("ends_at", "")))
-        if event_end <= event_start or reh_end <= reh_start:
-            raise ValueError("Horário de fim deve ser após o início")
+        if event_end <= event_start:
+            raise ValueError("Horário de fim do evento deve ser após o início")
+
+        rehearsals_raw = list(payload.get("rehearsals") or [])
+        # Compat: payload antigo com um único rehearsal
+        if not rehearsals_raw and payload.get("rehearsal"):
+            block = dict(payload["rehearsal"])
+            block["same_as_event_address"] = bool(payload.get("rehearsal_same_as_event_address"))
+            rehearsals_raw = [block]
 
         schedule = BandSchedule(
             id=_new_id("sch"),
             band_id=band_id,
-            title=(payload.get("title") or "").strip() or None,
+            title=title,
             created_by_user_id=user.id,
         )
         self.session.add(schedule)
         await self.session.flush()
 
-        self.session.add(
-            BandScheduleOccurrence(
-                id=_new_id("occ"),
-                schedule_id=schedule.id,
-                kind="event",
-                starts_at=event_start,
-                ends_at=event_end,
-                formatted_address=event_addr["formatted_address"],
-                lat=event_addr["lat"],
-                lng=event_addr["lng"],
-                place_id=event_addr.get("place_id"),
-                saved_address_id=event_addr.get("saved_address_id"),
-            )
+        created_occurrences: list[BandScheduleOccurrence] = []
+        event_occ = self._build_occurrence(
+            schedule_id=schedule.id,
+            kind="event",
+            title=title,
+            starts_at=event_start,
+            ends_at=event_end,
+            address=event_addr,
         )
-        self.session.add(
-            BandScheduleOccurrence(
-                id=_new_id("occ"),
+        self.session.add(event_occ)
+        created_occurrences.append(event_occ)
+
+        for reh in rehearsals_raw:
+            if reh.get("same_as_event_address") or reh.get("same_as_event"):
+                reh_addr = event_addr
+            else:
+                reh_addr = await self._resolve_address(band_id, reh)
+            reh_start = _parse_dt(str(reh.get("starts_at", "")))
+            reh_end = _parse_dt(str(reh.get("ends_at", "")))
+            if reh_end <= reh_start:
+                raise ValueError("Horário de fim do ensaio deve ser após o início")
+            reh_occ = self._build_occurrence(
                 schedule_id=schedule.id,
                 kind="rehearsal",
+                title=f"Ensaio {title}",
                 starts_at=reh_start,
                 ends_at=reh_end,
-                formatted_address=rehearsal_addr["formatted_address"],
-                lat=rehearsal_addr["lat"],
-                lng=rehearsal_addr["lng"],
-                place_id=rehearsal_addr.get("place_id"),
-                saved_address_id=rehearsal_addr.get("saved_address_id"),
+                address=reh_addr,
             )
-        )
+            self.session.add(reh_occ)
+            created_occurrences.append(reh_occ)
+
+            if bool(reh.get("save_address")) and (reh.get("save_address_label") or "").strip():
+                if not reh_addr.get("saved_address_id"):
+                    self.session.add(
+                        BandSavedAddress(
+                            id=_new_id("adr"),
+                            band_id=band_id,
+                            label=str(reh.get("save_address_label")).strip(),
+                            formatted_address=reh_addr["formatted_address"],
+                            lat=reh_addr["lat"],
+                            lng=reh_addr["lng"],
+                            place_id=reh_addr.get("place_id"),
+                        )
+                    )
+
         for member in members:
             self.session.add(
                 BandScheduleMember(
@@ -188,87 +221,178 @@ class ScheduleService:
                 )
             )
 
-        save_event = bool(payload.get("save_event_address"))
-        save_label = (payload.get("save_event_address_label") or "").strip()
-        if save_event and save_label and not event_addr.get("saved_address_id"):
-            saved = BandSavedAddress(
-                id=_new_id("adr"),
-                band_id=band_id,
-                label=save_label,
-                formatted_address=event_addr["formatted_address"],
-                lat=event_addr["lat"],
-                lng=event_addr["lng"],
-                place_id=event_addr.get("place_id"),
-            )
-            self.session.add(saved)
+        if bool(payload.get("save_event_address")) and (payload.get("save_event_address_label") or "").strip():
+            if not event_addr.get("saved_address_id"):
+                self.session.add(
+                    BandSavedAddress(
+                        id=_new_id("adr"),
+                        band_id=band_id,
+                        label=str(payload.get("save_event_address_label")).strip(),
+                        formatted_address=event_addr["formatted_address"],
+                        lat=event_addr["lat"],
+                        lng=event_addr["lng"],
+                        place_id=event_addr.get("place_id"),
+                    )
+                )
 
         await self.session.commit()
 
         band = await self.bands.get_band(band_id)
         if band is not None:
-            await self._notify_schedule_emails(
+            roster = await self._schedule_member_roster(members)
+            await self._notify_occurrences(
                 band=band,
-                title=schedule.title,
+                occurrences=created_occurrences,
                 members=members,
-                event_start=event_start,
-                event_end=event_end,
-                event_addr=event_addr,
-                reh_start=reh_start,
-                reh_end=reh_end,
-                rehearsal_addr=rehearsal_addr,
+                roster=roster,
+                action="create",
             )
 
         return await self._serialize_schedule(schedule)
 
-    async def _notify_schedule_emails(
+    async def update_occurrence(
         self,
-        *,
-        band: Band,
-        title: str | None,
-        members: list[BandMember],
-        event_start: datetime,
-        event_end: datetime,
-        event_addr: dict[str, Any],
-        reh_start: datetime,
-        reh_end: datetime,
-        rehearsal_addr: dict[str, Any],
-    ) -> None:
-        user_ids = [m.user_id for m in members]
-        users_result = await self.session.execute(select(User).where(User.id.in_(user_ids)))
-        recipients = [u.email for u in users_result.scalars().all() if u.email]
-        if not recipients:
-            return
+        band_id: str,
+        user: User,
+        occurrence_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        await self.bands.require_manage_access(band_id, user.id)
+        occ, schedule = await self._get_occurrence(band_id, occurrence_id)
+        if occ.removed_at is not None:
+            raise ValueError("Esta ocorrência já foi cancelada")
 
-        email = EmailService()
-        try:
-            email.schedule_occurrence(
-                recipients=recipients,
-                kind="rehearsal",
-                band_name=band.name,
-                title=title,
-                starts_at=reh_start,
-                ends_at=reh_end,
-                address=rehearsal_addr["formatted_address"],
-                lat=float(rehearsal_addr["lat"]),
-                lng=float(rehearsal_addr["lng"]),
+        previous_member_ids = {
+            row.member_id
+            for row in (
+                await self.session.execute(
+                    select(BandScheduleMember).where(BandScheduleMember.schedule_id == schedule.id)
+                )
+            ).scalars().all()
+        }
+
+        if payload.get("starts_at"):
+            occ.starts_at = _parse_dt(str(payload["starts_at"]))
+        if payload.get("ends_at"):
+            occ.ends_at = _parse_dt(str(payload["ends_at"]))
+        if occ.ends_at <= occ.starts_at:
+            raise ValueError("Horário de fim deve ser após o início")
+
+        if any(k in payload for k in ("formatted_address", "lat", "lng", "saved_address_id", "place_id")):
+            addr = await self._resolve_address(band_id, payload)
+            occ.formatted_address = addr["formatted_address"]
+            occ.lat = addr["lat"]
+            occ.lng = addr["lng"]
+            occ.place_id = addr.get("place_id")
+            occ.saved_address_id = addr.get("saved_address_id")
+
+        if occ.kind == "event" and payload.get("title") is not None:
+            new_title = str(payload.get("title") or "").strip()
+            if not new_title:
+                raise ValueError("Informe o título")
+            schedule.title = new_title
+            occ.title = new_title
+            # Atualiza títulos derivados dos ensaios ativos
+            reh_result = await self.session.execute(
+                select(BandScheduleOccurrence).where(
+                    BandScheduleOccurrence.schedule_id == schedule.id,
+                    BandScheduleOccurrence.kind == "rehearsal",
+                    BandScheduleOccurrence.removed_at.is_(None),
+                )
             )
-            email.schedule_occurrence(
-                recipients=recipients,
-                kind="event",
-                band_name=band.name,
-                title=title,
-                starts_at=event_start,
-                ends_at=event_end,
-                address=event_addr["formatted_address"],
-                lat=float(event_addr["lat"]),
-                lng=float(event_addr["lng"]),
+            for reh in reh_result.scalars().all():
+                reh.title = f"Ensaio {new_title}"
+                reh.updated_at = datetime.now(UTC)
+
+        if not occ.calendar_uid:
+            occ.calendar_uid = _calendar_uid(occ.id)
+        occ.calendar_sequence = int(occ.calendar_sequence or 0) + 1
+        occ.updated_at = datetime.now(UTC)
+
+        removed_members: list[BandMember] = []
+        current_members: list[BandMember] = []
+        if "member_ids" in payload:
+            member_ids = list(payload.get("member_ids") or [])
+            current_members = await self._load_active_members(band_id, member_ids)
+            new_ids = {m.id for m in current_members}
+            left_ids = previous_member_ids - new_ids
+            if left_ids:
+                left_result = await self.session.execute(
+                    select(BandMember).where(BandMember.id.in_(list(left_ids)))
+                )
+                removed_members = list(left_result.scalars().all())
+
+            existing = await self.session.execute(
+                select(BandScheduleMember).where(BandScheduleMember.schedule_id == schedule.id)
             )
-        except Exception as exc:
-            logger.warning(
-                "schedule_email_failed",
-                band_id=band.id,
-                error=str(exc),
+            for link in existing.scalars().all():
+                await self.session.delete(link)
+            await self.session.flush()
+            for member in current_members:
+                self.session.add(
+                    BandScheduleMember(
+                        id=_new_id("scm"),
+                        schedule_id=schedule.id,
+                        member_id=member.id,
+                    )
+                )
+        else:
+            current_members = await self._members_for_schedule(schedule.id)
+
+        await self.session.commit()
+        await self.session.refresh(occ)
+
+        band = await self.bands.get_band(band_id)
+        if band is not None:
+            roster = await self._schedule_member_roster(current_members)
+            if removed_members:
+                await self._notify_occurrences(
+                    band=band,
+                    occurrences=[occ],
+                    members=removed_members,
+                    roster=roster,
+                    action="cancel",
+                )
+            await self._notify_occurrences(
+                band=band,
+                occurrences=[occ],
+                members=current_members,
+                roster=roster,
+                action="update",
             )
+
+        return await self._serialize_schedule(schedule)
+
+    async def cancel_occurrence(
+        self,
+        band_id: str,
+        user: User,
+        occurrence_id: str,
+    ) -> dict[str, str]:
+        await self.bands.require_manage_access(band_id, user.id)
+        occ, schedule = await self._get_occurrence(band_id, occurrence_id)
+        if occ.removed_at is not None:
+            return {"status": "cancelled", "occurrence_id": occurrence_id}
+
+        if not occ.calendar_uid:
+            occ.calendar_uid = _calendar_uid(occ.id)
+        occ.calendar_sequence = int(occ.calendar_sequence or 0) + 1
+        occ.removed_at = datetime.now(UTC)
+        occ.updated_at = datetime.now(UTC)
+        await self.session.commit()
+
+        members = await self._members_for_schedule(schedule.id)
+        band = await self.bands.get_band(band_id)
+        if band is not None and members:
+            roster = await self._schedule_member_roster(members)
+            await self._notify_occurrences(
+                band=band,
+                occurrences=[occ],
+                members=members,
+                roster=roster,
+                action="cancel",
+            )
+        return {"status": "cancelled", "occurrence_id": occurrence_id}
 
     async def upcoming_for_user(self, user: User) -> dict[str, Any]:
         member_result = await self.session.execute(
@@ -295,18 +419,22 @@ class ScheduleService:
             .where(
                 BandScheduleMember.member_id.in_(member_ids),
                 BandScheduleOccurrence.starts_at >= now,
+                BandScheduleOccurrence.removed_at.is_(None),
             )
             .order_by(BandScheduleOccurrence.starts_at.asc())
         )
 
         next_rehearsal: dict[str, Any] | None = None
         next_event: dict[str, Any] | None = None
-        for link, occurrence, schedule, band in link_result.all():
+        roster_cache: dict[str, list[dict[str, Any]]] = {}
+        for _link, occurrence, schedule, band in link_result.all():
+            if schedule.id not in roster_cache:
+                roster_cache[schedule.id] = await self._roster_for_schedule(schedule.id)
             item = {
                 "id": occurrence.id,
                 "schedule_id": schedule.id,
                 "kind": occurrence.kind,
-                "title": schedule.title,
+                "title": occurrence.title or schedule.title,
                 "band_id": band.id,
                 "band_name": band.name,
                 "starts_at": occurrence.starts_at.isoformat(),
@@ -315,6 +443,7 @@ class ScheduleService:
                 "lat": occurrence.lat,
                 "lng": occurrence.lng,
                 "maps_url": self._maps_url(occurrence.lat, occurrence.lng),
+                "members": roster_cache[schedule.id],
             }
             if occurrence.kind == "rehearsal" and next_rehearsal is None:
                 next_rehearsal = item
@@ -324,6 +453,126 @@ class ScheduleService:
                 break
 
         return {"next_rehearsal": next_rehearsal, "next_event": next_event}
+
+    def _build_occurrence(
+        self,
+        *,
+        schedule_id: str,
+        kind: str,
+        title: str,
+        starts_at: datetime,
+        ends_at: datetime,
+        address: dict[str, Any],
+    ) -> BandScheduleOccurrence:
+        occ_id = _new_id("occ")
+        return BandScheduleOccurrence(
+            id=occ_id,
+            schedule_id=schedule_id,
+            kind=kind,
+            title=title,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            formatted_address=address["formatted_address"],
+            lat=address["lat"],
+            lng=address["lng"],
+            place_id=address.get("place_id"),
+            saved_address_id=address.get("saved_address_id"),
+            calendar_uid=_calendar_uid(occ_id),
+            calendar_sequence=0,
+            updated_at=datetime.now(UTC),
+        )
+
+    async def _notify_occurrences(
+        self,
+        *,
+        band: Band,
+        occurrences: list[BandScheduleOccurrence],
+        members: list[BandMember],
+        roster: list[dict[str, Any]],
+        action: str,
+    ) -> None:
+        if not occurrences or not members:
+            return
+        user_ids = [m.user_id for m in members]
+        users_result = await self.session.execute(select(User).where(User.id.in_(user_ids)))
+        recipients = [u.email for u in users_result.scalars().all() if u.email]
+        if not recipients:
+            return
+
+        members_lines = [
+            format_member_with_roles(item["full_name"], item["role_names"]) for item in roster
+        ]
+        email = EmailService()
+        try:
+            for occ in occurrences:
+                email.schedule_occurrence(
+                    recipients=recipients,
+                    kind=occ.kind,
+                    band_name=band.name,
+                    title=occ.title or band.name,
+                    starts_at=occ.starts_at,
+                    ends_at=occ.ends_at,
+                    address=occ.formatted_address,
+                    lat=float(occ.lat),
+                    lng=float(occ.lng),
+                    calendar_uid=occ.calendar_uid,
+                    calendar_sequence=int(occ.calendar_sequence or 0),
+                    members_lines=members_lines,
+                    action=action,
+                )
+        except Exception as exc:
+            logger.warning("schedule_email_failed", band_id=band.id, error=str(exc))
+
+    async def _load_active_members(self, band_id: str, member_ids: list[str]) -> list[BandMember]:
+        if not member_ids:
+            raise ValueError("Selecione ao menos um integrante")
+        members_result = await self.session.execute(
+            select(BandMember).where(
+                BandMember.band_id == band_id,
+                BandMember.status == "active",
+                BandMember.id.in_(member_ids),
+            )
+        )
+        members = list(members_result.scalars().all())
+        if len(members) != len(set(member_ids)):
+            raise ValueError("Integrante inválido na escala")
+        return members
+
+    async def _members_for_schedule(self, schedule_id: str) -> list[BandMember]:
+        result = await self.session.execute(
+            select(BandMember)
+            .join(BandScheduleMember, BandScheduleMember.member_id == BandMember.id)
+            .where(BandScheduleMember.schedule_id == schedule_id)
+        )
+        return list(result.scalars().all())
+
+    async def _get_schedule(self, band_id: str, schedule_id: str) -> BandSchedule:
+        result = await self.session.execute(
+            select(BandSchedule).where(
+                BandSchedule.id == schedule_id,
+                BandSchedule.band_id == band_id,
+            )
+        )
+        schedule = result.scalar_one_or_none()
+        if schedule is None:
+            raise ValueError("Escala não encontrada")
+        return schedule
+
+    async def _get_occurrence(
+        self, band_id: str, occurrence_id: str
+    ) -> tuple[BandScheduleOccurrence, BandSchedule]:
+        result = await self.session.execute(
+            select(BandScheduleOccurrence, BandSchedule)
+            .join(BandSchedule, BandSchedule.id == BandScheduleOccurrence.schedule_id)
+            .where(
+                BandScheduleOccurrence.id == occurrence_id,
+                BandSchedule.band_id == band_id,
+            )
+        )
+        row = result.one_or_none()
+        if row is None:
+            raise ValueError("Ocorrência não encontrada")
+        return row[0], row[1]
 
     async def _resolve_address(self, band_id: str, block: dict[str, Any]) -> dict[str, Any]:
         saved_id = block.get("saved_address_id")
@@ -358,36 +607,54 @@ class ScheduleService:
             "saved_address_id": None,
         }
 
+    def _serialize_grid_row(
+        self,
+        occ: BandScheduleOccurrence,
+        schedule: BandSchedule,
+        roster: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "occurrence_id": occ.id,
+            "schedule_id": schedule.id,
+            "title": occ.title or schedule.title,
+            "kind": occ.kind,
+            "starts_at": occ.starts_at.isoformat(),
+            "ends_at": occ.ends_at.isoformat(),
+            "formatted_address": occ.formatted_address,
+            "lat": occ.lat,
+            "lng": occ.lng,
+            "place_id": occ.place_id,
+            "maps_url": self._maps_url(occ.lat, occ.lng),
+            "member_count": len(roster),
+            "members": roster,
+        }
+
     async def _serialize_schedule(self, schedule: BandSchedule) -> dict[str, Any]:
         occ_result = await self.session.execute(
             select(BandScheduleOccurrence)
-            .where(BandScheduleOccurrence.schedule_id == schedule.id)
+            .where(
+                BandScheduleOccurrence.schedule_id == schedule.id,
+                BandScheduleOccurrence.removed_at.is_(None),
+            )
             .order_by(BandScheduleOccurrence.starts_at.asc())
-        )
-        mem_result = await self.session.execute(
-            select(BandScheduleMember, BandMember, User)
-            .join(BandMember, BandMember.id == BandScheduleMember.member_id)
-            .join(User, User.id == BandMember.user_id)
-            .where(BandScheduleMember.schedule_id == schedule.id)
         )
         occurrences = [
             {
                 "id": occ.id,
                 "kind": occ.kind,
+                "title": occ.title,
                 "starts_at": occ.starts_at.isoformat(),
                 "ends_at": occ.ends_at.isoformat(),
                 "formatted_address": occ.formatted_address,
                 "lat": occ.lat,
                 "lng": occ.lng,
                 "place_id": occ.place_id,
+                "saved_address_id": occ.saved_address_id,
                 "maps_url": self._maps_url(occ.lat, occ.lng),
             }
             for occ in occ_result.scalars().all()
         ]
-        members = [
-            {"member_id": member.id, "full_name": user.full_name}
-            for _, member, user in mem_result.all()
-        ]
+        members = await self._roster_for_schedule(schedule.id)
         return {
             "id": schedule.id,
             "band_id": schedule.band_id,
@@ -396,6 +663,66 @@ class ScheduleService:
             "occurrences": occurrences,
             "members": members,
         }
+
+    async def _roster_for_schedule(self, schedule_id: str) -> list[dict[str, Any]]:
+        mem_result = await self.session.execute(
+            select(BandMember, User)
+            .join(BandScheduleMember, BandScheduleMember.member_id == BandMember.id)
+            .join(User, User.id == BandMember.user_id)
+            .where(BandScheduleMember.schedule_id == schedule_id)
+            .order_by(User.full_name.asc())
+        )
+        pairs = list(mem_result.all())
+        return await self._schedule_member_roster(
+            [member for member, _ in pairs],
+            users={member.id: user for member, user in pairs},
+        )
+
+    async def _schedule_member_roster(
+        self,
+        members: list[BandMember],
+        users: dict[str, User] | None = None,
+    ) -> list[dict[str, Any]]:
+        if not members:
+            return []
+
+        if users is None:
+            user_ids = [m.user_id for m in members]
+            users_result = await self.session.execute(select(User).where(User.id.in_(user_ids)))
+            by_user_id = {u.id: u for u in users_result.scalars().all()}
+            users = {m.id: by_user_id[m.user_id] for m in members if m.user_id in by_user_id}
+
+        roles_by_member = await self._role_names_by_member_ids([m.id for m in members])
+        roster: list[dict[str, Any]] = []
+        for member in members:
+            user = users.get(member.id)
+            if user is None:
+                continue
+            role_names = roles_by_member.get(member.id, [])
+            roster.append(
+                {
+                    "member_id": member.id,
+                    "full_name": user.full_name,
+                    "role_names": role_names,
+                    "label": format_member_with_roles(user.full_name, role_names),
+                }
+            )
+        roster.sort(key=lambda item: item["full_name"].casefold())
+        return roster
+
+    async def _role_names_by_member_ids(self, member_ids: list[str]) -> dict[str, list[str]]:
+        if not member_ids:
+            return {}
+        result = await self.session.execute(
+            select(BandMemberRole.member_id, BandRole.name)
+            .join(BandRole, BandRole.id == BandMemberRole.role_id)
+            .where(BandMemberRole.member_id.in_(member_ids))
+            .order_by(BandRole.sort_order.asc(), BandRole.name.asc())
+        )
+        out: dict[str, list[str]] = {mid: [] for mid in member_ids}
+        for member_id, name in result.all():
+            out.setdefault(member_id, []).append(name)
+        return out
 
     @staticmethod
     def _serialize_address(addr: BandSavedAddress) -> dict[str, Any]:

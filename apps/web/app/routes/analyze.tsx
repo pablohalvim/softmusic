@@ -45,6 +45,7 @@ export default function Analyze() {
   const blocked = Boolean(activeBand?.is_blocked);
   const [mode, setMode] = useState<AnalyzeMode>("upload");
   const [file, setFile] = useState<File | null>(null);
+  const [songTitle, setSongTitle] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [cifraClubUrl, setCifraClubUrl] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
@@ -80,8 +81,11 @@ export default function Analyze() {
     setJobId(data.job_id);
   };
 
-  const buildOptions = () => {
-    const options: Record<string, string> = { educational_level: "intermediate" };
+  const buildOptions = (extra?: Record<string, string>) => {
+    const options: Record<string, string> = {
+      educational_level: "intermediate",
+      ...extra,
+    };
     if (cifraClubUrl.trim()) {
       options.cifra_club_url = cifraClubUrl.trim();
     }
@@ -89,10 +93,10 @@ export default function Analyze() {
   };
 
   const uploadMutation = useMutation({
-    mutationFn: async (selected: File) => {
+    mutationFn: async ({ selected, title }: { selected: File; title: string }) => {
       const formData = new FormData();
       formData.set("file", selected);
-      formData.set("options", JSON.stringify(buildOptions()));
+      formData.set("options", JSON.stringify(buildOptions({ title })));
       let response: Response;
       try {
         response = await authFetch("/songs/upload", {
@@ -227,18 +231,40 @@ export default function Analyze() {
               toast.warn("Não é possível enviar música para análise com a banda bloqueada.");
               return;
             }
+            const title = songTitle.trim();
+            if (!title) {
+              toast.warn("Informe o nome da música.");
+              return;
+            }
             if (file) {
-              uploadMutation.mutate(file);
+              uploadMutation.mutate({ selected: file, title });
             }
           }}
         >
+          <label className={labelClass}>
+            <span>Nome da Música</span>
+            <input
+              type="text"
+              required
+              maxLength={200}
+              placeholder="Ex.: Grande É o Senhor"
+              value={songTitle}
+              onChange={(event) => setSongTitle(event.target.value)}
+              disabled={isPending}
+              className={inputClass}
+            />
+          </label>
           <input
             type="file"
             accept="audio/*"
             className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-gradient-to-b file:from-red-400 file:to-red-600 file:px-4 file:py-2 file:font-medium file:text-white"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           />
-          <button type="submit" disabled={!file || isPending} className={`${btnAccent} disabled:opacity-50`}>
+          <button
+            type="submit"
+            disabled={!file || !songTitle.trim() || isPending}
+            className={`${btnAccent} disabled:opacity-50`}
+          >
             {isPending ? "Enviando..." : "Iniciar análise"}
           </button>
         </form>

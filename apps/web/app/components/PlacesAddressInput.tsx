@@ -2,12 +2,10 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import {
   fetchPlacePredictions,
-  getGoogleMapsApiKey,
-  onGoogleMapsAuthFailure,
   resolvePlaceDetails,
   type PlacePrediction,
   type PlaceSelection,
-} from "../lib/google-places";
+} from "../lib/places";
 import { inputClass, labelClass } from "../lib/ui-classes";
 
 type Props = {
@@ -29,14 +27,6 @@ export function PlacesAddressInput({ label, value, onChange, disabled }: Props) 
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    return onGoogleMapsAuthFailure((message) => {
-      setError(message);
-      setPredictions([]);
-      setOpen(false);
-    });
-  }, []);
-
-  useEffect(() => {
     if (value?.formatted_address) {
       setQuery(value.formatted_address);
     }
@@ -53,11 +43,6 @@ export function PlacesAddressInput({ label, value, onChange, disabled }: Props) 
   }, []);
 
   useEffect(() => {
-    if (!getGoogleMapsApiKey()) {
-      setError("VITE_GOOGLE_MAPS_API_KEY não entrou no build da web. Rebuild com a chave no .env.");
-      return;
-    }
-
     const trimmed = query.trim();
     if (trimmed.length < 3) {
       setPredictions([]);
@@ -87,7 +72,7 @@ export function PlacesAddressInput({ label, value, onChange, disabled }: Props) 
           setError(err instanceof Error ? err.message : "Erro ao buscar endereços");
         })
         .finally(() => setLoading(false));
-    }, 280);
+    }, 400);
 
     return () => {
       if (debounceRef.current) {
@@ -100,7 +85,7 @@ export function PlacesAddressInput({ label, value, onChange, disabled }: Props) 
     setBusyDetail(true);
     setOpen(false);
     try {
-      const place = await resolvePlaceDetails(prediction.place_id);
+      const place = await resolvePlaceDetails(prediction);
       setQuery(place.formatted_address);
       setError(null);
       onChange(place);
@@ -141,8 +126,8 @@ export function PlacesAddressInput({ label, value, onChange, disabled }: Props) 
           role="listbox"
           className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-white/10 bg-[#0a1610] py-1 shadow-2xl shadow-black/50"
         >
-          {predictions.map((item) => (
-            <li key={item.place_id}>
+          {predictions.map((item, index) => (
+            <li key={item.place_id ?? `${item.lat},${item.lng},${index}`}>
               <button
                 type="button"
                 role="option"
@@ -158,7 +143,9 @@ export function PlacesAddressInput({ label, value, onChange, disabled }: Props) 
 
       {loading || busyDetail ? (
         <p className="text-xs text-slate-500">{busyDetail ? "Confirmando localização..." : "Buscando..."}</p>
-      ) : null}
+      ) : (
+        <p className="text-xs text-slate-600">Sugestões via OpenStreetMap</p>
+      )}
 
       {value ? (
         <p className="text-xs text-slate-500">

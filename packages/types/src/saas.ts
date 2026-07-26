@@ -89,6 +89,29 @@ export const SavedAddressSchema = z.object({
   maps_url: z.string().optional(),
 });
 
+export const ScheduleMemberSchema = z.object({
+  member_id: z.string(),
+  full_name: z.string(),
+  role_names: z.array(z.string()).optional(),
+  label: z.string().optional(),
+});
+
+export const ScheduleGridRowSchema = z.object({
+  occurrence_id: z.string(),
+  schedule_id: z.string(),
+  title: z.string().nullable(),
+  kind: z.enum(["event", "rehearsal"]),
+  starts_at: z.string(),
+  ends_at: z.string(),
+  formatted_address: z.string(),
+  lat: z.number(),
+  lng: z.number(),
+  place_id: z.string().nullable().optional(),
+  maps_url: z.string(),
+  member_count: z.number().int(),
+  members: z.array(ScheduleMemberSchema),
+});
+
 export const UpcomingOccurrenceSchema = z.object({
   id: z.string(),
   schedule_id: z.string(),
@@ -102,6 +125,7 @@ export const UpcomingOccurrenceSchema = z.object({
   lat: z.number(),
   lng: z.number(),
   maps_url: z.string(),
+  members: z.array(ScheduleMemberSchema).optional(),
 });
 
 export const InvoiceSummarySchema = z.object({
@@ -138,6 +162,9 @@ export const PendingInviteSchema = z.object({
   band_name: z.string(),
   email: z.string().email(),
   can_analyze_songs: z.boolean(),
+  can_invite_members: z.boolean().optional().default(false),
+  can_manage_members: z.boolean().optional().default(false),
+  can_delete_songs: z.boolean().optional().default(false),
   expires_at: z.string(),
   created_at: z.string(),
 });

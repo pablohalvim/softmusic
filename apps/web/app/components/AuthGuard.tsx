@@ -42,8 +42,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (user && GUEST_ONLY_PATHS.has(location.pathname)) {
     const params = new URLSearchParams(location.search);
     const next = params.get("next");
-    const fromState = (location.state as { from?: string } | null)?.from;
-    const target = next || fromState || "/";
+    // Após login/cadastro: home por padrão (banda ativa já é selecionada no BandProvider).
+    // Só honra ?next= (ex.: convite); evita cair em /bandas por state antigo.
+    const target =
+      next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
     return <Navigate to={target} replace />;
   }
 

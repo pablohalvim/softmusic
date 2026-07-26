@@ -38,8 +38,8 @@ class Settings(BaseSettings):
 
     jwt_private_key: str = "dev-only-change-in-production-min-32-chars-long"
     jwt_algorithm: str = "HS256"
-    jwt_access_expires_in: str = "15m"
-    jwt_refresh_expires_in: str = "7d"
+    jwt_access_expires_in: str = "12h"
+    jwt_refresh_expires_in: str = "30d"
     admin_jwt_private_key: str = "dev-admin-change-in-production-min-32-chars"
     cpf_pepper: str = "dev-cpf-pepper-change-me"
 

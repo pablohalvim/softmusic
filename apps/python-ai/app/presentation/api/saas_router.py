@@ -12,6 +12,7 @@ from app.application.services.auth_service import AuthService
 from app.application.services.band_service import BandService
 from app.application.services.billing_service import BillingService
 from app.application.services.email_service import EmailService
+from app.application.services.geocoding_service import autocomplete_places
 from app.application.services.schedule_service import ScheduleService
 from app.config import get_settings
 from app.infrastructure.database.models import User
@@ -55,6 +56,9 @@ class CreateBandBody(BaseModel):
 class InviteBody(BaseModel):
     email: str
     can_analyze_songs: bool = False
+    can_invite_members: bool = False
+    can_manage_members: bool = False
+    can_delete_songs: bool = False
 
 
 class AcceptInviteBody(BaseModel):
@@ -104,16 +108,33 @@ class ScheduleOccurrenceBody(BaseModel):
     lng: float | None = None
     place_id: str | None = None
     saved_address_id: str | None = None
+    same_as_event_address: bool = False
+    save_address: bool = False
+    save_address_label: str | None = None
 
 
 class CreateScheduleBody(BaseModel):
-    title: str | None = None
+    title: str
     member_ids: list[str]
     event: ScheduleOccurrenceBody
-    rehearsal: ScheduleOccurrenceBody
+    rehearsals: list[ScheduleOccurrenceBody] = Field(default_factory=list)
+    # Compat payloads antigos
+    rehearsal: ScheduleOccurrenceBody | None = None
     rehearsal_same_as_event_address: bool = False
     save_event_address: bool = False
     save_event_address_label: str | None = None
+
+
+class UpdateOccurrenceBody(BaseModel):
+    title: str | None = None
+    starts_at: str | None = None
+    ends_at: str | None = None
+    formatted_address: str | None = None
+    lat: float | None = None
+    lng: float | None = None
+    place_id: str | None = None
+    saved_address_id: str | None = None
+    member_ids: list[str] | None = None
 
 
 class AdminLoginBody(BaseModel):
@@ -204,7 +225,13 @@ async def invite_member(
 ) -> dict[str, Any]:
     try:
         invite = await BandService(session).invite_member(
-            band_id, user.id, body.email, body.can_analyze_songs
+            band_id,
+            user.id,
+            body.email,
+            can_analyze_songs=body.can_analyze_songs,
+            can_invite_members=body.can_invite_members,
+            can_manage_members=body.can_manage_members,
+            can_delete_songs=body.can_delete_songs,
         )
         settings = get_settings()
         # Cadastro com auto-vínculo; quem já tem conta usa /convite ou login+aceite.
@@ -462,12 +489,73 @@ async def create_schedule(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.get("/bands/{band_id}/schedules/{schedule_id}")
+async def get_schedule(
+    band_id: str,
+    schedule_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await ScheduleService(session).get_schedule(band_id, user.id, schedule_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/bands/{band_id}/schedules/occurrences/{occurrence_id}")
+async def update_occurrence(
+    band_id: str,
+    occurrence_id: str,
+    body: UpdateOccurrenceBody,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await ScheduleService(session).update_occurrence(
+            band_id, user, occurrence_id, body.model_dump(exclude_unset=True)
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/bands/{band_id}/schedules/occurrences/{occurrence_id}/cancel")
+async def cancel_occurrence(
+    band_id: str,
+    occurrence_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        return await ScheduleService(session).cancel_occurrence(band_id, user, occurrence_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/schedule/upcoming")
 async def upcoming_schedule(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     return await ScheduleService(session).upcoming_for_user(user)
+
+
+@router.get("/geo/autocomplete")
+async def geo_autocomplete(
+    q: str = "",
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _ = user
+    try:
+        items = await autocomplete_places(q)
+        return {"items": items}
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/billing/invoices")

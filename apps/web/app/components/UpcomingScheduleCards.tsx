@@ -1,7 +1,11 @@
 import { formatRelativeTime } from "@softmusic/shared/datetime";
 import { useQuery } from "@tanstack/react-query";
 
-import { fetchUpcomingSchedule, type UpcomingOccurrence } from "../lib/api";
+import {
+  fetchUpcomingSchedule,
+  formatScheduleMemberLabel,
+  type UpcomingOccurrence,
+} from "../lib/api";
 import { btnPrimary, panelClass } from "../lib/ui-classes";
 
 export function UpcomingScheduleCards() {
@@ -46,6 +50,7 @@ function OccurrenceCard({
       ? "border-green-500/25 bg-green-500/[0.06]"
       : "border-amber-500/25 bg-amber-500/[0.06]";
   const labelClass = accent === "green" ? "text-green-300/80" : "text-amber-300/80";
+  const members = occurrence.members ?? [];
 
   return (
     <article className={`${panelClass} ${accentClass} p-4`}>
@@ -62,6 +67,16 @@ function OccurrenceCard({
         · {formatRelativeTime(occurrence.starts_at)}
       </p>
       <p className="mt-1 line-clamp-2 text-sm text-slate-400">{occurrence.formatted_address}</p>
+      {members.length > 0 ? (
+        <div className="mt-3 space-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Integrantes</p>
+          <ul className="space-y-0.5 text-sm text-slate-300">
+            {members.map((member) => (
+              <li key={member.member_id}>{formatScheduleMemberLabel(member)}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <a
         href={occurrence.maps_url}
         target="_blank"

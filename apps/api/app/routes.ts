@@ -21,7 +21,17 @@ export default [
   route("bands/:bandId/addresses", "routes/bands.$bandId.addresses._index.tsx"),
   route("bands/:bandId/addresses/:addressId", "routes/bands.$bandId.addresses.$addressId.tsx"),
   route("bands/:bandId/schedules", "routes/bands.$bandId.schedules._index.tsx"),
+  route(
+    "bands/:bandId/schedules/occurrences/:occurrenceId/cancel",
+    "routes/bands.$bandId.schedules.occurrences.$occurrenceId.cancel.tsx",
+  ),
+  route(
+    "bands/:bandId/schedules/occurrences/:occurrenceId",
+    "routes/bands.$bandId.schedules.occurrences.$occurrenceId.tsx",
+  ),
+  route("bands/:bandId/schedules/:scheduleId", "routes/bands.$bandId.schedules.$scheduleId.tsx"),
   route("schedule/upcoming", "routes/schedule.upcoming.tsx"),
+  route("geo/autocomplete", "routes/geo.autocomplete.tsx"),
   route("invites/pending", "routes/invites.pending.tsx"),
   route("invites/preview", "routes/invites.preview.tsx"),
   route("invites/accept", "routes/invites.accept.tsx"),

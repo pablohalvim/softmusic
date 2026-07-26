@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import smtplib
 from datetime import datetime
 from email.message import EmailMessage
@@ -9,12 +10,12 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from app.application.services.email_templates import (
-    google_calendar_url,
     invite_member_email_html,
     invite_member_email_text,
     schedule_occurrence_email_html,
     schedule_occurrence_email_text,
 )
+from app.application.services.ics import build_ics
 from app.config import get_settings
 from app.logging import logger
 
@@ -32,14 +33,19 @@ class EmailService:
         body: str,
         *,
         html: str | None = None,
+        attachments: list[dict[str, str]] | None = None,
     ) -> bool:
         recipients = self._normalize_recipients(to)
         if not recipients:
             return False
         if self.settings.resend_api_key:
-            return self._send_resend(recipients, subject, body, html=html)
+            return self._send_resend(
+                recipients, subject, body, html=html, attachments=attachments
+            )
         if self.settings.smtp_host:
-            return self._send_smtp(recipients, subject, body, html=html)
+            return self._send_smtp(
+                recipients, subject, body, html=html, attachments=attachments
+            )
         logger.info("email_skipped_no_provider", to=recipients, subject=subject)
         return False
 
@@ -65,6 +71,7 @@ class EmailService:
         body: str,
         *,
         html: str | None = None,
+        attachments: list[dict[str, str]] | None = None,
     ) -> bool:
         payload: dict = {
             "from": self.settings.email_from or "SoftMusic <administrativo@softmusic.com.br>",
@@ -74,6 +81,14 @@ class EmailService:
         }
         if html:
             payload["html"] = html
+        if attachments:
+            payload["attachments"] = [
+                {
+                    "filename": item["filename"],
+                    "content": base64.b64encode(item["content"].encode("utf-8")).decode("ascii"),
+                }
+                for item in attachments
+            ]
         try:
             response = httpx.post(
                 "https://api.resend.com/emails",
@@ -104,6 +119,7 @@ class EmailService:
         body: str,
         *,
         html: str | None = None,
+        attachments: list[dict[str, str]] | None = None,
     ) -> bool:
         message = EmailMessage()
         message["From"] = self.settings.email_from or "SoftMusic <administrativo@softmusic.com.br>"
@@ -112,6 +128,13 @@ class EmailService:
         message.set_content(body)
         if html:
             message.add_alternative(html, subtype="html")
+        for item in attachments or []:
+            message.add_attachment(
+                item["content"].encode("utf-8"),
+                maintype="text",
+                subtype="calendar",
+                filename=item["filename"],
+            )
 
         try:
             with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port) as server:
@@ -208,6 +231,10 @@ class EmailService:
         address: str,
         lat: float,
         lng: float,
+        calendar_uid: str,
+        calendar_sequence: int = 0,
+        members_lines: Sequence[str] | None = None,
+        action: str = "create",
     ) -> bool:
         kind_label = "Ensaio" if kind == "rehearsal" else "Evento"
         start_local = starts_at.astimezone(TZ_SP)
@@ -215,21 +242,38 @@ class EmailService:
         date_br = start_local.strftime("%d/%m/%Y")
         when_label = start_local.strftime("%d/%m/%Y às %H:%M")
         ends_label = end_local.strftime("%d/%m/%Y às %H:%M")
-        subject = f"{kind_label} {band_name} {date_br}"
+        roster = [line for line in (members_lines or []) if str(line).strip()]
 
-        event_title = f"{kind_label} — {band_name}"
-        if title:
-            event_title = f"{event_title}: {title}"
+        summary = title or f"{kind_label} — {band_name}"
+        if action == "cancel":
+            subject = f"Cancelado: {kind_label} {band_name} {date_br}"
+            method = "CANCEL"
+        elif action == "update":
+            subject = f"Atualizado: {kind_label} {band_name} {date_br}"
+            method = "REQUEST"
+        else:
+            subject = f"{kind_label} {band_name} {date_br}"
+            method = "REQUEST"
 
-        details = f"{event_title}\nLocal: {address}\nSoftMusic"
-        calendar_url = google_calendar_url(
-            title=event_title,
-            starts_at_utc_compact=starts_at.astimezone(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ"),
-            ends_at_utc_compact=ends_at.astimezone(ZoneInfo("UTC")).strftime("%Y%m%dT%H%M%SZ"),
-            details=details,
-            location=address,
-        )
+        details_parts = [summary, f"Banda: {band_name}", f"Local: {address}"]
+        if roster and action != "cancel":
+            details_parts.append("Integrantes:")
+            details_parts.extend(f"- {line}" for line in roster)
+        details_parts.append("SoftMusic")
+        description = "\n".join(details_parts)
         maps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
+
+        ics_content = build_ics(
+            uid=calendar_uid,
+            summary=summary,
+            description=description,
+            location=address,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            sequence=calendar_sequence,
+            method=method,
+        )
+        filename = f"softmusic-{kind}-{date_br.replace('/', '-')}.ics"
 
         html = schedule_occurrence_email_html(
             kind_label=kind_label,
@@ -239,8 +283,9 @@ class EmailService:
             ends_label=ends_label,
             address=address,
             maps_url=maps_url,
-            calendar_url=calendar_url,
             web_origin=self.settings.web_origin,
+            members_lines=list(roster),
+            action=action,
         )
         text = schedule_occurrence_email_text(
             kind_label=kind_label,
@@ -250,6 +295,13 @@ class EmailService:
             ends_label=ends_label,
             address=address,
             maps_url=maps_url,
-            calendar_url=calendar_url,
+            members_lines=list(roster),
+            action=action,
         )
-        return self.send(recipients, subject, text, html=html)
+        return self.send(
+            recipients,
+            subject,
+            text,
+            html=html,
+            attachments=[{"filename": filename, "content": ics_content}],
+        )

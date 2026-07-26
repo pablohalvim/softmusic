@@ -100,8 +100,9 @@ def schedule_occurrence_email_html(
     ends_label: str,
     address: str,
     maps_url: str,
-    calendar_url: str,
     web_origin: str,
+    members_lines: list[str] | None = None,
+    action: str = "create",
 ) -> str:
     band = escape(band_name)
     kind = escape(kind_label)
@@ -110,12 +111,34 @@ def schedule_occurrence_email_html(
         if title
         else ""
     )
+    if action == "cancel":
+        intro = "Este compromisso foi cancelado. Abra o anexo .ics para remover do Google Agenda."
+        accent_label = "Cancelado"
+    elif action == "update":
+        intro = "A escala foi atualizada. Abra o anexo .ics para atualizar no Google Agenda."
+        accent_label = "Atualizado"
+    else:
+        intro = "Você foi confirmado na escala. Abra o anexo .ics para salvar no Google Agenda."
+        accent_label = kind_label
+
+    members = [line for line in (members_lines or []) if line.strip()]
+    if members and action != "cancel":
+        members_html = "".join(
+            f'<li style="margin:0 0 6px;font-size:13px;color:{MUTED};">{escape(line)}</li>'
+            for line in members
+        )
+        members_block = f"""
+            <p style="margin:14px 0 6px;font-size:13px;color:{MUTED};"><strong style="color:{TEXT};">Integrantes</strong></p>
+            <ul style="margin:0;padding-left:18px;">{members_html}</ul>
+        """
+    else:
+        members_block = ""
     body = f"""
-      <p style="margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:{BRAND_BRIGHT};">{kind}</p>
+      <p style="margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:{BRAND_BRIGHT};">{escape(accent_label)}</p>
       <h1 style="margin:0 0 8px;font-size:24px;line-height:1.25;font-weight:700;color:{TEXT};">{band}</h1>
       {optional_title}
       <p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:{MUTED};">
-        Você foi confirmado na escala. Salve no Google Agenda e confira o local abaixo.
+        {escape(intro)}
       </p>
 
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;background:{SURFACE_ELEVATED};border:1px solid {BORDER_BRIGHT};border-radius:14px;">
@@ -124,20 +147,14 @@ def schedule_occurrence_email_html(
             <p style="margin:0 0 10px;font-size:13px;color:{MUTED};"><strong style="color:{TEXT};">Quando</strong><br />{escape(when_label)}</p>
             <p style="margin:0 0 10px;font-size:13px;color:{MUTED};"><strong style="color:{TEXT};">Até</strong><br />{escape(ends_label)}</p>
             <p style="margin:0;font-size:13px;color:{MUTED};"><strong style="color:{TEXT};">Local</strong><br />{escape(address)}</p>
+            {members_block}
           </td>
         </tr>
       </table>
 
-      <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 12px;">
-        <tr>
-          <td style="border-radius:12px;background:linear-gradient(180deg,{BRAND_BRIGHT},{BRAND});">
-            <a href="{escape(calendar_url)}" target="_blank" rel="noopener noreferrer"
-               style="display:inline-block;padding:12px 20px;font-size:14px;font-weight:700;color:#052e16;text-decoration:none;">
-              Salvar no Google Agenda
-            </a>
-          </td>
-        </tr>
-      </table>
+      <p style="margin:0 0 12px;font-size:13px;color:{MUTED};">
+        Anexo: arquivo <strong style="color:{TEXT};">.ics</strong> para o Google Agenda / Apple Calendar.
+      </p>
 
       <p style="margin:0 0 18px;">
         <a href="{escape(maps_url)}" target="_blank" rel="noopener noreferrer"
@@ -224,10 +241,16 @@ def schedule_occurrence_email_text(
     ends_label: str,
     address: str,
     maps_url: str,
-    calendar_url: str,
+    members_lines: list[str] | None = None,
+    action: str = "create",
 ) -> str:
+    action_label = {
+        "cancel": "CANCELADO",
+        "update": "ATUALIZADO",
+        "create": "NOVO",
+    }.get(action, "NOVO")
     lines = [
-        f"{kind_label} — {band_name}",
+        f"[{action_label}] {kind_label} — {band_name}",
     ]
     if title:
         lines.append(title)
@@ -237,8 +260,17 @@ def schedule_occurrence_email_text(
             f"Quando: {when_label}",
             f"Até: {ends_label}",
             f"Local: {address}",
+        ]
+    )
+    members = [line for line in (members_lines or []) if line.strip()]
+    if members and action != "cancel":
+        lines.append("")
+        lines.append("Integrantes:")
+        lines.extend(f"- {line}" for line in members)
+    lines.extend(
+        [
             "",
-            f"Salvar no Google Agenda: {calendar_url}",
+            "Abra o anexo .ics para sincronizar com o Google Agenda.",
             f"Rota no Google Maps: {maps_url}",
         ]
     )

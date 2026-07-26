@@ -121,7 +121,13 @@ class AuthService:
         user = await self.get_user(str(payload["sub"]))
         if user is None:
             raise ValueError("Usuário não encontrado")
-        return await self._issue_tokens(user, rotate_from=stored)
+        # SPA: não rotaciona o refresh a cada /auth/refresh.
+        # Rotação derruba abas/ações concorrentes e força "Não autenticado" no meio da edição.
+        return {
+            "access_token": create_access_token(user.id),
+            "refresh_token": refresh_token,
+            "user": self.serialize_user(user),
+        }
 
     async def logout(self, refresh_token: str) -> None:
         token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()

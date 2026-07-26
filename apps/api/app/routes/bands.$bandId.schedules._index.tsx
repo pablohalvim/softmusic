@@ -10,14 +10,16 @@ const OccurrenceSchema = z.object({
   lng: z.number().optional().nullable(),
   place_id: z.string().optional().nullable(),
   saved_address_id: z.string().optional().nullable(),
+  same_as_event_address: z.boolean().optional(),
+  save_address: z.boolean().optional(),
+  save_address_label: z.string().optional().nullable(),
 });
 
 const ScheduleSchema = z.object({
-  title: z.string().optional().nullable(),
+  title: z.string().min(1),
   member_ids: z.array(z.string()).min(1),
   event: OccurrenceSchema,
-  rehearsal: OccurrenceSchema,
-  rehearsal_same_as_event_address: z.boolean().optional(),
+  rehearsals: z.array(OccurrenceSchema).optional().default([]),
   save_event_address: z.boolean().optional(),
   save_event_address_label: z.string().optional().nullable(),
 });

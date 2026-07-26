@@ -10,6 +10,18 @@ import {
 import { useBand } from "../lib/band-context";
 import { btnGhost, btnPrimary, panelClass } from "../lib/ui-classes";
 
+function invitePermissionSummary(invite: PendingInvite): string {
+  const parts: string[] = [];
+  if (invite.can_analyze_songs) parts.push("analisar músicas");
+  if (invite.can_invite_members) parts.push("convidar membros");
+  if (invite.can_manage_members) parts.push("gerenciar banda");
+  if (invite.can_delete_songs) parts.push("excluir músicas");
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return ` com permissão para ${parts[0]}`;
+  const last = parts[parts.length - 1];
+  return ` com permissão para ${parts.slice(0, -1).join(", ")} e ${last}`;
+}
+
 export function PendingInvitesCard() {
   const queryClient = useQueryClient();
   const { refreshBands, setActiveBandId } = useBand();
@@ -90,7 +102,7 @@ function InviteCard({
           <h2 className="truncate text-lg font-semibold text-slate-50">{invite.band_name}</h2>
           <p className="text-sm text-slate-400">
             Você foi convidado para entrar nesta banda
-            {invite.can_analyze_songs ? " com permissão para analisar músicas" : ""}.
+            {invitePermissionSummary(invite)}.
           </p>
         </div>
         <div className="flex w-full shrink-0 gap-2 sm:w-auto">

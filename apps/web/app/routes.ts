@@ -7,6 +7,11 @@ export default [
   route("convite", "routes/convite.tsx"),
   route("bandas", "routes/bandas.tsx"),
   route("bandas/:bandId", "routes/bandas.$bandId.tsx"),
+  route("bandas/:bandId/agenda/nova", "routes/bandas.$bandId.agenda.nova.tsx"),
+  route(
+    "bandas/:bandId/agenda/:scheduleId/editar",
+    "routes/bandas.$bandId.agenda.$scheduleId.editar.tsx",
+  ),
   route("faturas", "routes/faturas.tsx"),
   route("dashboard", "routes/dashboard.tsx"),
   route("library", "routes/library.tsx"),

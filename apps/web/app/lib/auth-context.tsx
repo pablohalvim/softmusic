@@ -1,6 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { apiUrl, refreshAccessToken } from "./api";
+import {
+  AUTH_CLEARED_EVENT,
+  apiUrl,
+  ensureFreshAccessToken,
+  getJwtExpiryMs,
+  refreshAccessToken,
+} from "./api";
 import {
   clearTokens,
   loadTokens,
@@ -35,13 +41,46 @@ async function parseApiError(response: Response, fallback: string): Promise<stri
   }
 }
 
+/** Agenda renovação ~2 min antes do access expirar; com a página aberta, o token se renova sozinho. */
+function scheduleAccessRefresh(refresh: () => Promise<unknown>): () => void {
+  let timer: number | null = null;
+  let cancelled = false;
+
+  const arm = () => {
+    if (cancelled) return;
+    if (timer != null) {
+      window.clearTimeout(timer);
+      timer = null;
+    }
+    const access = loadTokens()?.access_token;
+    if (!access) return;
+    const exp = getJwtExpiryMs(access);
+    const delay =
+      exp == null ? 60_000 : Math.max(5_000, exp - Date.now() - 120_000);
+    timer = window.setTimeout(() => {
+      void refresh().finally(() => {
+        if (!cancelled) arm();
+      });
+    }, delay);
+  };
+
+  arm();
+  return () => {
+    cancelled = true;
+    if (timer != null) window.clearTimeout(timer);
+  };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchMe = useCallback(async (token: string) => {
     const response = await fetch(`${apiUrl}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.softmusic.v1+json",
+      },
     });
     if (!response.ok) {
       throw new Error("Sessão expirada");
@@ -52,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let cancelSchedule = () => undefined;
 
     async function bootstrap() {
       const tokens = loadTokens();
@@ -61,9 +101,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        await fetchMe(tokens.access_token);
+        await ensureFreshAccessToken();
+        const next = loadTokens();
+        await fetchMe(next?.access_token ?? tokens.access_token);
       } catch {
-        // Access de 15m costuma expirar; tenta refresh antes de deslogar.
         const refreshed = await refreshAccessToken();
         if (cancelled) return;
         if (refreshed) {
@@ -84,9 +125,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    void bootstrap();
+    void bootstrap().then(() => {
+      if (cancelled) return;
+      cancelSchedule = scheduleAccessRefresh(() => ensureFreshAccessToken());
+    });
+
+    const onAuthCleared = () => {
+      if (!cancelled) setUser(null);
+    };
+    window.addEventListener(AUTH_CLEARED_EVENT, onAuthCleared);
+
+    // Voltou para a aba / foco na janela → renova se o access já tiver acabado.
+    const onResume = () => {
+      if (document.visibilityState === "hidden") return;
+      void ensureFreshAccessToken();
+    };
+    document.addEventListener("visibilitychange", onResume);
+    window.addEventListener("focus", onResume);
+
     return () => {
       cancelled = true;
+      cancelSchedule();
+      window.removeEventListener(AUTH_CLEARED_EVENT, onAuthCleared);
+      document.removeEventListener("visibilitychange", onResume);
+      window.removeEventListener("focus", onResume);
     };
   }, [fetchMe]);
 

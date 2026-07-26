@@ -88,14 +88,18 @@ class AnalysisService:
         key = f"{song_id}/{filename}"
         file_path = await self.storage.save(key, content)
 
-        cifra_url = (options or {}).get("cifra_club_url")
+        opts = options or {}
+        cifra_url = opts.get("cifra_club_url")
         cifra_club_url = cifra_url.strip() if isinstance(cifra_url, str) and cifra_url.strip() else None
+        title_raw = opts.get("title")
+        title = title_raw.strip() if isinstance(title_raw, str) and title_raw.strip() else None
 
         song = Song(
             id=song_id,
             source_type="upload",
             source_ref=filename,
             file_path=file_path,
+            title=title,
             cifra_club_url=cifra_club_url,
             status=SongStatus.PENDING.value,
         )
@@ -686,9 +690,9 @@ class AnalysisService:
             song.file_path = str(source_path)
             source_metadata = download.metadata.to_dict()
 
-            if download.metadata.title:
+            if download.metadata.title and not song.title:
                 song.title = download.metadata.title
-            if download.metadata.artist:
+            if download.metadata.artist and not song.artist:
                 song.artist = download.metadata.artist
             if download.metadata.duration_seconds:
                 song.duration_seconds = download.metadata.duration_seconds
@@ -771,9 +775,10 @@ class AnalysisService:
         self.session.add(result)
         song.status = SongStatus.COMPLETED.value
         song.duration_seconds = payload["metadata"]["duration_seconds"]
-        if payload["metadata"].get("title"):
+        # Não sobrescreve título/artista já definidos (ex.: nome informado no upload).
+        if payload["metadata"].get("title") and not song.title:
             song.title = payload["metadata"]["title"]
-        if payload["metadata"].get("artist"):
+        if payload["metadata"].get("artist") and not song.artist:
             song.artist = payload["metadata"]["artist"]
         job.status = JobStatus.COMPLETED.value
         job.stage = "persist"

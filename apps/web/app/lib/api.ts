@@ -13,6 +13,39 @@ function resolveApiUrl(): string {
 
 export const apiUrl = resolveApiUrl();
 
+export const AUTH_CLEARED_EVENT = "softmusic:auth-cleared";
+export const AUTH_TOKENS_UPDATED_EVENT = "softmusic:auth-tokens-updated";
+
+function notifyAuthCleared(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(AUTH_CLEARED_EVENT));
+}
+
+function notifyTokensUpdated(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(AUTH_TOKENS_UPDATED_EVENT));
+}
+
+/** Lê `exp` do JWT sem validar assinatura (só para refresh preventivo no cliente). */
+export function getJwtExpiryMs(token: string): number | null {
+  try {
+    const segment = token.split(".")[1];
+    if (!segment) return null;
+    const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+    const payload = JSON.parse(atob(padded)) as { exp?: unknown };
+    return typeof payload.exp === "number" ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function accessTokenNeedsRefresh(token: string, skewMs = 120_000): boolean {
+  const exp = getJwtExpiryMs(token);
+  if (exp == null) return true;
+  return Date.now() + skewMs >= exp;
+}
+
 function authHeaders(): HeadersInit {
   const headers: Record<string, string> = {
     Accept: "application/vnd.softmusic.v1+json",
@@ -37,29 +70,65 @@ export async function refreshAccessToken(): Promise<boolean> {
   }
 
   const run = async (): Promise<boolean> => {
-    const tokens = loadTokens();
-    if (!tokens?.refresh_token) {
+    const tokensBefore = loadTokens();
+    if (!tokensBefore?.refresh_token) {
       return false;
     }
     try {
       const response = await fetch(`${apiUrl}/auth/refresh`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: tokens.refresh_token }),
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/vnd.softmusic.v1+json",
+        },
+        body: JSON.stringify({ refresh_token: tokensBefore.refresh_token }),
       });
-      if (!response.ok) {
-        return false;
+
+      if (response.ok) {
+        const payload = (await response.json()) as {
+          access_token?: string;
+          refresh_token?: string;
+        };
+        if (!payload?.access_token) {
+          return false;
+        }
+        saveTokens({
+          access_token: payload.access_token,
+          refresh_token: payload.refresh_token ?? tokensBefore.refresh_token,
+        });
+        notifyTokensUpdated();
+        return true;
       }
-      const payload = await response.json();
-      if (!payload?.access_token) {
-        return false;
+
+      // Outra aba pode ter rotacionado o refresh e gravado tokens novos.
+      const tokensAfter = loadTokens();
+      if (
+        tokensAfter?.access_token &&
+        tokensAfter.access_token !== tokensBefore.access_token &&
+        !accessTokenNeedsRefresh(tokensAfter.access_token, 0)
+      ) {
+        return true;
       }
-      saveTokens({
-        access_token: payload.access_token,
-        refresh_token: payload.refresh_token ?? tokens.refresh_token,
-      });
-      return true;
+
+      // Só limpa em 401 definitivo com o mesmo refresh (expirado/revogado).
+      // Erros de rede/5xx NÃO apagam a sessão — senão perde edição da cifra.
+      if (response.status === 401 || response.status === 403) {
+        const stillSameRefresh =
+          loadTokens()?.refresh_token === tokensBefore.refresh_token;
+        if (stillSameRefresh) {
+          clearTokens();
+          notifyAuthCleared();
+        }
+      }
+      return false;
     } catch {
+      const tokensAfter = loadTokens();
+      if (
+        tokensAfter?.access_token &&
+        tokensAfter.access_token !== tokensBefore.access_token
+      ) {
+        return true;
+      }
       return false;
     }
   };
@@ -70,28 +139,38 @@ export async function refreshAccessToken(): Promise<boolean> {
   return refreshInFlight;
 }
 
-export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(authHeaders());
-  if (init.headers) {
-    for (const [key, value] of new Headers(init.headers)) {
-      headers.set(key, value);
-    }
+/** Renova o access token se estiver perto de expirar (ou já expirado). */
+export async function ensureFreshAccessToken(): Promise<boolean> {
+  const tokens = loadTokens();
+  if (!tokens?.access_token) {
+    return false;
   }
-  let response = await fetch(`${apiUrl}${path}`, { ...init, headers });
-  if (response.status === 401) {
-    const hadRefresh = Boolean(loadTokens()?.refresh_token);
+  if (!accessTokenNeedsRefresh(tokens.access_token)) {
+    return true;
+  }
+  return refreshAccessToken();
+}
+
+export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  // Qualquer ação autenticada: se o access acabou (ou está perto), renova e segue.
+  await ensureFreshAccessToken();
+
+  const buildHeaders = () => {
+    const headers = new Headers(authHeaders());
+    if (init.headers) {
+      for (const [key, value] of new Headers(init.headers)) {
+        headers.set(key, value);
+      }
+    }
+    return headers;
+  };
+
+  let response = await fetch(`${apiUrl}${path}`, { ...init, headers: buildHeaders() });
+  if (response.status === 401 && loadTokens()?.refresh_token) {
+    // Access expirou no meio do caminho — renova e repete a mesma ação uma vez.
     const refreshed = await refreshAccessToken();
     if (refreshed) {
-      const retryHeaders = new Headers(authHeaders());
-      if (init.headers) {
-        for (const [key, value] of new Headers(init.headers)) {
-          retryHeaders.set(key, value);
-        }
-      }
-      response = await fetch(`${apiUrl}${path}`, { ...init, headers: retryHeaders });
-    } else if (hadRefresh) {
-      // Refresh inválido/expirado — limpa para não ficar em loop de 401.
-      clearTokens();
+      response = await fetch(`${apiUrl}${path}`, { ...init, headers: buildHeaders() });
     }
   }
   return response;
@@ -184,6 +263,9 @@ export interface PendingInvite {
   band_name: string;
   email: string;
   can_analyze_songs: boolean;
+  can_invite_members?: boolean;
+  can_manage_members?: boolean;
+  can_delete_songs?: boolean;
   expires_at: string;
   created_at: string;
 }
@@ -240,12 +322,23 @@ export async function declinePendingInvite(inviteId: string): Promise<void> {
 export async function inviteBandMember(
   bandId: string,
   email: string,
-  canAnalyzeSongs = false,
+  permissions: {
+    can_analyze_songs?: boolean;
+    can_invite_members?: boolean;
+    can_manage_members?: boolean;
+    can_delete_songs?: boolean;
+  } = {},
 ): Promise<void> {
   const response = await authFetch(`/bands/${bandId}/invites`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, can_analyze_songs: canAnalyzeSongs }),
+    body: JSON.stringify({
+      email,
+      can_analyze_songs: permissions.can_analyze_songs ?? false,
+      can_invite_members: permissions.can_invite_members ?? false,
+      can_manage_members: permissions.can_manage_members ?? false,
+      can_delete_songs: permissions.can_delete_songs ?? false,
+    }),
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
@@ -288,6 +381,29 @@ export interface SavedAddress {
 export interface ScheduleOccurrence {
   id: string;
   kind: "event" | "rehearsal";
+  title?: string | null;
+  starts_at: string;
+  ends_at: string;
+  formatted_address: string;
+  lat: number;
+  lng: number;
+  place_id?: string | null;
+  saved_address_id?: string | null;
+  maps_url: string;
+}
+
+export interface ScheduleMember {
+  member_id: string;
+  full_name: string;
+  role_names?: string[];
+  label?: string;
+}
+
+export interface ScheduleGridRow {
+  occurrence_id: string;
+  schedule_id: string;
+  title: string | null;
+  kind: "event" | "rehearsal";
   starts_at: string;
   ends_at: string;
   formatted_address: string;
@@ -295,6 +411,8 @@ export interface ScheduleOccurrence {
   lng: number;
   place_id?: string | null;
   maps_url: string;
+  member_count: number;
+  members: ScheduleMember[];
 }
 
 export interface BandSchedule {
@@ -303,7 +421,7 @@ export interface BandSchedule {
   title: string | null;
   created_at: string;
   occurrences: ScheduleOccurrence[];
-  members: Array<{ member_id: string; full_name: string }>;
+  members: ScheduleMember[];
 }
 
 export interface UpcomingOccurrence {
@@ -319,6 +437,18 @@ export interface UpcomingOccurrence {
   lat: number;
   lng: number;
   maps_url: string;
+  members?: ScheduleMember[];
+}
+
+export function formatScheduleMemberLabel(member: {
+  full_name: string;
+  role_names?: string[];
+  label?: string;
+}): string {
+  if (member.label?.trim()) return member.label;
+  const roles = member.role_names ?? [];
+  if (roles.length > 0) return `${member.full_name} (${roles.join(", ")})`;
+  return member.full_name;
 }
 
 async function readJsonOrThrow(response: Response, fallback: string) {
@@ -428,10 +558,15 @@ export async function deleteBandAddress(bandId: string, addressId: string): Prom
   await readJsonOrThrow(response, "Não foi possível excluir o endereço");
 }
 
-export async function fetchBandSchedules(bandId: string): Promise<BandSchedule[]> {
+export async function fetchBandSchedules(bandId: string): Promise<ScheduleGridRow[]> {
   const response = await authFetch(`/bands/${bandId}/schedules`);
   const payload = await readJsonOrThrow(response, "Não foi possível carregar a agenda");
   return payload.items ?? [];
+}
+
+export async function fetchBandSchedule(bandId: string, scheduleId: string): Promise<BandSchedule> {
+  const response = await authFetch(`/bands/${bandId}/schedules/${scheduleId}`);
+  return readJsonOrThrow(response, "Não foi possível carregar a escala");
 }
 
 export async function createBandSchedule(bandId: string, body: unknown): Promise<BandSchedule> {
@@ -441,6 +576,30 @@ export async function createBandSchedule(bandId: string, body: unknown): Promise
     body: JSON.stringify(body),
   });
   return readJsonOrThrow(response, "Não foi possível criar a escala");
+}
+
+export async function updateScheduleOccurrence(
+  bandId: string,
+  occurrenceId: string,
+  body: unknown,
+): Promise<BandSchedule> {
+  const response = await authFetch(`/bands/${bandId}/schedules/occurrences/${occurrenceId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return readJsonOrThrow(response, "Não foi possível atualizar a escala");
+}
+
+export async function cancelScheduleOccurrence(
+  bandId: string,
+  occurrenceId: string,
+): Promise<void> {
+  const response = await authFetch(
+    `/bands/${bandId}/schedules/occurrences/${occurrenceId}/cancel`,
+    { method: "POST" },
+  );
+  await readJsonOrThrow(response, "Não foi possível cancelar a escala");
 }
 
 export async function fetchUpcomingSchedule(): Promise<{

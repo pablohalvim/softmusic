@@ -232,6 +232,16 @@ class BandService:
         )
         await self.session.commit()
 
+    async def unlink_song(self, band_id: str, song_id: str) -> None:
+        result = await self.session.execute(
+            select(BandSong).where(BandSong.band_id == band_id, BandSong.song_id == song_id)
+        )
+        link = result.scalar_one_or_none()
+        if link is None:
+            return
+        await self.session.delete(link)
+        await self.session.commit()
+
     async def song_linked_to_band(self, band_id: str, song_id: str) -> bool:
         result = await self.session.execute(
             select(BandSong).where(BandSong.band_id == band_id, BandSong.song_id == song_id)
@@ -324,7 +334,15 @@ class BandService:
         return list(result.scalars().all()), total
 
     async def invite_member(
-        self, band_id: str, actor_user_id: str, email: str, can_analyze: bool
+        self,
+        band_id: str,
+        actor_user_id: str,
+        email: str,
+        *,
+        can_analyze_songs: bool = False,
+        can_invite_members: bool = False,
+        can_manage_members: bool = False,
+        can_delete_songs: bool = False,
     ) -> dict[str, Any]:
         band, _actor = await self.require_invite_access(band_id, actor_user_id)
         email_norm = email.strip().lower()
@@ -354,7 +372,10 @@ class BandService:
             band_id=band_id,
             email=email_norm,
             token_hash=hashlib.sha256(token.encode()).hexdigest(),
-            can_analyze_songs=can_analyze,
+            can_analyze_songs=bool(can_analyze_songs),
+            can_invite_members=bool(can_invite_members),
+            can_manage_members=bool(can_manage_members),
+            can_delete_songs=bool(can_delete_songs),
             expires_at=datetime.now(UTC) + timedelta(days=7),
         )
         self.session.add(invite)
@@ -410,6 +431,9 @@ class BandService:
             "band_name": band.name,
             "expires_at": invite.expires_at.isoformat(),
             "can_analyze_songs": invite.can_analyze_songs,
+            "can_invite_members": invite.can_invite_members,
+            "can_manage_members": invite.can_manage_members,
+            "can_delete_songs": invite.can_delete_songs,
         }
 
     async def accept_invite(
@@ -482,6 +506,9 @@ class BandService:
             user_id=user.id,
             role="member",
             can_analyze_songs=invite.can_analyze_songs,
+            can_invite_members=invite.can_invite_members,
+            can_manage_members=invite.can_manage_members,
+            can_delete_songs=invite.can_delete_songs,
             status="active",
             invited_at=invite.created_at,
             joined_at=datetime.now(UTC),
@@ -508,6 +535,9 @@ class BandService:
             "band_name": band.name,
             "email": invite.email,
             "can_analyze_songs": invite.can_analyze_songs,
+            "can_invite_members": invite.can_invite_members,
+            "can_manage_members": invite.can_manage_members,
+            "can_delete_songs": invite.can_delete_songs,
             "expires_at": invite.expires_at.isoformat(),
             "created_at": invite.created_at.isoformat(),
         }

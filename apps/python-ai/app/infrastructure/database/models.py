@@ -310,6 +310,7 @@ class BandScheduleOccurrence(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     schedule_id: Mapped[str] = mapped_column(String(32), index=True)
     kind: Mapped[str] = mapped_column(String(16))  # event | rehearsal
+    title: Mapped[str] = mapped_column(String(220), default="")
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     formatted_address: Mapped[str] = mapped_column(String(500))
@@ -317,7 +318,15 @@ class BandScheduleOccurrence(Base):
     lng: Mapped[float] = mapped_column(Float)
     place_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     saved_address_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    calendar_uid: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    calendar_sequence: Mapped[int] = mapped_column(Integer, default=0)
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
 
 class BandScheduleMember(Base):
@@ -337,6 +346,9 @@ class BandInvite(Base):
     email: Mapped[str] = mapped_column(String(320))
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     can_analyze_songs: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_invite_members: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_manage_members: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_delete_songs: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
