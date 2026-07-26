@@ -5,12 +5,23 @@ alwaysApply: true
 
 # Versionamento SoftMusic
 
-Antes de criar qualquer **git commit** neste repositório:
+A versão do produto fica em `packages/shared/src/version.ts` (`APP_VERSION`).
+
+## Automático (preferido)
+
+O hook git `.githooks/pre-commit` incrementa o **patch** (+1) e faz `git add` do arquivo em todo commit.
+
+- Ativar uma vez: `pnpm hooks:install` (também roda em `pnpm install` via `prepare`).
+- Pular um commit: `SKIP_VERSION_BUMP=1 git commit ...`
+- Bump manual: `pnpm version:bump`
+
+## Se o hook não estiver ativo
+
+Antes de criar qualquer **git commit**:
 
 1. Abra `packages/shared/src/version.ts`.
-2. Incremente o **patch** de `APP_VERSION` em **+1** (ex.: `1.0.0` → `1.0.1` → `1.0.2`).
+2. Incremente o **patch** de `APP_VERSION` em **+1** (ex.: `1.0.0` → `1.0.1`).
 3. Não altere major/minor a menos que o usuário peça explicitamente.
 4. Inclua `packages/shared/src/version.ts` no mesmo commit.
-5. O footer do app (`apps/web`) e do admin (`apps/admin-web`) leem essa constante via `@softmusic/shared` — não duplique a versão em outros arquivos.
 
-Versão inicial do produto: `1.0.0`.
+Não duplique a versão em outros arquivos — web e admin leem via `@softmusic/shared`.
