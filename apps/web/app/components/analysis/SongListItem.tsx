@@ -18,6 +18,7 @@ import {
 import { useAuth } from "../../lib/auth-context";
 import { useBand } from "../../lib/band-context";
 import { useConfirm } from "../../lib/confirm";
+import { ANALYSIS_MEDIA_ACCEPT } from "../../lib/media-upload";
 import { labelSongStatus } from "../../lib/status-labels";
 import { useToast } from "../../lib/toast";
 import { btnGhost, btnPrimary, panelClass } from "../../lib/ui-classes";
@@ -138,7 +139,7 @@ export function SongListItem({ song }: { song: SongSummary }) {
                   id={`reanalyze-audio-${song.id}`}
                   name={`reanalyze-audio-${song.id}`}
                   type="file"
-                  accept="audio/*"
+                  accept={ANALYSIS_MEDIA_ACCEPT}
                   className="hidden"
                   onChange={(event) => {
                     const selected = event.target.files?.[0] ?? null;

@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { createCifraDraft, uploadSongForAnalysis } from "../../lib/api";
+import { ANALYSIS_MEDIA_ACCEPT } from "../../lib/media-upload";
 import { useToast } from "../../lib/toast";
 import {
   btnGhost,
@@ -135,17 +136,17 @@ export function NewSongModal({ open, onClose }: NewSongModalProps) {
           </label>
 
           <label htmlFor="new-song-audio" className={labelClass}>
-            <span>Áudio (opcional)</span>
+            <span>Áudio ou vídeo (opcional)</span>
             <input
               id="new-song-audio"
               name="audio_file"
               type="file"
-              accept="audio/*"
+              accept={ANALYSIS_MEDIA_ACCEPT}
               className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-gradient-to-b file:from-red-400 file:to-red-600 file:px-4 file:py-2 file:font-medium file:text-white"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
             <span className="text-xs text-slate-500">
-              Sem áudio: cifra em branco para editar. Com áudio: inicia análise (stems, tom, etc.).
+              Sem arquivo: cifra em branco. Com áudio/vídeo (inclui MP4): inicia análise.
             </span>
           </label>
 

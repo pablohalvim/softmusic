@@ -9,6 +9,7 @@ import {
 } from "../components/cifra/cifra-variations";
 import { authFetch } from "../lib/api";
 import { useBand } from "../lib/band-context";
+import { ANALYSIS_MEDIA_ACCEPT } from "../lib/media-upload";
 import { useToast } from "../lib/toast";
 import {
   alertInfoClass,
@@ -311,15 +312,18 @@ export default function Analyze() {
             />
           </label>
           <label htmlFor="audio-file" className={labelClass}>
-            <span>Arquivo de áudio</span>
+            <span>Arquivo de áudio ou vídeo</span>
             <input
               id="audio-file"
               name="audio-file"
               type="file"
-              accept="audio/*"
+              accept={ANALYSIS_MEDIA_ACCEPT}
               className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-gradient-to-b file:from-red-400 file:to-red-600 file:px-4 file:py-2 file:font-medium file:text-white"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
+            <span className="text-xs text-slate-500">
+              MP3, WAV, OPUS, WEBM, MP4 e similares — o áudio do vídeo é extraído na análise.
+            </span>
           </label>
           <button
             type="submit"
