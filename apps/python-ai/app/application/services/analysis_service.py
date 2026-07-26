@@ -467,6 +467,26 @@ class AnalysisService:
         await self.session.refresh(variation)
         return serialize_cifra_variation(variation)
 
+    async def delete_cifra_variation(
+        self,
+        song_id: str,
+        variation_id: str,
+        band_id: str | None = None,
+    ) -> bool:
+        query = select(CifraVariation).where(
+            CifraVariation.id == variation_id,
+            CifraVariation.song_id == song_id,
+        )
+        if band_id is not None:
+            query = query.where(CifraVariation.band_id == band_id)
+        result = await self.session.execute(query)
+        variation = result.scalar_one_or_none()
+        if variation is None:
+            return False
+        await self.session.delete(variation)
+        await self.session.commit()
+        return True
+
     async def get_job(self, job_id: str) -> AnalysisJob | None:
         result = await self.session.execute(select(AnalysisJob).where(AnalysisJob.id == job_id))
         return result.scalar_one_or_none()

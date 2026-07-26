@@ -764,6 +764,24 @@ async def import_cifra_variation(
     )
 
 
+@router.delete("/songs/{song_id}/cifra-variations/{variation_id}")
+async def delete_cifra_variation(
+    song_id: str,
+    variation_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    if not band_id:
+        raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
+    await _ensure_song_access(session, band_id, user.id, song_id)
+    service = AnalysisService(session)
+    deleted = await service.delete_cifra_variation(song_id, variation_id, band_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Variação não encontrada")
+    return {"ok": True, "id": variation_id}
+
+
 @router.get("/songs/{song_id}/chords")
 async def get_chords(
     song_id: str,

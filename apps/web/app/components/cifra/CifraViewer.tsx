@@ -23,6 +23,7 @@ import {
 } from "./cifra-key";
 import { useCifraScroll } from "./cifra-scroll-context";
 import {
+  deleteCifraVariationFromServer,
   fetchCifraVariations,
   importCifraVariationFromUrl,
   saveCifraVariationToServer,
@@ -44,6 +45,7 @@ import {
 } from "../../lib/ui-classes";
 import { SaveCifraVariationModal } from "./SaveCifraVariationModal";
 import { FoundChordsBar } from "./FoundChordsBar";
+import { useConfirm } from "../../lib/confirm";
 import { useToast } from "../../lib/toast";
 
 interface ImportedCifraSheet {
@@ -207,7 +209,9 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
   const [toolsMinimizedMobile, setToolsMinimizedMobile] = useState(readToolsMinimizedMobile);
   const [cifraEditMode, setCifraEditMode] = useState(false);
   const [persistingVariation, setPersistingVariation] = useState(false);
+  const [deletingVariation, setDeletingVariation] = useState(false);
   const toast = useToast();
+  const { confirm } = useConfirm();
 
   const toggleToolsMinimizedMobile = () => {
     setToolsMinimizedMobile((current) => {
@@ -485,6 +489,33 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
     setActiveVariationId(variation.id);
     applyVariationSnapshot(variation.snapshot);
     setImportVariationOpen(false);
+  };
+
+  const handleDeleteVariation = async () => {
+    if (!activeVariationId) return;
+    const active = variations.find((entry) => entry.id === activeVariationId);
+    if (!active) return;
+
+    const ok = await confirm({
+      title: "Excluir variação",
+      message: `Excluir a variação “${active.name}”? Esta ação não pode ser desfeita.`,
+      confirmLabel: "Excluir",
+      danger: true,
+    });
+    if (!ok) return;
+
+    setDeletingVariation(true);
+    try {
+      await deleteCifraVariationFromServer(chordData.song_id, active.id);
+      const remaining = variations.filter((entry) => entry.id !== active.id);
+      setVariations(remaining);
+      setActiveVariationId("");
+      toast.success(`Variação “${active.name}” excluída.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível excluir a variação.");
+    } finally {
+      setDeletingVariation(false);
+    }
   };
 
   const handleVariationSelect = (variationId: string) => {
@@ -770,6 +801,19 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
               onClick={() => setImportVariationOpen(true)}
             >
               Importar nova variação
+            </button>
+            <button
+              type="button"
+              className={`${controlClass} mt-2 w-full text-center text-red-300 hover:border-red-500/40 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40`}
+              onClick={() => void handleDeleteVariation()}
+              disabled={!activeVariationId || deletingVariation}
+              title={
+                activeVariationId
+                  ? "Exclui a variação selecionada da banda"
+                  : "Selecione uma variação para excluir"
+              }
+            >
+              {deletingVariation ? "Excluindo..." : "Excluir variação"}
             </button>
           </div>
 

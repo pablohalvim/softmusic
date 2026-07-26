@@ -69,6 +69,10 @@ export default [
   route("songs/:songId/timeline", "routes/songs.$songId.timeline.tsx"),
   route("songs/:songId/chords", "routes/songs.$songId.chords.tsx"),
   route("songs/:songId/cifra-variations", "routes/songs.$songId.cifra-variations.tsx"),
+  route(
+    "songs/:songId/cifra-variations/:variationId",
+    "routes/songs.$songId.cifra-variations.$variationId.tsx",
+  ),
   route("songs/:songId/lyrics", "routes/songs.$songId.lyrics.tsx"),
   route("songs/:songId/waveform", "routes/songs.$songId.waveform.tsx"),
   route("songs/:songId/audio", "routes/songs.$songId.audio.tsx"),

@@ -263,3 +263,18 @@ export function deleteCifraVariation(songId: string, variationId: string): void 
   const variations = loadCifraVariations(songId).filter((variation) => variation.id !== variationId);
   saveCifraVariations(songId, variations);
 }
+
+export async function deleteCifraVariationFromServer(
+  songId: string,
+  variationId: string,
+): Promise<void> {
+  const response = await authFetch(`/songs/${songId}/cifra-variations/${variationId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    await parseVariationError(response, "Falha ao excluir variação da cifra");
+  }
+
+  deleteCifraVariation(songId, variationId);
+}
