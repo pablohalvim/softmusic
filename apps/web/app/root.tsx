@@ -1,3 +1,4 @@
+import { formatAppFooter } from "@softmusic/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
 import { Link, Links, Meta, Outlet, Scripts, ScrollRestoration, useLocation } from "react-router";
@@ -205,6 +206,14 @@ function AppHeader() {
   );
 }
 
+function AppFooter() {
+  return (
+    <footer className="mt-8 border-t border-white/[0.06] pt-4 text-center text-xs text-slate-500">
+      {formatAppFooter()}
+    </footer>
+  );
+}
+
 function AppShell() {
   return (
     <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-4 pb-4 pt-0 sm:pb-6">
@@ -223,6 +232,7 @@ function AppShell() {
           <Outlet />
         </AuthGuard>
       </main>
+      <AppFooter />
     </div>
   );
 }

@@ -6,8 +6,12 @@ import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8")) as { version?: string };
-const appVersion = process.env.VITE_APP_VERSION || pkg.version || "0.0.1";
+const versionSource = fs.readFileSync(
+  path.join(rootDir, "../../packages/shared/src/version.ts"),
+  "utf8",
+);
+const versionMatch = versionSource.match(/APP_VERSION\s*=\s*"([^"]+)"/);
+const appVersion = process.env.VITE_APP_VERSION || versionMatch?.[1] || "1.0.0";
 
 function writeVersionFile(dir: string) {
   if (!fs.existsSync(dir)) return;

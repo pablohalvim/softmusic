@@ -1,0 +1,16 @@
+---
+description: Incrementar APP_VERSION (patch) em todo commit
+alwaysApply: true
+---
+
+# Versionamento SoftMusic
+
+Antes de criar qualquer **git commit** neste repositório:
+
+1. Abra `packages/shared/src/version.ts`.
+2. Incremente o **patch** de `APP_VERSION` em **+1** (ex.: `1.0.0` → `1.0.1` → `1.0.2`).
+3. Não altere major/minor a menos que o usuário peça explicitamente.
+4. Inclua `packages/shared/src/version.ts` no mesmo commit.
+5. O footer do app (`apps/web`) e do admin (`apps/admin-web`) leem essa constante via `@softmusic/shared` — não duplique a versão em outros arquivos.
+
+Versão inicial do produto: `1.0.0`.

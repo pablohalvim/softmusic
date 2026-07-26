@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { formatAppFooter } from "@softmusic/shared";
+
 import {
   adminLogin,
   clearAdminToken,
@@ -16,6 +18,10 @@ import {
   type AsaasSettings,
 } from "./lib/api";
 import { AdminDashboard } from "./components/AdminDashboard";
+
+function AppFooter() {
+  return <footer className="app-footer">{formatAppFooter()}</footer>;
+}
 
 type Tab = "dashboard" | "users" | "bands" | "invoices" | "settings" | "marketing";
 
@@ -133,6 +139,7 @@ export function App() {
           {error ? <p className="error">{error}</p> : null}
           <button type="submit">Entrar</button>
         </form>
+        <AppFooter />
       </main>
     );
   }
@@ -387,6 +394,8 @@ export function App() {
           </button>
         </section>
       ) : null}
+
+      <AppFooter />
     </main>
   );
 }
