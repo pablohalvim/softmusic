@@ -284,12 +284,14 @@ function MembersTab({ bandId, canManage }: { bandId: string; canManage: boolean 
       can_analyze_songs: boolean;
       can_invite_members: boolean;
       can_manage_members: boolean;
+      can_delete_songs: boolean;
     }) =>
       updateBandMember(bandId, payload.memberId, {
         role_ids: payload.role_ids,
         can_analyze_songs: payload.can_analyze_songs,
         can_invite_members: payload.can_invite_members,
         can_manage_members: payload.can_manage_members,
+        can_delete_songs: payload.can_delete_songs,
       }),
     onSuccess: async () => {
       setEditing(null);
@@ -400,12 +402,14 @@ function MemberEditModal({
     can_analyze_songs: boolean;
     can_invite_members: boolean;
     can_manage_members: boolean;
+    can_delete_songs: boolean;
   }) => void;
 }) {
   const [roleIds, setRoleIds] = useState(() => new Set(member.roles.map((r) => r.id)));
   const [canAnalyze, setCanAnalyze] = useState(member.can_analyze_songs);
   const [canInvite, setCanInvite] = useState(member.can_invite_members);
   const [canManage, setCanManage] = useState(member.can_manage_members);
+  const [canDelete, setCanDelete] = useState(Boolean(member.can_delete_songs));
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center">
@@ -452,6 +456,10 @@ function MemberEditModal({
               <input type="checkbox" checked={canManage} onChange={(e) => setCanManage(e.target.checked)} />
               Pode gerenciar funções, membros e agenda
             </label>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input type="checkbox" checked={canDelete} onChange={(e) => setCanDelete(e.target.checked)} />
+              Pode excluir músicas da biblioteca
+            </label>
           </fieldset>
         ) : (
           <p className="text-sm text-slate-400">O responsável mantém todas as permissões de gestão.</p>
@@ -471,6 +479,7 @@ function MemberEditModal({
                 can_analyze_songs: canAnalyze,
                 can_invite_members: canInvite,
                 can_manage_members: canManage,
+                can_delete_songs: canDelete,
               })
             }
           >

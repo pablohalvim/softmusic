@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
-import { getGoogleMapsApiKey, loadGoogleMaps, type PlaceSelection } from "../lib/google-places";
+import {
+  fetchPlacePredictions,
+  getGoogleMapsApiKey,
+  onGoogleMapsAuthFailure,
+  resolvePlaceDetails,
+  type PlacePrediction,
+  type PlaceSelection,
+} from "../lib/google-places";
 import { inputClass, labelClass } from "../lib/ui-classes";
 
 type Props = {
@@ -11,74 +18,159 @@ type Props = {
 };
 
 export function PlacesAddressInput({ label, value, onChange, disabled }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const onChangeRef = useRef(onChange);
+  const listId = useId();
+  const [query, setQuery] = useState(value?.formatted_address ?? "");
+  const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [busyDetail, setBusyDetail] = useState(false);
+  const debounceRef = useRef<number | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!getGoogleMapsApiKey()) {
-      setError("Configure VITE_GOOGLE_MAPS_API_KEY para buscar endereços.");
-      return;
-    }
-    void loadGoogleMaps()
-      .then(() => {
-        if (cancelled || !inputRef.current || !window.google?.maps?.places) return;
-        const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
-          fields: ["formatted_address", "geometry", "place_id", "name"],
-          componentRestrictions: { country: "br" },
-        });
-        autocomplete.addListener("place_changed", () => {
-          const place = autocomplete.getPlace();
-          const loc = place.geometry?.location;
-          if (!loc) {
-            setError("Selecione um endereço da lista do Google");
-            return;
-          }
-          setError(null);
-          onChangeRef.current({
-            formatted_address: place.formatted_address || place.name || "",
-            lat: loc.lat(),
-            lng: loc.lng(),
-            place_id: place.place_id ?? null,
-          });
-        });
-        setReady(true);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Erro ao carregar Maps");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+    return onGoogleMapsAuthFailure((message) => {
+      setError(message);
+      setPredictions([]);
+      setOpen(false);
+    });
   }, []);
 
+  useEffect(() => {
+    if (value?.formatted_address) {
+      setQuery(value.formatted_address);
+    }
+  }, [value?.formatted_address, value?.place_id]);
+
+  useEffect(() => {
+    function onDocClick(event: MouseEvent) {
+      if (!wrapRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
+  useEffect(() => {
+    if (!getGoogleMapsApiKey()) {
+      setError("VITE_GOOGLE_MAPS_API_KEY não entrou no build da web. Rebuild com a chave no .env.");
+      return;
+    }
+
+    const trimmed = query.trim();
+    if (trimmed.length < 3) {
+      setPredictions([]);
+      setOpen(false);
+      return;
+    }
+    if (value?.formatted_address && trimmed === value.formatted_address) {
+      setPredictions([]);
+      setOpen(false);
+      return;
+    }
+
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = window.setTimeout(() => {
+      setLoading(true);
+      void fetchPlacePredictions(trimmed)
+        .then((items) => {
+          setPredictions(items);
+          setOpen(items.length > 0);
+          setError(null);
+        })
+        .catch((err) => {
+          setPredictions([]);
+          setOpen(false);
+          setError(err instanceof Error ? err.message : "Erro ao buscar endereços");
+        })
+        .finally(() => setLoading(false));
+    }, 280);
+
+    return () => {
+      if (debounceRef.current) {
+        window.clearTimeout(debounceRef.current);
+      }
+    };
+  }, [query, value?.formatted_address]);
+
+  async function selectPrediction(prediction: PlacePrediction) {
+    setBusyDetail(true);
+    setOpen(false);
+    try {
+      const place = await resolvePlaceDetails(prediction.place_id);
+      setQuery(place.formatted_address);
+      setError(null);
+      onChange(place);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao resolver endereço");
+    } finally {
+      setBusyDetail(false);
+    }
+  }
+
   return (
-    <label className={labelClass}>
-      <span>{label}</span>
-      <input
-        ref={inputRef}
-        disabled={disabled || !ready}
-        className={inputClass}
-        placeholder="Digite e selecione o endereço"
-        defaultValue={value?.formatted_address ?? ""}
-        onChange={() => {
-          if (value) onChange(null);
-        }}
-      />
-      {value ? (
-        <span className="text-xs text-slate-500">
-          Selecionado · {value.lat.toFixed(5)}, {value.lng.toFixed(5)}
-        </span>
+    <div ref={wrapRef} className="relative space-y-1.5">
+      <label className={labelClass}>
+        <span>{label}</span>
+        <input
+          disabled={disabled || busyDetail}
+          className={inputClass}
+          placeholder="Digite o endereço e escolha uma sugestão"
+          value={query}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (value) onChange(null);
+          }}
+          onFocus={() => {
+            if (predictions.length > 0) setOpen(true);
+          }}
+        />
+      </label>
+
+      {open && predictions.length > 0 ? (
+        <ul
+          id={listId}
+          role="listbox"
+          className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-white/10 bg-[#0a1610] py-1 shadow-2xl shadow-black/50"
+        >
+          {predictions.map((item) => (
+            <li key={item.place_id}>
+              <button
+                type="button"
+                role="option"
+                className="w-full px-3 py-2.5 text-left text-sm text-slate-200 transition hover:bg-green-500/15 hover:text-green-100"
+                onClick={() => void selectPrediction(item)}
+              >
+                {item.description}
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : null}
-      {error ? <span className="text-xs text-red-400">{error}</span> : null}
-    </label>
+
+      {loading || busyDetail ? (
+        <p className="text-xs text-slate-500">{busyDetail ? "Confirmando localização..." : "Buscando..."}</p>
+      ) : null}
+
+      {value ? (
+        <p className="text-xs text-slate-500">
+          Selecionado · {value.lat.toFixed(5)}, {value.lng.toFixed(5)}
+        </p>
+      ) : null}
+
+      {error ? (
+        <p className="rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-2 text-xs leading-relaxed text-red-200">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

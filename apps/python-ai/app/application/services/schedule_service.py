@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.band_service import BandService
+from app.application.services.email_service import EmailService
 from app.infrastructure.database.models import (
     Band,
     BandMember,
@@ -17,6 +18,7 @@ from app.infrastructure.database.models import (
     BandScheduleOccurrence,
     User,
 )
+from app.logging import logger
 
 
 def _new_id(prefix: str) -> str:
@@ -201,7 +203,72 @@ class ScheduleService:
             self.session.add(saved)
 
         await self.session.commit()
+
+        band = await self.bands.get_band(band_id)
+        if band is not None:
+            await self._notify_schedule_emails(
+                band=band,
+                title=schedule.title,
+                members=members,
+                event_start=event_start,
+                event_end=event_end,
+                event_addr=event_addr,
+                reh_start=reh_start,
+                reh_end=reh_end,
+                rehearsal_addr=rehearsal_addr,
+            )
+
         return await self._serialize_schedule(schedule)
+
+    async def _notify_schedule_emails(
+        self,
+        *,
+        band: Band,
+        title: str | None,
+        members: list[BandMember],
+        event_start: datetime,
+        event_end: datetime,
+        event_addr: dict[str, Any],
+        reh_start: datetime,
+        reh_end: datetime,
+        rehearsal_addr: dict[str, Any],
+    ) -> None:
+        user_ids = [m.user_id for m in members]
+        users_result = await self.session.execute(select(User).where(User.id.in_(user_ids)))
+        recipients = [u.email for u in users_result.scalars().all() if u.email]
+        if not recipients:
+            return
+
+        email = EmailService()
+        try:
+            email.schedule_occurrence(
+                recipients=recipients,
+                kind="rehearsal",
+                band_name=band.name,
+                title=title,
+                starts_at=reh_start,
+                ends_at=reh_end,
+                address=rehearsal_addr["formatted_address"],
+                lat=float(rehearsal_addr["lat"]),
+                lng=float(rehearsal_addr["lng"]),
+            )
+            email.schedule_occurrence(
+                recipients=recipients,
+                kind="event",
+                band_name=band.name,
+                title=title,
+                starts_at=event_start,
+                ends_at=event_end,
+                address=event_addr["formatted_address"],
+                lat=float(event_addr["lat"]),
+                lng=float(event_addr["lng"]),
+            )
+        except Exception as exc:
+            logger.warning(
+                "schedule_email_failed",
+                band_id=band.id,
+                error=str(exc),
+            )
 
     async def upcoming_for_user(self, user: User) -> dict[str, Any]:
         member_result = await self.session.execute(

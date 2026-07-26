@@ -6,7 +6,7 @@ import { btnPrimary, inputClass, labelClass, linkClass } from "../lib/ui-classes
 
 function safeNextPath(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
-    return "/library";
+    return "/";
   }
   return raw;
 }

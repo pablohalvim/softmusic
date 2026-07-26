@@ -151,6 +151,7 @@ class User(Base):
     address_zip: Mapped[str] = mapped_column(String(8))
     password_hash: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(32), default=UserStatus.ACTIVE.value)
+    asaas_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -228,6 +229,7 @@ class BandMember(Base):
     can_analyze_songs: Mapped[bool] = mapped_column(Boolean, default=False)
     can_invite_members: Mapped[bool] = mapped_column(Boolean, default=False)
     can_manage_members: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_delete_songs: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(32), default="active")
     invited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     joined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -367,14 +369,30 @@ class BillingSubscriptionItem(Base):
     )
 
 
+class InvoiceKind(StrEnum):
+    FIRST = "first"
+    RECURRENCE = "recurrence"
+
+
+class InvoiceStatus(StrEnum):
+    AWAITING_PAYMENT = "awaiting_payment"
+    PAID = "paid"
+    OVERDUE = "overdue"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
+
+
 class Invoice(Base):
     __tablename__ = "invoices"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     billing_account_id: Mapped[str] = mapped_column(String(32), index=True)
+    invoice_kind: Mapped[str] = mapped_column(String(32), default=InvoiceKind.FIRST.value)
+    invoice_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     asaas_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    asaas_payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     total_amount_cents: Mapped[int] = mapped_column(Integer)
-    status: Mapped[str] = mapped_column(String(32), default="pending")
+    status: Mapped[str] = mapped_column(String(32), default=InvoiceStatus.AWAITING_PAYMENT.value)
     due_date: Mapped[date] = mapped_column(Date)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     payment_method: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -382,6 +400,8 @@ class Invoice(Base):
     pix_qr_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
     period_start: Mapped[date] = mapped_column(Date)
     period_end: Mapped[date] = mapped_column(Date)
+    reminder_due_soon_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reminder_overdue_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -398,6 +418,29 @@ class InvoiceLineItem(Base):
     band_id: Mapped[str] = mapped_column(String(32))
     description: Mapped[str] = mapped_column(String(255))
     amount_cents: Mapped[int] = mapped_column(Integer)
+    plan_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    item_kind: Mapped[str] = mapped_column(String(32), default="plan_base")
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+    unit_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class NationalHoliday(Base):
+    __tablename__ = "national_holidays"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    holiday_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    is_movable: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_by_admin_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class SongBlock(Base):

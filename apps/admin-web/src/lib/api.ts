@@ -137,3 +137,35 @@ export async function sendMarketing(subject: string, body: string, audience = "a
   if (!response.ok) throw new Error("Falha ao enviar campanha");
   return response.json();
 }
+
+export interface AsaasSettings {
+  asaas_api_key_masked: string;
+  asaas_api_key_configured: boolean;
+  asaas_environment: string;
+  asaas_webhook_token_configured: boolean;
+}
+
+export async function fetchAsaasSettings(): Promise<AsaasSettings> {
+  const response = await adminFetch("/admin/billing/settings");
+  if (!response.ok) await parseAdminError(response, "Falha ao carregar parametrização Asaas");
+  return response.json();
+}
+
+export async function updateAsaasSettings(payload: {
+  asaas_api_key?: string;
+  asaas_environment?: "sandbox" | "production";
+  asaas_webhook_token?: string;
+}): Promise<AsaasSettings> {
+  const response = await adminFetch("/admin/billing/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) await parseAdminError(response, "Falha ao salvar parametrização Asaas");
+  return response.json();
+}
+
+export async function fetchAdminInvoices() {
+  const response = await adminFetch("/admin/billing/invoices");
+  if (!response.ok) await parseAdminError(response, "Falha ao carregar faturas");
+  return response.json();
+}

@@ -144,7 +144,7 @@ SMTP_PORT="${SMTP_PORT:-587}"
 SMTP_USER="${SMTP_USER:-}"
 SMTP_PASSWORD="${SMTP_PASSWORD:-}"
 RESEND_API_KEY="${RESEND_API_KEY:-}"
-EMAIL_FROM="${EMAIL_FROM:-noreply@softmusic.com.br}"
+EMAIL_FROM="${EMAIL_FROM:-SoftMusic <administrativo@softmusic.com.br>}"
 
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-admin}"
 GRAFANA_ROOT_URL="${GRAFANA_ROOT_URL:-https://grafana.softmusic.com.br}"

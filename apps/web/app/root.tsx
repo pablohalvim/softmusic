@@ -4,10 +4,13 @@ import { Link, Links, Meta, Outlet, Scripts, ScrollRestoration, useLocation } fr
 
 import { AuthGuard } from "./components/AuthGuard";
 import { BandSelector } from "./components/BandSelector";
+import { BlockedBandsGate } from "./components/BlockedBandsGate";
 import { InstallButton } from "./components/InstallButton";
 import { PwaUpdateToast } from "./components/PwaUpdateToast";
 import { AuthProvider, useAuth } from "./lib/auth-context";
-import { BandProvider } from "./lib/band-context";
+import { BandProvider, useBand } from "./lib/band-context";
+import { ConfirmProvider } from "./lib/confirm";
+import { ToastProvider } from "./lib/toast";
 import "./app.css";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -62,9 +65,11 @@ function NavLink({
 
 function AppHeader() {
   const { user, logout } = useAuth();
+  const { bands } = useBand();
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
+  const showBilling = bands.some((band) => band.is_owner);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -100,9 +105,8 @@ function AppHeader() {
               <BandSelector />
               <NavLink to="/dashboard">Dashboard</NavLink>
               <NavLink to="/library">Biblioteca</NavLink>
-              <NavLink to="/analyze">Analisar</NavLink>
               <NavLink to="/bandas">Bandas</NavLink>
-              <NavLink to="/faturas">Faturas</NavLink>
+              {showBilling ? <NavLink to="/faturas">Faturas</NavLink> : null}
               <button type="button" onClick={() => void logout()} className="nav-link">
                 Sair
               </button>
@@ -159,15 +163,14 @@ function AppHeader() {
               <NavLink to="/library" onNavigate={closeMenu}>
                 Biblioteca
               </NavLink>
-              <NavLink to="/analyze" onNavigate={closeMenu}>
-                Analisar
-              </NavLink>
               <NavLink to="/bandas" onNavigate={closeMenu}>
                 Bandas
               </NavLink>
-              <NavLink to="/faturas" onNavigate={closeMenu}>
-                Faturas
-              </NavLink>
+              {showBilling ? (
+                <NavLink to="/faturas" onNavigate={closeMenu}>
+                  Faturas
+                </NavLink>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
@@ -216,6 +219,7 @@ function AppShell() {
       <AppHeader />
       <main className="min-w-0 flex-1 overflow-x-hidden pb-[env(safe-area-inset-bottom)]">
         <AuthGuard>
+          <BlockedBandsGate />
           <Outlet />
         </AuthGuard>
       </main>
@@ -239,11 +243,15 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BandProvider>
-          <AppShell />
-        </BandProvider>
-      </AuthProvider>
+      <ToastProvider>
+        <ConfirmProvider>
+          <AuthProvider>
+            <BandProvider>
+              <AppShell />
+            </BandProvider>
+          </AuthProvider>
+        </ConfirmProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

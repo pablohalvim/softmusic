@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { apiUrl } from "./api";
+import { apiUrl, refreshAccessToken } from "./api";
 import {
   clearTokens,
   loadTokens,
@@ -51,14 +51,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const tokens = loadTokens();
-    if (!tokens) {
-      setLoading(false);
-      return;
+    let cancelled = false;
+
+    async function bootstrap() {
+      const tokens = loadTokens();
+      if (!tokens) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      try {
+        await fetchMe(tokens.access_token);
+      } catch {
+        // Access de 15m costuma expirar; tenta refresh antes de deslogar.
+        const refreshed = await refreshAccessToken();
+        if (cancelled) return;
+        if (refreshed) {
+          const next = loadTokens();
+          if (next?.access_token) {
+            try {
+              await fetchMe(next.access_token);
+              return;
+            } catch {
+              /* cai no clear abaixo */
+            }
+          }
+        }
+        clearTokens();
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-    fetchMe(tokens.access_token)
-      .catch(() => clearTokens())
-      .finally(() => setLoading(false));
+
+    void bootstrap();
+    return () => {
+      cancelled = true;
+    };
   }, [fetchMe]);
 
   const login = useCallback(async (loginValue: string, password: string) => {

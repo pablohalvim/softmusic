@@ -6,11 +6,14 @@ import { SongListItem } from "../components/analysis/SongListItem";
 import { GlobalLibraryModal } from "../components/library/GlobalLibraryModal";
 import { fetchSongs, isActiveSong } from "../lib/api";
 import { useBand } from "../lib/band-context";
-import { alertInfoClass, btnAccent, btnGhost, linkClass, panelClass } from "../lib/ui-classes";
+import { useToast } from "../lib/toast";
+import { alertInfoClass, btnAccent, btnGhost, panelClass } from "../lib/ui-classes";
 
 export default function Library() {
   const { activeBand } = useBand();
+  const toast = useToast();
   const [globalOpen, setGlobalOpen] = useState(false);
+  const blocked = Boolean(activeBand?.is_blocked);
   const songsQuery = useQuery({
     queryKey: ["songs", activeBand?.id ?? null],
     queryFn: () => fetchSongs(50),
@@ -42,9 +45,21 @@ export default function Library() {
           >
             Adicionar da biblioteca global
           </button>
-          <Link to="/analyze" className={btnAccent}>
-            Nova análise
-          </Link>
+          {blocked ? (
+            <button
+              type="button"
+              className={`${btnAccent} opacity-50`}
+              onClick={() =>
+                toast.warn("Banda bloqueada. Não é possível enviar música para análise.")
+              }
+            >
+              Nova análise
+            </button>
+          ) : (
+            <Link to="/analyze" className={btnAccent}>
+              Nova análise
+            </Link>
+          )}
         </div>
       </div>
 
@@ -67,9 +82,21 @@ export default function Library() {
       ) : songs.length === 0 ? (
         <div className={`${panelClass} border-dashed p-10 text-center`}>
           <p className="text-slate-400">Nenhuma música analisada ainda.</p>
-          <Link to="/analyze" className={`${btnAccent} mt-4 inline-flex`}>
-            Analisar primeira música
-          </Link>
+          {blocked ? (
+            <button
+              type="button"
+              className={`${btnAccent} mt-4 inline-flex opacity-50`}
+              onClick={() =>
+                toast.warn("Banda bloqueada. Não é possível enviar música para análise.")
+              }
+            >
+              Analisar primeira música
+            </button>
+          ) : (
+            <Link to="/analyze" className={`${btnAccent} mt-4 inline-flex`}>
+              Analisar primeira música
+            </Link>
+          )}
         </div>
       ) : (
         <div className="space-y-4">

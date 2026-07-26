@@ -11,13 +11,19 @@ import {
   isJobFinished,
   type SongSummary,
 } from "../../lib/api";
+import { useBand } from "../../lib/band-context";
+import { useConfirm } from "../../lib/confirm";
 import { labelSongStatus } from "../../lib/status-labels";
 import { btnGhost, btnPrimary, panelClass } from "../../lib/ui-classes";
 import { JobProgressDetails, ProgressBar, StatusBadge } from "./StatusBadge";
 
 export function SongListItem({ song }: { song: SongSummary }) {
   const queryClient = useQueryClient();
+  const { activeBand } = useBand();
+  const { confirm } = useConfirm();
   const isActive = isActiveSong(song.status);
+  const blocked = Boolean(activeBand?.is_blocked);
+  const canDelete = Boolean(activeBand?.is_owner || activeBand?.can_delete_songs);
 
   const jobQuery = useQuery({
     queryKey: ["song-job", song.id],
@@ -70,54 +76,71 @@ export function SongListItem({ song }: { song: SongSummary }) {
           <p className="mt-1 text-xs text-slate-500">{labelSongStatus(displayStatus)}</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {isActive ? (
-            <button
-              type="button"
-              disabled={isBusy}
-              onClick={() => {
-                if (window.confirm("Cancelar a análise desta música?")) {
-                  cancelMutation.mutate();
-                }
-              }}
-              className={`${btnGhost} border-amber-500/30 text-amber-200 hover:border-amber-400 disabled:opacity-50`}
-            >
-              {cancelMutation.isPending ? "Cancelando..." : "Cancelar"}
-            </button>
-          ) : null}
+        {!blocked ? (
+          <div className="flex flex-wrap gap-2">
+            {isActive ? (
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Cancelar análise",
+                    message: "Cancelar a análise desta música?",
+                    confirmLabel: "Cancelar análise",
+                    danger: true,
+                  });
+                  if (ok) cancelMutation.mutate();
+                }}
+                className={`${btnGhost} border-amber-500/30 text-amber-200 hover:border-amber-400 disabled:opacity-50`}
+              >
+                {cancelMutation.isPending ? "Cancelando..." : "Cancelar"}
+              </button>
+            ) : null}
 
-          {song.status === "completed" ? (
-            <>
-              <Link to={`/songs/${song.id}/cifra`} className={`${btnPrimary} px-3 py-1.5 text-sm`}>
-                Cifra
-              </Link>
+            {song.status === "completed" ? (
+              <>
+                <Link to={`/songs/${song.id}/cifra`} className={`${btnPrimary} px-3 py-1.5 text-sm`}>
+                  Cifra
+                </Link>
+                <Link to={`/songs/${song.id}`} className={`${btnGhost} px-3 py-1.5 text-sm`}>
+                  Detalhes
+                </Link>
+              </>
+            ) : !isActive ? (
               <Link to={`/songs/${song.id}`} className={`${btnGhost} px-3 py-1.5 text-sm`}>
-                Detalhes
+                Ver detalhes
               </Link>
-            </>
-          ) : !isActive ? (
-            <Link to={`/songs/${song.id}`} className={`${btnGhost} px-3 py-1.5 text-sm`}>
-              Ver detalhes
-            </Link>
-          ) : (
-            <Link to={`/songs/${song.id}`} className={`${btnGhost} border-green-500/30 px-3 py-1.5 text-sm text-green-200`}>
-              Acompanhar
-            </Link>
-          )}
+            ) : (
+              <Link
+                to={`/songs/${song.id}`}
+                className={`${btnGhost} border-green-500/30 px-3 py-1.5 text-sm text-green-200`}
+              >
+                Acompanhar
+              </Link>
+            )}
 
-          <button
-            type="button"
-            disabled={isBusy}
-            onClick={() => {
-              if (window.confirm("Excluir esta música da biblioteca?")) {
-                deleteMutation.mutate();
-              }
-            }}
-            className={`${btnGhost} border-red-500/30 px-3 py-1.5 text-sm text-red-300 hover:border-red-400 disabled:opacity-50`}
-          >
-            {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
-          </button>
-        </div>
+            {canDelete ? (
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Excluir música",
+                    message: "Excluir esta música da biblioteca?",
+                    confirmLabel: "Excluir",
+                    danger: true,
+                  });
+                  if (ok) deleteMutation.mutate();
+                }}
+                className={`${btnGhost} border-red-500/30 px-3 py-1.5 text-sm text-red-300 hover:border-red-400 disabled:opacity-50`}
+              >
+                {deleteMutation.isPending ? "Excluindo..." : "Excluir"}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-xs text-amber-300">Conteúdo bloqueado — regularize o pagamento</p>
+        )}
       </div>
 
       {deleteMutation.isError ? (

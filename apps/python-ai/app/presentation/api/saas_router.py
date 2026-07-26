@@ -35,6 +35,7 @@ class RegisterBody(BaseModel):
     address_state: str
     address_zip: str
     password: str = Field(min_length=8)
+    invite_token: str | None = None
 
 
 class LoginBody(BaseModel):
@@ -69,7 +70,14 @@ class MemberPermissionBody(BaseModel):
     can_analyze_songs: bool | None = None
     can_invite_members: bool | None = None
     can_manage_members: bool | None = None
+    can_delete_songs: bool | None = None
     role_ids: list[str] | None = None
+
+
+class AsaasSettingsBody(BaseModel):
+    asaas_api_key: str | None = None
+    asaas_environment: Literal["sandbox", "production"] | None = None
+    asaas_webhook_token: str | None = None
 
 
 class RoleBody(BaseModel):
@@ -199,13 +207,25 @@ async def invite_member(
             band_id, user.id, body.email, body.can_analyze_songs
         )
         settings = get_settings()
-        invite_url = f"{settings.web_origin}/convite?token={invite['token']}"
+        # Cadastro com auto-vínculo; quem já tem conta usa /convite ou login+aceite.
+        invite_url = f"{settings.web_origin}/cadastro?token={invite['token']}"
         EmailService().invite_member(body.email, invite["band_name"], invite_url)
         return {"invite_id": invite["invite_id"], "email": invite["email"]}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/invites/preview")
+async def preview_invite(
+    token: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await BandService(session).preview_invite(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/invites/pending")
@@ -459,6 +479,42 @@ async def list_invoices(
     return {"items": items}
 
 
+@router.get("/billing/invoices/{invoice_id}")
+async def get_invoice(
+    invoice_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await BillingService(session).get_invoice_details(user.id, invoice_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/billing/invoices/{invoice_id}/pay")
+async def pay_invoice(
+    invoice_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await BillingService(session).pay_invoice(user.id, invoice_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/billing/invoices/{invoice_id}/refresh")
+async def refresh_invoice(
+    invoice_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        return await BillingService(session).refresh_first_invoice(user.id, invoice_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/billing/status")
 async def billing_status(
     user: User = Depends(get_current_user),
@@ -467,53 +523,24 @@ async def billing_status(
     return await BillingService(session).get_billing_status(user.id)
 
 
-class CreditCardBody(BaseModel):
-    holder_name: str
-    number: str
-    expiry_month: str
-    expiry_year: str
-    ccv: str
-
-
-class CheckoutBody(BaseModel):
-    payment_method: Literal["pix", "credit_card"]
-    credit_card: CreditCardBody | None = None
-    holder_info: dict[str, Any] | None = None
-
-
-@router.post("/billing/checkout")
-async def billing_checkout(
-    body: CheckoutBody,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> dict[str, Any]:
-    try:
-        return await BillingService(session).create_checkout(
-            user.id,
-            body.payment_method,
-            body.credit_card.model_dump() if body.credit_card else None,
-            body.holder_info,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
 @router.post("/webhooks/asaas")
 async def asaas_webhook(
     payload: dict[str, Any],
     asaas_access_token: str | None = Header(default=None, alias="asaas-access-token"),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    settings = get_settings()
-    if settings.asaas_webhook_token and asaas_access_token != settings.asaas_webhook_token:
+    billing = BillingService(session)
+    expected = await billing.get_setting("asaas_webhook_token")
+    if expected and asaas_access_token != expected:
         raise HTTPException(status_code=401, detail="Webhook não autorizado")
     event = payload.get("event")
     payment = payload.get("payment") or {}
-    billing = BillingService(session)
-    if event == "PAYMENT_CONFIRMED":
+    if event in {"PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"}:
         await billing.handle_payment_confirmed(payment)
     elif event == "PAYMENT_OVERDUE":
         await billing.handle_payment_overdue(payment)
+    elif event in {"PAYMENT_REFUNDED", "PAYMENT_PARTIALLY_REFUNDED"}:
+        await billing.handle_payment_refunded(payment)
     return {"status": "ok"}
 
 
@@ -610,6 +637,60 @@ async def admin_suspend_overdue(
     admin=Depends(get_current_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    count = await BillingService(session).suspend_overdue_accounts()
-    await AdminService(session).audit(admin.id, "suspend_overdue", "billing", None, {"count": count})
-    return {"suspended": count}
+    stats = await BillingService(session).run_daily_billing_robot()
+    await AdminService(session).audit(admin.id, "billing_robot", "billing", None, stats)
+    return stats
+
+
+@router.get("/admin/billing/settings")
+async def admin_billing_settings(
+    admin=Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    _ = admin
+    return await BillingService(session).get_asaas_settings()
+
+
+@router.put("/admin/billing/settings")
+async def admin_update_billing_settings(
+    body: AsaasSettingsBody,
+    admin=Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    billing = BillingService(session)
+    if body.asaas_api_key is not None:
+        await billing.set_setting("asaas_api_key", body.asaas_api_key.strip(), admin.id)
+    if body.asaas_environment is not None:
+        await billing.set_setting("asaas_environment", body.asaas_environment, admin.id)
+    if body.asaas_webhook_token is not None:
+        await billing.set_setting("asaas_webhook_token", body.asaas_webhook_token.strip(), admin.id)
+    await AdminService(session).audit(admin.id, "update_asaas_settings", "settings", None, {
+        "asaas_environment": body.asaas_environment,
+        "api_key_updated": body.asaas_api_key is not None,
+        "webhook_updated": body.asaas_webhook_token is not None,
+    })
+    return await billing.get_asaas_settings()
+
+
+@router.get("/admin/billing/invoices")
+async def admin_list_invoices(
+    admin=Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    _ = admin
+    return {"items": await BillingService(session).list_all_invoices_admin()}
+
+
+@router.post("/admin/billing/invoices/{invoice_id}/exempt-band/{band_id}")
+async def admin_exempt_band_from_invoice(
+    invoice_id: str,
+    band_id: str,
+    admin=Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    _ = invoice_id
+    await BillingService(session).exempt_band_charges(band_id, "Isenção via admin")
+    await AdminService(session).audit(
+        admin.id, "exempt_band_invoice", "band", band_id, {"invoice_id": invoice_id}
+    )
+    return {"status": "ok"}

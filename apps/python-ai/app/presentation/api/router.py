@@ -41,6 +41,17 @@ async def _ensure_song_access(
         raise HTTPException(status_code=403, detail="Esta música foi bloqueada pela moderação")
 
 
+async def _ensure_song_content_access(
+    session: AsyncSession, band_id: str | None, user_id: str, song_id: str
+) -> None:
+    await _ensure_song_access(session, band_id, user_id, song_id)
+    assert band_id is not None
+    try:
+        await BandService(session).require_song_content_access(band_id, user_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
 async def _ensure_job_access(
     session: AsyncSession, band_id: str | None, user_id: str, job_id: str
 ) -> Any:
@@ -549,6 +560,10 @@ async def delete_song(
 
     service = AnalysisService(session)
     band_service = BandService(session)
+    member = await band_service.get_member(band_id, user.id)
+    if member is None or not band_service.can_delete_songs(member):
+        raise HTTPException(status_code=403, detail="Sem permissão para excluir músicas nesta banda")
+
     song = await service.get_song(song_id)
     if song is None:
         raise HTTPException(status_code=404, detail="Song not found")
@@ -599,7 +614,7 @@ async def get_analysis(
     user: User = Depends(get_current_user),
     band_id: str | None = Depends(get_band_id),
 ) -> dict[str, Any]:
-    await _ensure_song_access(session, band_id, user.id, song_id)
+    await _ensure_song_content_access(session, band_id, user.id, song_id)
     service = AnalysisService(session)
     result = await service.get_analysis(song_id)
     if result is None:
@@ -701,7 +716,7 @@ async def get_chords(
     user: User = Depends(get_current_user),
     band_id: str | None = Depends(get_band_id),
 ) -> dict[str, Any]:
-    await _ensure_song_access(session, band_id, user.id, song_id)
+    await _ensure_song_content_access(session, band_id, user.id, song_id)
     service = AnalysisService(session)
     song = await service.get_song(song_id)
     if song is None:

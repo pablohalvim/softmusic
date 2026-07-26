@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { Link, useParams } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import {
   analyzeProgressionChords,
@@ -28,9 +28,18 @@ import {
   isJobFinished,
   isSongFinished,
 } from "../lib/api";
+import { useBand } from "../lib/band-context";
 
 export default function SongDetail() {
   const { songId } = useParams();
+  const navigate = useNavigate();
+  const { activeBand } = useBand();
+  const blocked = Boolean(activeBand?.is_blocked);
+  const [blockModalOpen, setBlockModalOpen] = useState(blocked);
+
+  useEffect(() => {
+    if (blocked) setBlockModalOpen(true);
+  }, [blocked]);
 
   const songQuery = useQuery({
     queryKey: ["song", songId],
@@ -88,6 +97,29 @@ export default function SongDetail() {
 
     return { analyzed, degreeUsage, progression };
   }, [analysisQuery.data]);
+
+  if (blockModalOpen) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center">
+        <div className={`${panelClass} w-full max-w-md space-y-4 border-amber-400/30 p-5`}>
+          <h2 className="text-lg font-semibold text-amber-100">Conteúdo indisponível</h2>
+          <p className="text-sm text-slate-300">
+            Não é possível acessar este conteúdo. A banda está bloqueada por falta de pagamento.
+          </p>
+          <button
+            type="button"
+            className={`${btnPrimary} w-full`}
+            onClick={() => {
+              setBlockModalOpen(false);
+              navigate("/");
+            }}
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (songQuery.isLoading) {
     return <p className="text-slate-400">Carregando...</p>;

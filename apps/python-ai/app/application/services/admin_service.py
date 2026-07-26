@@ -90,9 +90,13 @@ class AdminService:
         band = result.scalar_one_or_none()
         if band is None:
             raise ValueError("Banda não encontrada")
-        band.billing_exempt = exempt
+        if exempt:
+            from app.application.services.billing_service import BillingService
+
+            await BillingService(self.session).exempt_band_charges(band_id, reason)
+            return
+        band.billing_exempt = False
         band.exempt_reason = reason
-        band.status = BandStatus.ACTIVE.value if exempt else band.status
         await self.session.commit()
 
     async def suspend_band(self, band_id: str) -> None:

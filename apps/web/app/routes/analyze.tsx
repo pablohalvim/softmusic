@@ -9,6 +9,7 @@ import {
 } from "../components/cifra/cifra-variations";
 import { authFetch } from "../lib/api";
 import { useBand } from "../lib/band-context";
+import { useToast } from "../lib/toast";
 import {
   alertInfoClass,
   alertWarnClass,
@@ -40,6 +41,8 @@ type AnalyzeResponse = {
 
 export default function Analyze() {
   const { activeBand } = useBand();
+  const toast = useToast();
+  const blocked = Boolean(activeBand?.is_blocked);
   const [mode, setMode] = useState<AnalyzeMode>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -220,6 +223,10 @@ export default function Analyze() {
           className={`${panelClass} space-y-4`}
           onSubmit={(event) => {
             event.preventDefault();
+            if (blocked) {
+              toast.warn("Não é possível enviar música para análise com a banda bloqueada.");
+              return;
+            }
             if (file) {
               uploadMutation.mutate(file);
             }
@@ -240,6 +247,10 @@ export default function Analyze() {
           className={`${panelClass} space-y-4`}
           onSubmit={(event) => {
             event.preventDefault();
+            if (blocked) {
+              toast.warn("Não é possível enviar música para análise com a banda bloqueada.");
+              return;
+            }
             if (youtubeUrl.trim()) {
               youtubeMutation.mutate(youtubeUrl.trim());
             }

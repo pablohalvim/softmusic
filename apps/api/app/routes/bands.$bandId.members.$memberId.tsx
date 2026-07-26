@@ -6,6 +6,7 @@ const MemberSchema = z.object({
   can_analyze_songs: z.boolean().optional(),
   can_invite_members: z.boolean().optional(),
   can_manage_members: z.boolean().optional(),
+  can_delete_songs: z.boolean().optional(),
   role_ids: z.array(z.string()).optional(),
 });
 

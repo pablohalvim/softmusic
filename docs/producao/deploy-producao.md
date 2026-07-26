@@ -298,7 +298,7 @@ Convites de banda, avisos de cobrança e campanhas do admin usam o
    Cloudflare.
 3. Cadastre no Jenkins: `softmusic-resend-api-key` (Secret text).
 4. Ajuste `EMAIL_FROM` no `render-env.sh` / `.env.production` se necessário
-   (ex.: `SoftMusic <noreply@softmusic.com.br>`).
+   (ex.: `SoftMusic <administrativo@softmusic.com.br>`).
 
 Sem `RESEND_API_KEY`, o sistema tenta SMTP (`SMTP_HOST`…) se configurado; caso
 contrário os e-mails são ignorados (útil em dev).

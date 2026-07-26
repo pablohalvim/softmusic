@@ -35,6 +35,12 @@ VIEWABLE_STATUSES = {
     BandStatus.TRIAL.value,
     BandStatus.ACTIVE.value,
     BandStatus.PAST_DUE.value,
+    BandStatus.PENDING_PAYMENT.value,
+    BandStatus.SUSPENDED.value,
+}
+
+BLOCKED_STATUSES = {
+    BandStatus.SUSPENDED.value,
 }
 
 
@@ -61,32 +67,49 @@ class BandService:
     async def create_band(self, owner: User, name: str, plan_code: str) -> dict[str, Any]:
         if plan_code not in PLAN_LIMITS:
             raise ValueError("Plano inválido")
+        cleaned_name = name.strip()
+        if not cleaned_name:
+            raise ValueError("Nome da banda é obrigatório")
+        dup = await self.session.execute(
+            select(Band).where(func.lower(Band.name) == cleaned_name.lower()).limit(1)
+        )
+        if dup.scalar_one_or_none():
+            raise ValueError("Já existe uma banda com este nome")
+
         base_cents, member_limit, extra_cents = PLAN_LIMITS[plan_code]
 
         billing_result = await self.session.execute(
             select(BillingAccount).where(BillingAccount.owner_user_id == owner.id)
         )
         billing = billing_result.scalar_one_or_none()
+        existing_bands = 0
+        if billing is not None:
+            count_result = await self.session.execute(
+                select(func.count()).select_from(Band).where(Band.billing_account_id == billing.id)
+            )
+            existing_bands = int(count_result.scalar_one())
+
+        with_trial = existing_bands == 0
         if billing is None:
             billing = BillingAccount(
                 id=_new_id("bil"),
                 owner_user_id=owner.id,
                 status="pending",
-                trial_ends_at=datetime.now(UTC) + timedelta(days=2),
+                trial_ends_at=datetime.now(UTC) + timedelta(days=2) if with_trial else None,
             )
             self.session.add(billing)
             await self.session.flush()
 
         band = Band(
             id=_new_id("bnd"),
-            name=name.strip(),
+            name=cleaned_name,
             owner_user_id=owner.id,
             billing_account_id=billing.id,
             plan_code=plan_code,
-            status=BandStatus.TRIAL.value,
+            status=BandStatus.TRIAL.value if with_trial else BandStatus.PENDING_PAYMENT.value,
             member_limit=member_limit,
             extra_member_price_cents=extra_cents,
-            trial_ends_at=datetime.now(UTC) + timedelta(days=2),
+            trial_ends_at=datetime.now(UTC) + timedelta(days=2) if with_trial else None,
         )
         owner_member = BandMember(
             id=_new_id("mbr"),
@@ -96,6 +119,7 @@ class BandService:
             can_analyze_songs=True,
             can_invite_members=True,
             can_manage_members=True,
+            can_delete_songs=True,
             status="active",
             joined_at=datetime.now(UTC),
         )
@@ -107,7 +131,13 @@ class BandService:
         await self.session.refresh(band)
         await self.session.refresh(owner_member)
 
-        # Assinatura Asaas é sincronizada no checkout; no trial a banda já funciona.
+        try:
+            await BillingService(self.session).create_first_invoice_for_band(
+                band, with_trial=with_trial
+            )
+        except Exception as exc:
+            logger.warning("first_invoice_create_failed", band_id=band.id, error=str(exc))
+
         return self._serialize_band(band, owner_member, 1)
 
     async def seed_default_roles(self, band_id: str) -> None:
@@ -150,11 +180,25 @@ class BandService:
 
     async def require_analyze_access(self, band_id: str, user_id: str) -> tuple[Band, BandMember]:
         band, member = await self.require_view_access(band_id, user_id)
+        if band.status in BLOCKED_STATUSES and not band.billing_exempt:
+            raise PermissionError("Banda bloqueada por falta de pagamento. Não é possível enviar música para análise.")
         if band.status == BandStatus.TRIAL.value:
             raise PermissionError("No período de trial não é possível enviar músicas para análise")
+        if band.status == BandStatus.PENDING_PAYMENT.value:
+            raise PermissionError("Regularize o pagamento da banda para analisar músicas")
         if member.role != "owner" and not member.can_analyze_songs:
             raise PermissionError("Sem permissão para analisar músicas nesta banda")
         return band, member
+
+    async def require_song_content_access(self, band_id: str, user_id: str) -> tuple[Band, BandMember]:
+        """Acesso a detalhes/cifra — bloqueado se banda suspensa."""
+        band, member = await self.require_view_access(band_id, user_id)
+        if band.status in BLOCKED_STATUSES and not band.billing_exempt:
+            raise PermissionError("Não é possível acessar este conteúdo. A banda está bloqueada por falta de pagamento.")
+        return band, member
+
+    def can_delete_songs(self, member: BandMember) -> bool:
+        return member.role == "owner" or bool(member.can_delete_songs)
 
     async def require_invite_access(self, band_id: str, user_id: str) -> tuple[Band, BandMember]:
         band, member = await self.require_view_access(band_id, user_id)
@@ -337,6 +381,36 @@ class BandService:
         for invite, band in result.all():
             items.append(self._serialize_pending_invite(invite, band))
         return items
+
+    async def get_pending_invite_by_token(self, token: str) -> BandInvite | None:
+        token_clean = (token or "").strip()
+        if not token_clean:
+            return None
+        token_hash = hashlib.sha256(token_clean.encode()).hexdigest()
+        result = await self.session.execute(
+            select(BandInvite).where(
+                BandInvite.token_hash == token_hash,
+                BandInvite.accepted_at.is_(None),
+                BandInvite.expires_at > datetime.now(UTC),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def preview_invite(self, token: str) -> dict[str, Any]:
+        """Público: dados do convite pendente para pré-preencher o cadastro."""
+        invite = await self.get_pending_invite_by_token(token)
+        if invite is None:
+            raise ValueError("Convite inválido ou expirado")
+        band = await self.get_band(invite.band_id)
+        if band is None:
+            raise ValueError("Banda não encontrada")
+        return {
+            "email": invite.email,
+            "band_id": band.id,
+            "band_name": band.name,
+            "expires_at": invite.expires_at.isoformat(),
+            "can_analyze_songs": invite.can_analyze_songs,
+        }
 
     async def accept_invite(
         self, user: User, *, token: str | None = None, invite_id: str | None = None
@@ -560,6 +634,8 @@ class BandService:
                 member.can_invite_members = bool(payload["can_invite_members"])
             if "can_manage_members" in payload and payload["can_manage_members"] is not None:
                 member.can_manage_members = bool(payload["can_manage_members"])
+            if "can_delete_songs" in payload and payload["can_delete_songs"] is not None:
+                member.can_delete_songs = bool(payload["can_delete_songs"])
             if "role_ids" in payload:
                 await self._set_member_roles(band_id, member.id, list(payload.get("role_ids") or []))
 
@@ -673,6 +749,7 @@ class BandService:
             "can_analyze_songs": is_owner or member.can_analyze_songs,
             "can_invite_members": is_owner or member.can_invite_members,
             "can_manage_members": is_owner or member.can_manage_members,
+            "can_delete_songs": is_owner or member.can_delete_songs,
         }
 
     async def _active_member_count(self, band_id: str) -> int:
@@ -696,6 +773,8 @@ class BandService:
             "can_analyze_songs": is_owner or member.can_analyze_songs,
             "can_invite_members": is_owner or member.can_invite_members,
             "can_manage_members": is_owner or member.can_manage_members,
+            "can_delete_songs": is_owner or member.can_delete_songs,
             "is_owner": is_owner,
+            "is_blocked": (not band.billing_exempt) and band.status in BLOCKED_STATUSES,
             "trial_ends_at": band.trial_ends_at.isoformat() if band.trial_ends_at else None,
         }

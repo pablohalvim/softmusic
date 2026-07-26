@@ -1,4 +1,4 @@
-import { loadActiveBandId, loadTokens, saveTokens } from "./auth-storage";
+import { clearTokens, loadActiveBandId, loadTokens, saveTokens } from "./auth-storage";
 
 function resolveApiUrl(): string {
   const configured = import.meta.env.VITE_API_URL;
@@ -28,25 +28,46 @@ function authHeaders(): HeadersInit {
   return headers;
 }
 
-async function refreshAccessToken(): Promise<boolean> {
-  const tokens = loadTokens();
-  if (!tokens?.refresh_token) {
-    return false;
+/** Single-flight: evita 2 refreshes paralelos (rotação revoga o token do “perdedor”). */
+let refreshInFlight: Promise<boolean> | null = null;
+
+export async function refreshAccessToken(): Promise<boolean> {
+  if (refreshInFlight) {
+    return refreshInFlight;
   }
-  const response = await fetch(`${apiUrl}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: tokens.refresh_token }),
+
+  const run = async (): Promise<boolean> => {
+    const tokens = loadTokens();
+    if (!tokens?.refresh_token) {
+      return false;
+    }
+    try {
+      const response = await fetch(`${apiUrl}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: tokens.refresh_token }),
+      });
+      if (!response.ok) {
+        return false;
+      }
+      const payload = await response.json();
+      if (!payload?.access_token) {
+        return false;
+      }
+      saveTokens({
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token ?? tokens.refresh_token,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  refreshInFlight = run().finally(() => {
+    refreshInFlight = null;
   });
-  if (!response.ok) {
-    return false;
-  }
-  const payload = await response.json();
-  saveTokens({
-    access_token: payload.access_token,
-    refresh_token: payload.refresh_token ?? tokens.refresh_token,
-  });
-  return true;
+  return refreshInFlight;
 }
 
 export async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -58,6 +79,7 @@ export async function authFetch(path: string, init: RequestInit = {}): Promise<R
   }
   let response = await fetch(`${apiUrl}${path}`, { ...init, headers });
   if (response.status === 401) {
+    const hadRefresh = Boolean(loadTokens()?.refresh_token);
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       const retryHeaders = new Headers(authHeaders());
@@ -67,6 +89,9 @@ export async function authFetch(path: string, init: RequestInit = {}): Promise<R
         }
       }
       response = await fetch(`${apiUrl}${path}`, { ...init, headers: retryHeaders });
+    } else if (hadRefresh) {
+      // Refresh inválido/expirado — limpa para não ficar em loop de 401.
+      clearTokens();
     }
   }
   return response;
@@ -346,6 +371,7 @@ export async function updateBandMember(
     can_analyze_songs?: boolean;
     can_invite_members?: boolean;
     can_manage_members?: boolean;
+    can_delete_songs?: boolean;
     role_ids?: string[];
   },
 ): Promise<BandMemberDetail> {

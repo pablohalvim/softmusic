@@ -28,9 +28,21 @@ class AuthService:
         self.settings = get_settings()
 
     async def register(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from app.application.services.band_service import BandService
+
         cpf = normalize_cpf(str(payload["cpf"]))
         cpf_hash = hash_cpf(cpf, self.settings.cpf_pepper)
         email = str(payload["email"]).strip().lower()
+        invite_token = (payload.get("invite_token") or "").strip() or None
+
+        pending_invite = None
+        if invite_token:
+            band_service = BandService(self.session)
+            pending_invite = await band_service.get_pending_invite_by_token(invite_token)
+            if pending_invite is None:
+                raise ValueError("Convite inválido ou expirado")
+            if pending_invite.email != email:
+                raise ValueError("Use o mesmo e-mail do convite para se cadastrar")
 
         existing = await self.session.execute(
             select(User).where(
@@ -66,7 +78,15 @@ class AuthService:
         self.session.add(user)
         await self.session.commit()
         await self.session.refresh(user)
-        return await self._issue_tokens(user)
+
+        joined_band = None
+        if invite_token:
+            joined_band = await BandService(self.session).accept_invite(user, token=invite_token)
+
+        tokens = await self._issue_tokens(user)
+        if joined_band is not None:
+            tokens["joined_band"] = joined_band
+        return tokens
 
     async def login(self, login: str, password: str) -> dict[str, Any]:
         login_value = login.strip().lower()

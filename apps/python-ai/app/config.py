@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     # Resend (https://resend.com) — preferido em produção. Se vazio, cai no SMTP.
     resend_api_key: str = ""
-    email_from: str = "noreply@softmusic.com.br"
+    email_from: str = "SoftMusic <administrativo@softmusic.com.br>"
     web_origin: str = "http://localhost:5173"
     lp_origin: str = "http://localhost:5180"
 

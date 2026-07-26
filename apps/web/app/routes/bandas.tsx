@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { PLANS, formatBrl } from "@softmusic/shared";
 import type { BandSummary } from "@softmusic/types";
 
 import { PendingInvitesCard } from "../components/PendingInvitesCard";
 import { inviteBandMember } from "../lib/api";
 import { useBand } from "../lib/band-context";
+import { useToast } from "../lib/toast";
 import {
   btnGhost,
   btnPrimary,
@@ -23,6 +24,9 @@ const PLANS_LIST = Object.values(PLANS).map((plan) => ({
 
 export default function BandasPage() {
   const { bands, activeBand, setActiveBandId, createBand, loading } = useBand();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [planCode, setPlanCode] = useState("individual");
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +39,10 @@ export default function BandasPage() {
     setError(null);
     try {
       await createBand(name.trim(), planCode);
+      toast.success("Banda criada. Confira a fatura gerada.");
       setName("");
+      setModalOpen(false);
+      navigate("/faturas");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao criar banda");
     } finally {
@@ -45,9 +52,14 @@ export default function BandasPage() {
 
   return (
     <section className="space-y-8">
-      <div>
-        <h1 className="sm-page-title">Minhas bandas</h1>
-        <p className="sm-page-subtitle">Escolha a banda ativa, convide membros ou crie uma nova.</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="sm-page-title">Minhas bandas</h1>
+          <p className="sm-page-subtitle">Escolha a banda ativa, convide membros ou crie uma nova.</p>
+        </div>
+        <button type="button" className={btnPrimary} onClick={() => setModalOpen(true)}>
+          + Nova banda
+        </button>
       </div>
 
       <PendingInvitesCard />
@@ -75,42 +87,62 @@ export default function BandasPage() {
         </Link>
       ) : null}
 
-      <form onSubmit={handleCreate} className={`${panelClass} max-w-md space-y-4`}>
-        <h2 className="font-medium">Nova banda</h2>
-        <label className={labelClass}>
-          <span>Nome</span>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className={inputClass}
-          />
-        </label>
-        <fieldset className="space-y-2">
-          <legend className="text-sm text-slate-300">Plano</legend>
-          <div className="grid gap-2" role="radiogroup" aria-label="Plano">
-            {PLANS_LIST.map((plan) => {
-              const active = planCode === plan.code;
-              return (
-                <button
-                  key={plan.code}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setPlanCode(plan.code)}
-                  className={`sm-plan-option ${active ? "sm-plan-option-active" : ""}`}
-                >
-                  {plan.label}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-        {error ? <p className="text-sm text-red-400">{error}</p> : null}
-        <button type="submit" disabled={submitting} className={`${btnPrimary} disabled:opacity-60`}>
-          {submitting ? "Criando..." : "Criar banda"}
-        </button>
-      </form>
+      {modalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center">
+          <form
+            onSubmit={(e) => void handleCreate(e)}
+            className={`${panelClass} w-full max-w-md space-y-4 border-green-500/20 p-5`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-lg font-semibold">Nova banda</h2>
+              <button
+                type="button"
+                className={btnGhost}
+                onClick={() => {
+                  setModalOpen(false);
+                  setError(null);
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+            <label className={labelClass}>
+              <span>Nome</span>
+              <input
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={inputClass}
+                placeholder="Ex.: Ministério de Louvor"
+              />
+            </label>
+            <fieldset className="space-y-2">
+              <legend className="text-sm text-slate-300">Plano</legend>
+              <div className="grid gap-2" role="radiogroup" aria-label="Plano">
+                {PLANS_LIST.map((plan) => {
+                  const active = planCode === plan.code;
+                  return (
+                    <button
+                      key={plan.code}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setPlanCode(plan.code)}
+                      className={`sm-plan-option ${active ? "sm-plan-option-active" : ""}`}
+                    >
+                      {plan.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+            {error ? <p className="text-sm text-red-400">{error}</p> : null}
+            <button type="submit" disabled={submitting} className={`${btnPrimary} w-full disabled:opacity-60`}>
+              {submitting ? "Criando..." : "Criar banda"}
+            </button>
+          </form>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -167,6 +199,9 @@ function BandCard({
         {band.status === "trial" ? (
           <p className="mt-2 text-xs text-amber-300">Trial: visualização de cifras sem análise</p>
         ) : null}
+        {band.is_blocked ? (
+          <p className="mt-2 text-xs text-red-300">Bloqueada por falta de pagamento</p>
+        ) : null}
       </button>
 
       <div className="mt-3 flex flex-col gap-2 border-t border-white/10 pt-3 sm:flex-row sm:flex-wrap">
@@ -178,11 +213,7 @@ function BandCard({
           Gerenciar Banda
         </Link>
         {band.is_owner || band.can_invite_members ? (
-          <button
-            type="button"
-            onClick={onToggleInvite}
-            className={`${btnGhost} px-3 py-2 text-sm`}
-          >
+          <button type="button" onClick={onToggleInvite} className={`${btnGhost} px-3 py-2 text-sm`}>
             {inviting ? "Fechar convite" : "Convidar por e-mail"}
           </button>
         ) : null}
@@ -198,26 +229,15 @@ function BandCard({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={inputClass}
-              placeholder="pessoa@email.com"
-              autoComplete="email"
             />
           </label>
-          <label className="flex items-start gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              checked={canAnalyze}
-              onChange={(e) => setCanAnalyze(e.target.checked)}
-              className="mt-1"
-            />
-            <span>Permitir analisar músicas nesta banda</span>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="checkbox" checked={canAnalyze} onChange={(e) => setCanAnalyze(e.target.checked)} />
+            Pode analisar músicas
           </label>
           {inviteError ? <p className="text-sm text-red-400">{inviteError}</p> : null}
           {inviteOk ? <p className="text-sm text-green-300">{inviteOk}</p> : null}
-          <button
-            type="submit"
-            disabled={sending}
-            className={`${btnPrimary} w-full disabled:opacity-60 sm:w-auto`}
-          >
+          <button type="submit" disabled={sending} className={`${btnPrimary} disabled:opacity-60`}>
             {sending ? "Enviando..." : "Enviar convite"}
           </button>
         </form>

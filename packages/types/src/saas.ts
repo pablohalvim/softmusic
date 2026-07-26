@@ -26,6 +26,7 @@ export const RegisterUserSchema = z.object({
   address_state: z.string().length(2),
   address_zip: z.string().regex(/^\d{8}$/),
   password: z.string().min(8).max(128),
+  invite_token: z.string().min(1).optional(),
 });
 
 export const LoginSchema = z.object({
@@ -49,7 +50,10 @@ export const BandSummarySchema = z.object({
   can_analyze_songs: z.boolean(),
   can_invite_members: z.boolean().optional(),
   can_manage_members: z.boolean().optional(),
+  can_delete_songs: z.boolean().optional(),
   is_owner: z.boolean(),
+  is_blocked: z.boolean().optional(),
+  trial_ends_at: z.string().nullable().optional(),
 });
 
 export const BandRoleSchema = z.object({
@@ -71,6 +75,7 @@ export const BandMemberDetailSchema = z.object({
   can_analyze_songs: z.boolean(),
   can_invite_members: z.boolean(),
   can_manage_members: z.boolean(),
+  can_delete_songs: z.boolean().optional(),
 });
 
 export const SavedAddressSchema = z.object({
@@ -101,17 +106,28 @@ export const UpcomingOccurrenceSchema = z.object({
 
 export const InvoiceSummarySchema = z.object({
   id: z.string(),
+  invoice_number: z.number().int().nullable().optional(),
+  invoice_kind: z.enum(["first", "recurrence"]).optional(),
   total_amount_cents: z.number().int(),
-  status: z.enum(["pending", "paid", "overdue", "cancelled"]),
+  status: z.enum(["awaiting_payment", "paid", "overdue", "cancelled", "refunded", "pending"]),
   due_date: z.string(),
-  paid_at: z.string().datetime().nullable(),
-  payment_method: z.enum(["pix", "credit_card"]).nullable(),
-  invoice_url: z.string().url().nullable(),
+  paid_at: z.string().nullable(),
+  payment_method: z.string().nullable(),
+  invoice_url: z.string().nullable(),
+  can_pay: z.boolean().optional(),
+  can_refresh: z.boolean().optional(),
+  has_asaas_link: z.boolean().optional(),
   line_items: z.array(
     z.object({
       band_id: z.string(),
       description: z.string(),
       amount_cents: z.number().int(),
+      plan_code: z.string().nullable().optional(),
+      item_kind: z.string().optional(),
+      quantity: z.number().int().optional(),
+      unit_amount_cents: z.number().int().optional(),
+      band_name: z.string().nullable().optional(),
+      plan_label: z.string().nullable().optional(),
     }),
   ),
 });

@@ -19,7 +19,7 @@ celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-    timezone="UTC",
+    timezone="America/Sao_Paulo",
     enable_utc=True,
     task_track_started=True,
     task_acks_late=True,
@@ -28,11 +28,12 @@ celery_app.conf.update(
     task_routes={
         "app.worker.run_analysis": {"queue": "analysis"},
         "app.worker.suspend_overdue_accounts": {"queue": "billing"},
+        "app.worker.run_daily_billing": {"queue": "billing"},
     },
     beat_schedule={
-        "suspend-overdue-accounts-hourly": {
-            "task": "app.worker.suspend_overdue_accounts",
-            "schedule": crontab(minute=0),
+        "daily-billing-robot": {
+            "task": "app.worker.run_daily_billing",
+            "schedule": crontab(hour=5, minute=0),
             "options": {"queue": "billing"},
         },
     },
@@ -74,15 +75,20 @@ def run_analysis(self, job_id: str) -> dict:
     return run_async_in_worker(process)
 
 
-@celery_app.task(name="app.worker.suspend_overdue_accounts")
-def suspend_overdue_accounts() -> dict[str, int]:
+@celery_app.task(name="app.worker.run_daily_billing")
+def run_daily_billing() -> dict[str, int]:
     from app.application.services.billing_service import BillingService
 
     async def run(session) -> dict[str, int]:
-        count = await BillingService(session).suspend_overdue_accounts()
-        return {"suspended": count}
+        return await BillingService(session).run_daily_billing_robot()
 
     return run_async_in_worker(run)
+
+
+@celery_app.task(name="app.worker.suspend_overdue_accounts")
+def suspend_overdue_accounts() -> dict[str, int]:
+    """Compat: redireciona para o robô diário de billing."""
+    return run_daily_billing()
 
 
 def revoke_job_task(job_id: str) -> None:

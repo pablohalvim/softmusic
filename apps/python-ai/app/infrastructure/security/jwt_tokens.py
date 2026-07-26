@@ -48,4 +48,5 @@ def create_refresh_token(user_id: str, token_id: str) -> str:
 def decode_token(token: str, *, admin: bool = False) -> dict[str, Any]:
     settings = get_settings()
     key = settings.admin_jwt_private_key if admin else settings.jwt_private_key
-    return jwt.decode(token, key, algorithms=[settings.jwt_algorithm])
+    # leeway: evita 401 por skew de relógio entre containers/host.
+    return jwt.decode(token, key, algorithms=[settings.jwt_algorithm], leeway=30)
