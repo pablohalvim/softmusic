@@ -99,9 +99,11 @@ export default function BandasPage() {
                 Fechar
               </button>
             </div>
-            <label className={labelClass}>
+            <label htmlFor="band-name" className={labelClass}>
               <span>Nome</span>
               <input
+                id="band-name"
+                name="band-name"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -235,9 +237,11 @@ function BandCard({
 
       {inviting && (band.is_owner || band.can_invite_members) ? (
         <form onSubmit={(e) => void handleInvite(e)} className="mt-3 space-y-3">
-          <label className={labelClass}>
+          <label htmlFor="invite-email" className={labelClass}>
             <span>E-mail do convidado</span>
             <input
+              id="invite-email"
+              name="invite-email"
               required
               type="email"
               value={email}
@@ -247,20 +251,44 @@ function BandCard({
           </label>
           <fieldset className="space-y-2">
             <legend className="text-sm text-slate-300">Permissões do convidado</legend>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={canAnalyze} onChange={(e) => setCanAnalyze(e.target.checked)} />
+            <label htmlFor="invite-can-analyze" className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                id="invite-can-analyze"
+                name="invite-can-analyze"
+                type="checkbox"
+                checked={canAnalyze}
+                onChange={(e) => setCanAnalyze(e.target.checked)}
+              />
               Pode enviar/analisar músicas
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={canInvite} onChange={(e) => setCanInvite(e.target.checked)} />
+            <label htmlFor="invite-can-invite" className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                id="invite-can-invite"
+                name="invite-can-invite"
+                type="checkbox"
+                checked={canInvite}
+                onChange={(e) => setCanInvite(e.target.checked)}
+              />
               Pode convidar membros
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={canManage} onChange={(e) => setCanManage(e.target.checked)} />
+            <label htmlFor="invite-can-manage" className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                id="invite-can-manage"
+                name="invite-can-manage"
+                type="checkbox"
+                checked={canManage}
+                onChange={(e) => setCanManage(e.target.checked)}
+              />
               Pode gerenciar funções, membros e agenda
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={canDelete} onChange={(e) => setCanDelete(e.target.checked)} />
+            <label htmlFor="invite-can-delete" className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                id="invite-can-delete"
+                name="invite-can-delete"
+                type="checkbox"
+                checked={canDelete}
+                onChange={(e) => setCanDelete(e.target.checked)}
+              />
               Pode excluir músicas da biblioteca
             </label>
           </fieldset>

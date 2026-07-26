@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import mimetypes
 from typing import Any
@@ -139,7 +140,9 @@ async def analyze(
                     )
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
-                await band_service.link_song(band_id, existing.id, user.id)
+                await band_service.link_song(
+                    band_id, existing.id, user.id, link_source="imported_global"
+                )
                 return {
                     "duplicate": True,
                     "song_id": existing.id,
@@ -147,7 +150,9 @@ async def analyze(
                     "message": f'Música já importada. Variação "{variation["name"]}" criada.',
                     "variation": variation,
                 }
-            await band_service.link_song(band_id, existing.id, user.id)
+            await band_service.link_song(
+                band_id, existing.id, user.id, link_source="imported_global"
+            )
             return {
                 "duplicate": True,
                 "song_id": existing.id,
@@ -162,7 +167,7 @@ async def analyze(
         body.options,
         created_by_user_id=user.id,
     )
-    await band_service.link_song(band_id, song.id, user.id)
+    await band_service.link_song(band_id, song.id, user.id, link_source="created")
     run_analysis.delay(job.id)
     return {
         "duplicate": False,
@@ -204,7 +209,7 @@ async def upload_song(
         parsed_options,
         created_by_user_id=user.id,
     )
-    await band_service.link_song(band_id, song.id, user.id)
+    await band_service.link_song(band_id, song.id, user.id, link_source="created")
     run_analysis.delay(job.id)
     return {"duplicate": False, "job_id": job.id, "song_id": song.id, "variation": None}
 
@@ -254,7 +259,7 @@ async def create_cifra_draft(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     song = created["song"]
-    await band_service.link_song(band_id, song.id, user.id)
+    await band_service.link_song(band_id, song.id, user.id, link_source="created")
     return {
         "song_id": song.id,
         "job_id": None,
@@ -286,6 +291,11 @@ async def analyze_audio_for_song(
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     await _ensure_song_access(session, band_id, user.id, song_id)
+    if not await band_service.band_owns_song_origin(band_id, song_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Só é possível analisar áudio de músicas criadas nesta banda (não importadas da global).",
+        )
 
     source_type = body.source.get("type")
     source_ref = body.source.get("url")
@@ -311,6 +321,7 @@ async def analyze_audio_upload_for_song(
     song_id: str,
     file: UploadFile = File(...),
     options: str | None = None,
+    replace: bool = False,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
     band_id: str | None = Depends(get_band_id),
@@ -324,6 +335,12 @@ async def analyze_audio_upload_for_song(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     await _ensure_song_access(session, band_id, user.id, song_id)
 
+    if not await band_service.band_owns_song_origin(band_id, song_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Só é possível reanalisar músicas criadas nesta banda (não importadas da global).",
+        )
+
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
@@ -332,7 +349,11 @@ async def analyze_audio_upload_for_song(
     service = AnalysisService(session)
     try:
         job = await service.attach_audio_upload(
-            song_id, file.filename or "upload.bin", content, parsed_options
+            song_id,
+            file.filename or "upload.bin",
+            content,
+            parsed_options,
+            replace=replace,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -355,11 +376,16 @@ def _serialize_job(job: Any) -> dict[str, Any]:
     }
 
 
-def _serialize_song(song: Any) -> dict[str, Any]:
+def _serialize_song(song: Any, *, link_source: str | None = None) -> dict[str, Any]:
     has_audio = bool(song.file_path) or song.source_type in {"youtube", "upload", "http", "s3", "azure_blob", "gcs"}
     # Cifra-only drafts ainda não têm áudio até anexar fonte.
     if song.source_type in {"manual", "cifra_club"} and not song.file_path and not song.youtube_url:
         has_audio = False
+    origin = link_source or "created"
+    can_reanalyze = origin == "created" and song.status not in {
+        SongStatus.PENDING.value,
+        SongStatus.PROCESSING.value,
+    }
     return {
         "id": song.id,
         "title": song.title,
@@ -372,6 +398,8 @@ def _serialize_song(song: Any) -> dict[str, Any]:
         "has_audio": has_audio,
         "is_global": bool(getattr(song, "is_global", False)),
         "created_by_user_id": getattr(song, "created_by_user_id", None),
+        "link_source": origin,
+        "can_reanalyze": can_reanalyze,
         "created_at": song.created_at.isoformat(),
         "updated_at": song.updated_at.isoformat(),
     }
@@ -452,8 +480,14 @@ async def list_songs(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     songs, total = await band_service.list_band_songs(band_id, limit=limit, offset=offset)
+    link_sources = await band_service.get_band_song_link_sources(
+        band_id, [song.id for song in songs]
+    )
     return {
-        "items": [_serialize_song(song) for song in songs],
+        "items": [
+            _serialize_song(song, link_source=link_sources.get(song.id, "created"))
+            for song in songs
+        ],
         "total": total,
         "limit": max(1, min(limit, 100)),
         "offset": max(0, offset),
@@ -516,8 +550,8 @@ async def link_song_to_band(
     if song.moderation_status == "blocked":
         raise HTTPException(status_code=403, detail="Esta música foi bloqueada pela moderação")
 
-    await band_service.link_song(band_id, song_id, user.id)
-    return _serialize_song(song)
+    await band_service.link_song(band_id, song_id, user.id, link_source="imported_global")
+    return _serialize_song(song, link_source="imported_global")
 
 
 @router.post("/songs/{song_id}/share")
@@ -594,7 +628,11 @@ async def get_song(
     song = await service.get_song(song_id)
     if song is None:
         raise HTTPException(status_code=404, detail="Song not found")
-    return _serialize_song(song)
+    link_source = "created"
+    if band_id:
+        sources = await BandService(session).get_band_song_link_sources(band_id, [song_id])
+        link_source = sources.get(song_id, "created")
+    return _serialize_song(song, link_source=link_source)
 
 
 @router.delete("/songs/{song_id}")
@@ -880,7 +918,8 @@ async def get_waveform(
     source_path = await service.ensure_source_local(song)
     if source_path is None:
         raise HTTPException(status_code=404, detail="Song audio not found")
-    peaks = write_waveform_peaks(source_path)
+    # librosa é CPU-bound; não bloquear o event loop único do uvicorn.
+    peaks = await asyncio.to_thread(write_waveform_peaks, source_path)
     return {"song_id": song_id, "peaks": peaks}
 
 

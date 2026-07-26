@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     demucs_model: str = "htdemucs_6s"
     log_level: str = "info"
     celery_concurrency: int = 1
+    # Threads de CPU do PyTorch/Demucs. Default baixo para não matar a API no mesmo host.
+    torch_num_threads: int = 2
     cuda_visible_devices: str = "0"
 
     jwt_private_key: str = "dev-only-change-in-production-min-32-chars-long"

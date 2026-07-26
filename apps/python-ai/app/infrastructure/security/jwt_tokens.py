@@ -19,7 +19,12 @@ def _parse_duration(value: str, default_minutes: int) -> timedelta:
     return timedelta(minutes=default_minutes)
 
 
-def create_access_token(user_id: str, *, admin: bool = False) -> str:
+def create_access_token(
+    user_id: str,
+    *,
+    admin: bool = False,
+    role: str | None = None,
+) -> str:
     settings = get_settings()
     key = settings.admin_jwt_private_key if admin else settings.jwt_private_key
     expires = _parse_duration(settings.jwt_access_expires_in, 15)
@@ -29,6 +34,8 @@ def create_access_token(user_id: str, *, admin: bool = False) -> str:
         "exp": datetime.now(UTC) + expires,
         "iat": datetime.now(UTC),
     }
+    if admin and role:
+        payload["role"] = role
     return jwt.encode(payload, key, algorithm=settings.jwt_algorithm)
 
 

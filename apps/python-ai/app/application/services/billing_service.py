@@ -232,6 +232,17 @@ class BillingService:
     async def pay_invoice(self, owner_user_id: str, invoice_id: str) -> dict[str, Any]:
         """Cria cobrança no Asaas sob demanda e retorna URL para redirecionar."""
         invoice = await self._get_owner_invoice(owner_user_id, invoice_id)
+        return await self.ensure_payment_link(invoice)
+
+    async def ensure_payment_link_for_invoice_id(self, invoice_id: str) -> dict[str, Any]:
+        result = await self.session.execute(select(Invoice).where(Invoice.id == invoice_id))
+        invoice = result.scalar_one_or_none()
+        if invoice is None:
+            raise ValueError("Fatura não encontrada")
+        return await self.ensure_payment_link(invoice)
+
+    async def ensure_payment_link(self, invoice: Invoice) -> dict[str, Any]:
+        """Cria (ou reutiliza) cobrança Asaas e devolve invoice_url."""
         if invoice.status not in OPEN_STATUSES:
             raise ValueError("Fatura não está disponível para pagamento")
         if invoice.total_amount_cents <= 0:
@@ -243,7 +254,7 @@ class BillingService:
         account = await self._get_account(invoice.billing_account_id)
         if account is None:
             raise ValueError("Conta de billing não encontrada")
-        user = await self._get_user(owner_user_id)
+        user = await self._get_user(account.owner_user_id)
         if user is None:
             raise ValueError("Usuário não encontrado")
 
@@ -313,10 +324,53 @@ class BillingService:
         )
         return [await self._serialize_invoice(inv) for inv in result.scalars().all()]
 
-    async def list_all_invoices_admin(self) -> list[dict[str, Any]]:
-        result = await self.session.execute(
-            select(Invoice).order_by(Invoice.due_date.desc(), Invoice.created_at.desc()).limit(500)
-        )
+    async def list_all_invoices_admin(
+        self,
+        *,
+        registered_by_admin_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if registered_by_admin_id:
+            # Faturas que tocam bandas cadastradas pelo vendedor OU owner cadastrado por ele.
+            band_ids_result = await self.session.execute(
+                select(Band.id).where(Band.registered_by_admin_id == registered_by_admin_id)
+            )
+            band_ids = [row[0] for row in band_ids_result.all()]
+            owner_ids_result = await self.session.execute(
+                select(User.id).where(User.registered_by_admin_id == registered_by_admin_id)
+            )
+            owner_ids = [row[0] for row in owner_ids_result.all()]
+            account_ids: list[str] = []
+            if owner_ids:
+                accounts = await self.session.execute(
+                    select(BillingAccount.id).where(BillingAccount.owner_user_id.in_(owner_ids))
+                )
+                account_ids = [row[0] for row in accounts.all()]
+
+            invoice_ids: set[str] = set()
+            if band_ids:
+                lines = await self.session.execute(
+                    select(InvoiceLineItem.invoice_id).where(InvoiceLineItem.band_id.in_(band_ids))
+                )
+                invoice_ids.update(row[0] for row in lines.all())
+            if account_ids:
+                by_account = await self.session.execute(
+                    select(Invoice.id).where(Invoice.billing_account_id.in_(account_ids))
+                )
+                invoice_ids.update(row[0] for row in by_account.all())
+
+            if not invoice_ids:
+                return []
+            result = await self.session.execute(
+                select(Invoice)
+                .where(Invoice.id.in_(list(invoice_ids)))
+                .order_by(Invoice.due_date.desc(), Invoice.created_at.desc())
+                .limit(500)
+            )
+        else:
+            result = await self.session.execute(
+                select(Invoice).order_by(Invoice.due_date.desc(), Invoice.created_at.desc()).limit(500)
+            )
+
         items = []
         for inv in result.scalars().all():
             data = await self._serialize_invoice(inv)
@@ -324,8 +378,13 @@ class BillingService:
             owner = await self._get_user(account.owner_user_id) if account else None
             data["owner_email"] = owner.email if owner else None
             data["owner_name"] = owner.full_name if owner else None
+            data["is_delinquent"] = inv.status == InvoiceStatus.OVERDUE.value
             items.append(data)
         return items
+
+    async def invoice_in_admin_scope(self, invoice_id: str, admin_id: str) -> bool:
+        items = await self.list_all_invoices_admin(registered_by_admin_id=admin_id)
+        return any(item["id"] == invoice_id for item in items)
 
     async def get_invoice_details(self, owner_user_id: str, invoice_id: str) -> dict[str, Any]:
         invoice = await self._get_owner_invoice(owner_user_id, invoice_id)

@@ -7,14 +7,22 @@ interface VolumeControlProps {
 
 export function VolumeControl({ label, value, onChange, className }: VolumeControlProps) {
   const percent = Math.round(value * 100);
+  const fieldId = `volume-${label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")}`;
 
   return (
-    <label className={`flex flex-col gap-1.5 ${className ?? ""}`}>
+    <label htmlFor={fieldId} className={`flex flex-col gap-1.5 ${className ?? ""}`}>
       <span className="flex items-center justify-between text-xs text-slate-400">
         <span>{label}</span>
         <span className="tabular-nums text-slate-500">{percent}%</span>
       </span>
       <input
+        id={fieldId}
+        name={fieldId}
         type="range"
         min={0}
         max={100}

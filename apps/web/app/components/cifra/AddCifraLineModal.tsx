@@ -8,6 +8,8 @@ interface CifraLineModalProps {
   mode: "add" | "edit";
   initialNotas?: string;
   initialLetra?: string;
+  /** Texto auxiliar quando está inserindo no meio da cifra. */
+  addHint?: string;
   onClose: () => void;
   onSave: (notas: string, letra: string) => void;
 }
@@ -23,6 +25,7 @@ export function CifraLineModal({
   mode,
   initialNotas = "",
   initialLetra = "",
+  addHint,
   onClose,
   onSave,
 }: CifraLineModalProps) {
@@ -49,8 +52,9 @@ export function CifraLineModal({
 
   if (!open) return null;
 
-  const canSubmit = notas.trim().length > 0 || letra.trim().length > 0;
   const isEdit = mode === "edit";
+  // Em edição, permitir salvar vazio para remover a linha.
+  const canSubmit = isEdit || notas.trim().length > 0 || letra.trim().length > 0;
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -72,14 +76,16 @@ export function CifraLineModal({
         </h2>
         <p className="mt-1 text-sm text-slate-400">
           {isEdit
-            ? "Altere os acordes (separados por espaço) e o texto da linha."
-            : "A nova linha será incluída ao final da última seção."}
+            ? "Altere os acordes (separados por espaço) e o texto da linha. Deixe tudo vazio e salve para remover a linha."
+            : (addHint ?? "A nova linha será incluída ao final da última seção.")}
         </p>
 
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-          <label className="block text-sm text-slate-300">
+          <label htmlFor="cifra-line-notes" className="block text-sm text-slate-300">
             Notas
             <input
+              id="cifra-line-notes"
+              name="cifra-line-notes"
               autoFocus
               className={`${inputClass} mt-1.5 font-mono`}
               value={notas}
@@ -88,9 +94,11 @@ export function CifraLineModal({
             />
           </label>
 
-          <label className="block text-sm text-slate-300">
+          <label htmlFor="cifra-line-lyrics" className="block text-sm text-slate-300">
             Letra
             <textarea
+              id="cifra-line-lyrics"
+              name="cifra-line-lyrics"
               className={`${textareaClass} mt-1.5 min-h-[5rem]`}
               value={letra}
               onChange={(event) => setLetra(event.target.value)}
@@ -112,7 +120,11 @@ export function CifraLineModal({
               disabled={!canSubmit}
               className="sm-btn-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {isEdit ? "Salvar" : "Adicionar"}
+              {isEdit
+                ? notas.trim() || letra.trim()
+                  ? "Salvar"
+                  : "Remover linha"
+                : "Adicionar"}
             </button>
           </div>
         </form>

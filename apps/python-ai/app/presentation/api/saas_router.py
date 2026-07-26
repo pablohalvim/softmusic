@@ -17,7 +17,13 @@ from app.application.services.schedule_service import ScheduleService
 from app.config import get_settings
 from app.infrastructure.database.models import User
 from app.infrastructure.database.session import get_session
-from app.presentation.api.deps import get_band_id, get_current_admin, get_current_user
+from app.presentation.api.deps import (
+    get_band_id,
+    get_current_admin,
+    get_current_user,
+    is_full_admin,
+    require_full_admin,
+)
 
 router = APIRouter(prefix="/internal", tags=["saas"])
 
@@ -42,6 +48,21 @@ class RegisterBody(BaseModel):
 class LoginBody(BaseModel):
     login: str
     password: str = Field(min_length=8)
+
+
+class ForgotPasswordBody(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+
+class VerifyResetCodeBody(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    code: str = Field(min_length=6, max_length=12)
+
+
+class ResetPasswordWithCodeBody(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    code: str = Field(min_length=6, max_length=12)
+    password: str = Field(min_length=8, max_length=128)
 
 
 class RefreshBody(BaseModel):
@@ -170,6 +191,37 @@ class ResetPasswordBody(BaseModel):
     password: str = Field(min_length=8)
 
 
+class CreateAdminBody(BaseModel):
+    email: str
+    full_name: str
+    password: str = Field(min_length=8)
+    role: Literal["full_admin", "salesperson"] = "salesperson"
+
+
+class UpdateAdminBody(BaseModel):
+    full_name: str | None = None
+    role: Literal["full_admin", "salesperson"] | None = None
+    status: Literal["active", "inactive"] | None = None
+
+
+class SalesRegisterBody(BaseModel):
+    full_name: str
+    cpf: str
+    birth_date: str
+    email: str
+    phone: str
+    address_street: str
+    address_number: str
+    address_complement: str | None = None
+    address_neighborhood: str
+    address_city: str
+    address_state: str
+    address_zip: str
+    password: str | None = Field(default=None, min_length=8)
+    band_name: str
+    plan_code: str
+
+
 @router.post("/auth/register")
 async def register(body: RegisterBody, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     try:
@@ -184,6 +236,39 @@ async def login(body: LoginBody, session: AsyncSession = Depends(get_session)) -
         return await AuthService(session).login(body.login, body.password)
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+@router.post("/auth/forgot-password")
+async def forgot_password(
+    body: ForgotPasswordBody,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        return await AuthService(session).request_password_reset(body.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/auth/verify-reset-code")
+async def verify_reset_code(
+    body: VerifyResetCodeBody,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        return await AuthService(session).verify_password_reset_code(body.email, body.code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/auth/reset-password")
+async def reset_password_with_code(
+    body: ResetPasswordWithCodeBody,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        return await AuthService(session).reset_password(body.email, body.code, body.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/auth/refresh")
@@ -647,12 +732,105 @@ async def admin_login(body: AdminLoginBody, session: AsyncSession = Depends(get_
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
+@router.get("/admin/me")
+async def admin_me(admin=Depends(get_current_admin), session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+    return await AdminService(session).me(admin)
+
+
+@router.get("/admin/admins")
+async def admin_list_admins(
+    admin=Depends(require_full_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    _ = admin
+    return {"items": await AdminService(session).list_admins()}
+
+
+@router.post("/admin/admins")
+async def admin_create_admin(
+    body: CreateAdminBody,
+    admin=Depends(require_full_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        created = await AdminService(session).create_admin(
+            email=body.email,
+            full_name=body.full_name,
+            password=body.password,
+            role=body.role,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await AdminService(session).audit(admin.id, "create_admin", "admin", created["id"], {
+        "email": created["email"],
+        "role": created["role"],
+    })
+    return {"admin": created}
+
+
+@router.patch("/admin/admins/{admin_id}")
+async def admin_update_admin(
+    admin_id: str,
+    body: UpdateAdminBody,
+    admin=Depends(require_full_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    try:
+        updated = await AdminService(session).update_admin(
+            admin_id,
+            full_name=body.full_name,
+            role=body.role,
+            status=body.status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await AdminService(session).audit(admin.id, "update_admin", "admin", admin_id, body.model_dump(exclude_none=True))
+    return {"admin": updated}
+
+
+@router.post("/admin/admins/{admin_id}/reset-password")
+async def admin_reset_admin_password(
+    admin_id: str,
+    body: ResetPasswordBody,
+    admin=Depends(require_full_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        await AdminService(session).reset_admin_password(admin_id, body.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await AdminService(session).audit(admin.id, "reset_admin_password", "admin", admin_id, None)
+    return {"status": "ok"}
+
+
+@router.post("/admin/sales/register")
+async def admin_sales_register(
+    body: SalesRegisterBody,
+    admin=Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    payload = body.model_dump()
+    try:
+        result = await AdminService(session).register_sale(admin, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await AdminService(session).audit(
+        admin.id,
+        "sales_register",
+        "user",
+        result["user"]["id"],
+        {"band_id": result["band"].get("id"), "plan_code": body.plan_code},
+    )
+    return result
+
+
 @router.get("/admin/dashboard/stats")
 async def admin_dashboard_stats(
     admin=Depends(get_current_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    _ = admin
+    if not is_full_admin(admin):
+        return await AdminService(session).sales_dashboard_stats(admin)
     return await AnalysisService(session).get_dashboard_stats()
 
 
@@ -662,7 +840,7 @@ async def admin_users(
     admin=Depends(get_current_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    return {"items": await AdminService(session).list_users(q)}
+    return {"items": await AdminService(session).list_users(q, admin=admin)}
 
 
 @router.post("/admin/users/{user_id}/reset-password")
@@ -672,21 +850,26 @@ async def admin_reset_password(
     admin=Depends(get_current_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    await AdminService(session).reset_user_password(user_id, body.password)
+    try:
+        await AdminService(session).reset_user_password(user_id, body.password, admin=admin)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     await AdminService(session).audit(admin.id, "reset_password", "user", user_id, None)
     return {"status": "ok"}
 
 
 @router.get("/admin/bands")
 async def admin_bands(admin=Depends(get_current_admin), session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
-    return {"items": await AdminService(session).list_bands()}
+    return {"items": await AdminService(session).list_bands(admin=admin)}
 
 
 @router.patch("/admin/bands/{band_id}/exempt")
 async def admin_exempt(
     band_id: str,
     body: ExemptBody,
-    admin=Depends(get_current_admin),
+    admin=Depends(require_full_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
     await AdminService(session).set_band_exempt(band_id, body.exempt, body.reason)
@@ -697,7 +880,7 @@ async def admin_exempt(
 @router.post("/admin/bands/{band_id}/suspend")
 async def admin_suspend(
     band_id: str,
-    admin=Depends(get_current_admin),
+    admin=Depends(require_full_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
     await AdminService(session).suspend_band(band_id)
@@ -708,7 +891,7 @@ async def admin_suspend(
 @router.post("/admin/songs/block")
 async def admin_block_song(
     body: BlockSongBody,
-    admin=Depends(get_current_admin),
+    admin=Depends(require_full_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
     await AdminService(session).block_song(admin.id, body.song_id, body.youtube_video_id, body.reason)
@@ -719,7 +902,7 @@ async def admin_block_song(
 @router.post("/admin/marketing/send")
 async def admin_marketing(
     body: MarketingBody,
-    admin=Depends(get_current_admin),
+    admin=Depends(require_full_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     result = await AdminService(session).send_marketing(body.subject, body.body, body.audience)
@@ -729,7 +912,7 @@ async def admin_marketing(
 
 @router.post("/admin/billing/suspend-overdue")
 async def admin_suspend_overdue(
-    admin=Depends(get_current_admin),
+    admin=Depends(require_full_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     stats = await BillingService(session).run_daily_billing_robot()
@@ -739,7 +922,7 @@ async def admin_suspend_overdue(
 
 @router.get("/admin/billing/settings")
 async def admin_billing_settings(
-    admin=Depends(get_current_admin),
+    admin=Depends(require_full_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     _ = admin
@@ -749,7 +932,7 @@ async def admin_billing_settings(
 @router.put("/admin/billing/settings")
 async def admin_update_billing_settings(
     body: AsaasSettingsBody,
-    admin=Depends(get_current_admin),
+    admin=Depends(require_full_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     billing = BillingService(session)
@@ -772,15 +955,36 @@ async def admin_list_invoices(
     admin=Depends(get_current_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    _ = admin
-    return {"items": await BillingService(session).list_all_invoices_admin()}
+    scope = None if is_full_admin(admin) else admin.id
+    return {"items": await BillingService(session).list_all_invoices_admin(registered_by_admin_id=scope)}
+
+
+@router.post("/admin/billing/invoices/{invoice_id}/payment-link")
+async def admin_invoice_payment_link(
+    invoice_id: str,
+    admin=Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    billing = BillingService(session)
+    if not is_full_admin(admin):
+        allowed = await billing.invoice_in_admin_scope(invoice_id, admin.id)
+        if not allowed:
+            raise HTTPException(status_code=403, detail="Fatura fora do seu escopo")
+    try:
+        result = await billing.ensure_payment_link_for_invoice_id(invoice_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await AdminService(session).audit(
+        admin.id, "generate_payment_link", "invoice", invoice_id, {"invoice_url": result.get("invoice_url")}
+    )
+    return result
 
 
 @router.post("/admin/billing/invoices/{invoice_id}/exempt-band/{band_id}")
 async def admin_exempt_band_from_invoice(
     invoice_id: str,
     band_id: str,
-    admin=Depends(get_current_admin),
+    admin=Depends(require_full_admin),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
     _ = invoice_id

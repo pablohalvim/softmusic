@@ -45,14 +45,14 @@ export default function SongDetail() {
     queryKey: ["song", songId],
     queryFn: () => fetchSong(songId!),
     enabled: Boolean(songId),
-    refetchInterval: (query) => (query.state.data && isSongFinished(query.state.data.status) ? false : 3000),
+    refetchInterval: (query) => (query.state.data && isSongFinished(query.state.data.status) ? false : 5000),
   });
 
   const jobQuery = useQuery({
     queryKey: ["song-job", songId],
     queryFn: () => fetchSongJob(songId!),
     enabled: Boolean(songId) && Boolean(songQuery.data) && !isSongFinished(songQuery.data!.status),
-    refetchInterval: (query) => (query.state.data && isJobFinished(query.state.data.status) ? false : 2000),
+    refetchInterval: (query) => (query.state.data && isJobFinished(query.state.data.status) ? false : 5000),
   });
 
   const analysisQuery = useQuery({

@@ -108,6 +108,7 @@ export function SongAudioPlayer({
     let cancelled = false;
     setStemsManifest(null);
     setStemUrls({});
+    setStemsLoading(false);
     setStemsError(null);
     void authFetch(`/songs/${songId}/stems`)
       .then(async (response) => {
@@ -126,7 +127,10 @@ export function SongAudioPlayer({
   const availableStemKey = availableStems.map((stem) => stem.name).join("|");
 
   useEffect(() => {
-    if (!canUseStems || !availableStemKey) return;
+    if (!canUseStems || !availableStemKey) {
+      setStemsLoading(false);
+      return;
+    }
     const names = availableStemKey.split("|");
     setEnabledStems(new Set(names));
 
@@ -134,6 +138,7 @@ export function SongAudioPlayer({
     const created: string[] = [];
     setStemsLoading(true);
     setStemsError(null);
+    setStemUrls({});
 
     void Promise.all(
       names.map(async (name) => {
@@ -461,6 +466,8 @@ export function SongAudioPlayer({
           {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
         </span>
         <input
+          id="playback-progress"
+          name="playback-progress"
           type="range"
           min={0}
           max={Math.max(duration, 0.1)}
@@ -484,82 +491,115 @@ export function SongAudioPlayer({
     </div>
   );
 
+  const stemsBusy = stemsLoading && !stemsReady;
+  const showStemsPanel = mode === "stems" && canUseStems;
+
   const modeToggle = canUseStems ? (
     <div className={`${segmentedWrapClass} !p-1`} role="group" aria-label="Fonte de áudio">
       <button
         type="button"
-        className={effectiveMode === "original" ? segmentedActiveClass : segmentedIdleClass}
+        className={mode === "original" ? segmentedActiveClass : segmentedIdleClass}
         onClick={() => handleModeChange("original")}
       >
         Música original
       </button>
       <button
         type="button"
-        className={effectiveMode === "stems" ? segmentedActiveClass : segmentedIdleClass}
+        className={mode === "stems" ? segmentedActiveClass : segmentedIdleClass}
         onClick={() => handleModeChange("stems")}
-        disabled={stemsLoading && !stemsReady}
+        aria-busy={stemsBusy || undefined}
       >
-        Stems
+        {stemsBusy ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block h-3 w-3 animate-spin rounded-full border border-current border-r-transparent"
+              aria-hidden
+            />
+            Carregando…
+          </span>
+        ) : (
+          "Stems"
+        )}
       </button>
     </div>
   ) : null;
 
-  const stemsPicker =
-    effectiveMode === "stems" ? (
+  const stemsPicker = showStemsPanel ? (
       <div className="space-y-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs uppercase tracking-wide text-slate-500">Faixas (Demucs)</p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="text-xs text-green-300 hover:text-green-200"
-              onClick={() => setEnabledStems(new Set(availableStems.map((s) => s.name)))}
-            >
-              Todas
-            </button>
-            <button
-              type="button"
-              className="text-xs text-slate-400 hover:text-slate-200"
-              onClick={() => setEnabledStems(new Set())}
-            >
-              Nenhuma
-            </button>
-          </div>
+          {!stemsBusy ? (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="text-xs text-green-300 hover:text-green-200"
+                onClick={() => setEnabledStems(new Set(availableStems.map((s) => s.name)))}
+              >
+                Todas
+              </button>
+              <button
+                type="button"
+                className="text-xs text-slate-400 hover:text-slate-200"
+                onClick={() => setEnabledStems(new Set())}
+              >
+                Nenhuma
+              </button>
+            </div>
+          ) : null}
         </div>
-        {stemsLoading && !stemsReady ? (
-          <p className="text-xs text-slate-500">Carregando stems...</p>
+        {stemsBusy ? (
+          <div
+            className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-4 text-sm text-slate-300"
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-green-400 border-r-transparent"
+              aria-hidden
+            />
+            <span>Carregando faixas separadas…</span>
+          </div>
         ) : null}
         {stemsError ? <p className="text-xs text-amber-300">{stemsError}</p> : null}
-        <ul className="grid gap-1.5 sm:grid-cols-2">
-          {availableStems.map((stem) => {
-            const checked = enabledStems.has(stem.name);
-            const loaded = Boolean(stemUrls[stem.name]);
-            return (
-              <li key={stem.name}>
-                <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-200 hover:bg-white/[0.04]">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={!loaded}
-                    onChange={() => toggleStem(stem.name)}
-                    className="accent-brand rounded border-white/20 bg-black/30"
-                  />
-                  <span className={!loaded ? "text-slate-500" : undefined}>
-                    {stemLabel(stem.name)}
-                    {!loaded ? "…" : null}
-                  </span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-        {enabledStems.size === 0 ? (
-          <p className="text-xs text-amber-300/90">Marque ao menos uma faixa para tocar.</p>
-        ) : (
-          <p className="text-xs text-slate-500">
-            As faixas marcadas tocam juntas. Desmarque o instrumento que você toca para treinar.
-          </p>
-        )}
+        {!stemsBusy ? (
+          <>
+            <ul className="grid gap-1.5 sm:grid-cols-2">
+              {availableStems.map((stem) => {
+                const checked = enabledStems.has(stem.name);
+                const loaded = Boolean(stemUrls[stem.name]);
+                return (
+                  <li key={stem.name}>
+                    <label
+                      htmlFor={`stem-${stem.name}`}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-200 hover:bg-white/[0.04]"
+                    >
+                      <input
+                        id={`stem-${stem.name}`}
+                        name={`stem-${stem.name}`}
+                        type="checkbox"
+                        checked={checked}
+                        disabled={!loaded}
+                        onChange={() => toggleStem(stem.name)}
+                        className="accent-brand rounded border-white/20 bg-black/30"
+                      />
+                      <span className={!loaded ? "text-slate-500" : undefined}>
+                        {stemLabel(stem.name)}
+                        {!loaded ? "…" : null}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+            {enabledStems.size === 0 ? (
+              <p className="text-xs text-amber-300/90">Marque ao menos uma faixa para tocar.</p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                As faixas marcadas tocam juntas. Desmarque o instrumento que você toca para treinar.
+              </p>
+            )}
+          </>
+        ) : null}
       </div>
     ) : null;
 
@@ -613,8 +653,13 @@ export function SongAudioPlayer({
 
   const metronomeExtras = hasMetronome ? (
     <>
-      <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+      <label
+        htmlFor="sync-metronome"
+        className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-slate-300"
+      >
         <input
+          id="sync-metronome"
+          name="sync-metronome"
           type="checkbox"
           checked={syncMetronome}
           onChange={(event) => handleSyncChange(event.target.checked)}

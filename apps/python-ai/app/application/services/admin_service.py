@@ -5,30 +5,48 @@ import secrets
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.models import (
+    AdminRole,
     AdminUser,
     AuditLog,
     Band,
     BandStatus,
     BillingAccount,
+    Invoice,
+    InvoiceLineItem,
+    InvoiceStatus,
     Song,
     SongBlock,
     User,
 )
 from app.infrastructure.security.jwt_tokens import create_access_token
 from app.infrastructure.security.passwords import hash_password, verify_password
+from app.presentation.api.deps import is_full_admin, normalize_admin_role
 
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(8)}"
 
 
+VALID_ADMIN_ROLES = {AdminRole.FULL_ADMIN.value, AdminRole.SALESPERSON.value}
+
+
 class AdminService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    def serialize_admin(self, admin: AdminUser) -> dict[str, Any]:
+        return {
+            "id": admin.id,
+            "email": admin.email,
+            "full_name": admin.full_name,
+            "role": normalize_admin_role(admin.role),
+            "status": admin.status,
+            "created_at": admin.created_at.isoformat() if admin.created_at else None,
+        }
 
     async def login(self, email: str, password: str) -> dict[str, Any]:
         result = await self.session.execute(
@@ -40,50 +58,216 @@ class AdminService:
         admin = result.scalar_one_or_none()
         if admin is None or not verify_password(password, admin.password_hash):
             raise ValueError("Credenciais inválidas")
+        role = normalize_admin_role(admin.role)
+        if admin.role != role:
+            admin.role = role
+            await self.session.commit()
         return {
-            "access_token": create_access_token(admin.id, admin=True),
-            "admin": {"id": admin.id, "email": admin.email, "full_name": admin.full_name, "role": admin.role},
+            "access_token": create_access_token(admin.id, admin=True, role=role),
+            "admin": self.serialize_admin(admin),
         }
 
-    async def list_users(self, query: str | None = None) -> list[dict[str, Any]]:
+    async def me(self, admin: AdminUser) -> dict[str, Any]:
+        return self.serialize_admin(admin)
+
+    async def list_admins(self) -> list[dict[str, Any]]:
+        result = await self.session.execute(select(AdminUser).order_by(AdminUser.created_at.desc()))
+        return [self.serialize_admin(item) for item in result.scalars().all()]
+
+    async def create_admin(
+        self,
+        *,
+        email: str,
+        full_name: str,
+        password: str,
+        role: str,
+    ) -> dict[str, Any]:
+        if role not in VALID_ADMIN_ROLES:
+            raise ValueError("Role inválida. Use full_admin ou salesperson")
+        clean_email = email.strip().lower()
+        existing = await self.session.execute(select(AdminUser).where(AdminUser.email == clean_email))
+        if existing.scalar_one_or_none():
+            raise ValueError("E-mail já cadastrado")
+        admin = AdminUser(
+            id=_new_id("adm"),
+            email=clean_email,
+            full_name=full_name.strip(),
+            password_hash=hash_password(password),
+            role=role,
+            status="active",
+        )
+        self.session.add(admin)
+        await self.session.commit()
+        await self.session.refresh(admin)
+        return self.serialize_admin(admin)
+
+    async def update_admin(
+        self,
+        admin_id: str,
+        *,
+        full_name: str | None = None,
+        role: str | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        result = await self.session.execute(select(AdminUser).where(AdminUser.id == admin_id))
+        admin = result.scalar_one_or_none()
+        if admin is None:
+            raise ValueError("Admin não encontrado")
+
+        previous_role = normalize_admin_role(admin.role)
+        previous_status = admin.status
+
+        if full_name is not None:
+            admin.full_name = full_name.strip()
+        if role is not None:
+            if role not in VALID_ADMIN_ROLES:
+                raise ValueError("Role inválida. Use full_admin ou salesperson")
+            admin.role = role
+        if status is not None:
+            if status not in {"active", "inactive"}:
+                raise ValueError("Status inválido")
+            admin.status = status
+
+        next_role = normalize_admin_role(admin.role)
+        demoting_last = (
+            previous_role == AdminRole.FULL_ADMIN.value
+            and previous_status == "active"
+            and (
+                next_role != AdminRole.FULL_ADMIN.value
+                or admin.status != "active"
+            )
+        )
+        if demoting_last:
+            count = await self._count_active_full_admins(exclude_id=admin.id)
+            if count == 0:
+                raise ValueError("Não é possível remover o último administrador ativo")
+
+        await self.session.commit()
+        await self.session.refresh(admin)
+        return self.serialize_admin(admin)
+
+    async def reset_admin_password(self, admin_id: str, new_password: str) -> None:
+        result = await self.session.execute(select(AdminUser).where(AdminUser.id == admin_id))
+        admin = result.scalar_one_or_none()
+        if admin is None:
+            raise ValueError("Admin não encontrado")
+        admin.password_hash = hash_password(new_password)
+        await self.session.commit()
+
+    async def _count_active_full_admins(self, *, exclude_id: str | None = None) -> int:
+        stmt = select(func.count()).select_from(AdminUser).where(
+            AdminUser.status == "active",
+            AdminUser.role == AdminRole.FULL_ADMIN.value,
+        )
+        if exclude_id:
+            stmt = stmt.where(AdminUser.id != exclude_id)
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def list_users(
+        self,
+        query: str | None = None,
+        *,
+        admin: AdminUser | None = None,
+    ) -> list[dict[str, Any]]:
         stmt = select(User).where(User.deleted_at.is_(None))
+        if admin is not None and not is_full_admin(admin):
+            stmt = stmt.where(User.registered_by_admin_id == admin.id)
         if query:
             like = f"%{query.strip()}%"
             stmt = stmt.where(or_(User.full_name.ilike(like), User.email.ilike(like)))
-        result = await self.session.execute(stmt.order_by(User.created_at.desc()).limit(100))
-        return [
-            {
-                "id": user.id,
-                "full_name": user.full_name,
-                "email": user.email,
-                "cpf": user.cpf,
-                "status": user.status,
-                "created_at": user.created_at.isoformat(),
-            }
-            for user in result.scalars().all()
-        ]
+        result = await self.session.execute(stmt.order_by(User.created_at.desc()).limit(200))
+        items = []
+        for user in result.scalars().all():
+            delinquent = await self._user_has_delinquency(user.id)
+            items.append(
+                {
+                    "id": user.id,
+                    "full_name": user.full_name,
+                    "email": user.email,
+                    "cpf": user.cpf,
+                    "status": user.status,
+                    "registered_by_admin_id": user.registered_by_admin_id,
+                    "is_delinquent": delinquent,
+                    "created_at": user.created_at.isoformat(),
+                }
+            )
+        return items
 
-    async def reset_user_password(self, user_id: str, new_password: str) -> None:
+    async def reset_user_password(
+        self,
+        user_id: str,
+        new_password: str,
+        *,
+        admin: AdminUser | None = None,
+    ) -> None:
         result = await self.session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if user is None:
             raise ValueError("Usuário não encontrado")
+        if admin is not None and not is_full_admin(admin):
+            if user.registered_by_admin_id != admin.id:
+                raise PermissionError("Usuário fora do seu escopo")
         user.password_hash = hash_password(new_password)
         await self.session.commit()
 
-    async def list_bands(self) -> list[dict[str, Any]]:
-        result = await self.session.execute(select(Band).order_by(Band.created_at.desc()).limit(200))
-        return [
-            {
-                "id": band.id,
-                "name": band.name,
-                "plan_code": band.plan_code,
-                "status": band.status,
-                "billing_exempt": band.billing_exempt,
-                "owner_user_id": band.owner_user_id,
-            }
-            for band in result.scalars().all()
-        ]
+    async def list_bands(self, *, admin: AdminUser | None = None) -> list[dict[str, Any]]:
+        stmt = select(Band).order_by(Band.created_at.desc()).limit(200)
+        if admin is not None and not is_full_admin(admin):
+            stmt = select(Band).where(Band.registered_by_admin_id == admin.id).order_by(
+                Band.created_at.desc()
+            ).limit(200)
+        result = await self.session.execute(stmt)
+        items = []
+        for band in result.scalars().all():
+            delinquent = await self._band_is_delinquent(band)
+            items.append(
+                {
+                    "id": band.id,
+                    "name": band.name,
+                    "plan_code": band.plan_code,
+                    "status": band.status,
+                    "billing_exempt": band.billing_exempt,
+                    "owner_user_id": band.owner_user_id,
+                    "registered_by_admin_id": band.registered_by_admin_id,
+                    "is_delinquent": delinquent,
+                }
+            )
+        return items
+
+    async def _band_is_delinquent(self, band: Band) -> bool:
+        if band.status in {
+            BandStatus.PAST_DUE.value,
+            BandStatus.SUSPENDED.value,
+            BandStatus.PENDING_PAYMENT.value,
+        }:
+            return True
+        overdue = await self.session.execute(
+            select(func.count())
+            .select_from(InvoiceLineItem)
+            .join(Invoice, Invoice.id == InvoiceLineItem.invoice_id)
+            .where(
+                InvoiceLineItem.band_id == band.id,
+                Invoice.status == InvoiceStatus.OVERDUE.value,
+            )
+        )
+        return int(overdue.scalar_one()) > 0
+
+    async def _user_has_delinquency(self, user_id: str) -> bool:
+        bands = await self.session.execute(select(Band).where(Band.owner_user_id == user_id))
+        for band in bands.scalars().all():
+            if await self._band_is_delinquent(band):
+                return True
+        return False
+
+    async def ensure_band_in_scope(self, band_id: str, admin: AdminUser) -> Band:
+        result = await self.session.execute(select(Band).where(Band.id == band_id))
+        band = result.scalar_one_or_none()
+        if band is None:
+            raise ValueError("Banda não encontrada")
+        if not is_full_admin(admin) and band.registered_by_admin_id != admin.id:
+            raise PermissionError("Banda fora do seu escopo")
+        return band
 
     async def set_band_exempt(self, band_id: str, exempt: bool, reason: str | None) -> None:
         result = await self.session.execute(select(Band).where(Band.id == band_id))
@@ -106,6 +290,56 @@ class AdminService:
             raise ValueError("Banda não encontrada")
         band.status = BandStatus.SUSPENDED.value
         await self.session.commit()
+
+    async def register_sale(self, admin: AdminUser, payload: dict[str, Any]) -> dict[str, Any]:
+        from app.application.services.auth_service import AuthService
+        from app.application.services.band_service import BandService
+
+        band_name = str(payload.get("band_name") or "").strip()
+        plan_code = str(payload.get("plan_code") or "").strip()
+        if not band_name:
+            raise ValueError("Nome da banda é obrigatório")
+        if not plan_code:
+            raise ValueError("Plano é obrigatório")
+
+        password = str(payload.get("password") or "").strip()
+        if not password:
+            password = secrets.token_urlsafe(10)
+
+        register_payload = {
+            **payload,
+            "password": password,
+            "registered_by_admin_id": admin.id,
+            "issue_tokens": False,
+        }
+        created = await AuthService(self.session).register(register_payload)
+        user_id = created["user"]["id"]
+        user_result = await self.session.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one()
+        band = await BandService(self.session).create_band(
+            user,
+            band_name,
+            plan_code,
+            registered_by_admin_id=admin.id,
+        )
+        return {
+            "user": created["user"],
+            "band": band,
+            "temporary_password": password if not payload.get("password") else None,
+        }
+
+    async def sales_dashboard_stats(self, admin: AdminUser) -> dict[str, Any]:
+        users = await self.list_users(admin=admin)
+        bands = await self.list_bands(admin=admin)
+        overdue_bands = sum(1 for band in bands if band.get("is_delinquent"))
+        return {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "scope": "salesperson",
+            "users_total": len(users),
+            "bands_total": len(bands),
+            "delinquent_bands": overdue_bands,
+            "delinquent_users": sum(1 for user in users if user.get("is_delinquent")),
+        }
 
     async def block_song(self, admin_id: str, song_id: str | None, youtube_video_id: str | None, reason: str) -> None:
         if song_id:
@@ -141,7 +375,14 @@ class AdminService:
         sent = email_service.send_bulk(recipients, subject, body)
         return {"sent": sent, "total": len(recipients)}
 
-    async def audit(self, admin_id: str, action: str, entity_type: str, entity_id: str | None, payload: dict[str, Any] | None) -> None:
+    async def audit(
+        self,
+        admin_id: str,
+        action: str,
+        entity_type: str,
+        entity_id: str | None,
+        payload: dict[str, Any] | None,
+    ) -> None:
         self.session.add(
             AuditLog(
                 id=_new_id("aud"),

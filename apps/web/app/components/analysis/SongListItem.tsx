@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 import { Link } from "react-router";
 
 import { formatDateTime } from "@softmusic/shared/datetime";
@@ -9,6 +10,7 @@ import {
   fetchSongJob,
   isActiveSong,
   isJobFinished,
+  reanalyzeSongAudio,
   shareSongToGlobal,
   unshareSongFromGlobal,
   type SongSummary,
@@ -17,6 +19,7 @@ import { useAuth } from "../../lib/auth-context";
 import { useBand } from "../../lib/band-context";
 import { useConfirm } from "../../lib/confirm";
 import { labelSongStatus } from "../../lib/status-labels";
+import { useToast } from "../../lib/toast";
 import { btnGhost, btnPrimary, panelClass } from "../../lib/ui-classes";
 import { JobProgressDetails, ProgressBar, StatusBadge } from "./StatusBadge";
 
@@ -25,19 +28,23 @@ export function SongListItem({ song }: { song: SongSummary }) {
   const { user } = useAuth();
   const { activeBand } = useBand();
   const { confirm } = useConfirm();
+  const toast = useToast();
+  const reanalyzeInputRef = useRef<HTMLInputElement>(null);
   const isActive = isActiveSong(song.status);
   const blocked = Boolean(activeBand?.is_blocked);
   const canDelete = Boolean(activeBand?.is_owner || activeBand?.can_delete_songs);
   const canManageShare =
     song.status === "completed" &&
     (!song.created_by_user_id || song.created_by_user_id === user?.id);
+  const canReanalyze = Boolean(song.can_reanalyze) && !blocked && !isActive;
+  const reanalyzeLabel = song.has_audio ? "Nova análise" : "Analisar áudio";
 
   const jobQuery = useQuery({
     queryKey: ["song-job", song.id],
     queryFn: () => fetchSongJob(song.id),
     enabled: isActive || song.status === "failed",
     refetchInterval: (query) =>
-      query.state.data && isJobFinished(query.state.data.status) ? false : 2500,
+      query.state.data && isJobFinished(query.state.data.status) ? false : 5000,
   });
 
   const invalidateLibrary = () => {
@@ -63,10 +70,33 @@ export function SongListItem({ song }: { song: SongSummary }) {
     onSuccess: invalidateLibrary,
   });
 
+  const reanalyzeMutation = useMutation({
+    mutationFn: (file: File) =>
+      reanalyzeSongAudio(song.id, file, { replace: Boolean(song.has_audio) }),
+    onSuccess: () => {
+      invalidateLibrary();
+      toast.success(
+        song.has_audio
+          ? "Nova análise iniciada com o áudio enviado."
+          : "Análise de áudio iniciada.",
+      );
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+    },
+  });
+
   const title = song.title ?? "Sem título";
   const subtitle = [
     song.artist,
-    song.source_type === "youtube" ? "YouTube" : song.source_type === "upload" ? "Upload" : null,
+    song.source_type === "youtube"
+      ? "YouTube"
+      : song.source_type === "upload"
+        ? "Upload"
+        : song.source_type === "manual" || song.source_type === "cifra_club"
+          ? "Cifra"
+          : null,
+    song.link_source === "imported_global" ? "Importada" : null,
     formatDateTime(song.created_at),
   ]
     .filter(Boolean)
@@ -77,7 +107,10 @@ export function SongListItem({ song }: { song: SongSummary }) {
     job?.status === "cancelled" || job?.status === "failed" ? "failed" : song.status;
   const showProgress = isActive && job && !isJobFinished(job.status);
   const isBusy =
-    deleteMutation.isPending || cancelMutation.isPending || shareMutation.isPending;
+    deleteMutation.isPending ||
+    cancelMutation.isPending ||
+    shareMutation.isPending ||
+    reanalyzeMutation.isPending;
 
   return (
     <article className={panelClass}>
@@ -98,6 +131,47 @@ export function SongListItem({ song }: { song: SongSummary }) {
 
         {!blocked ? (
           <div className="flex flex-wrap gap-2">
+            {canReanalyze ? (
+              <>
+                <input
+                  ref={reanalyzeInputRef}
+                  id={`reanalyze-audio-${song.id}`}
+                  name={`reanalyze-audio-${song.id}`}
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const selected = event.target.files?.[0] ?? null;
+                    event.target.value = "";
+                    if (!selected) return;
+                    void (async () => {
+                      const ok = await confirm({
+                        title: song.has_audio ? "Nova análise" : "Analisar áudio",
+                        message: song.has_audio
+                          ? "Enviar um novo áudio substitui o atual e inicia outra análise. Continuar?"
+                          : "Enviar áudio para analisar esta música (stems, tom, etc.)?",
+                        confirmLabel: song.has_audio ? "Substituir e analisar" : "Analisar",
+                      });
+                      if (ok) reanalyzeMutation.mutate(selected);
+                    })();
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => reanalyzeInputRef.current?.click()}
+                  className={`${btnGhost} border-green-500/30 px-3 py-1.5 text-sm text-green-200 hover:border-green-400 disabled:opacity-50`}
+                  title={
+                    song.has_audio
+                      ? "Envia um novo áudio e reanalisa (somente músicas criadas nesta banda)"
+                      : "Anexa áudio e inicia a primeira análise"
+                  }
+                >
+                  {reanalyzeMutation.isPending ? "Enviando..." : reanalyzeLabel}
+                </button>
+              </>
+            ) : null}
+
             {isActive ? (
               <button
                 type="button"
@@ -192,6 +266,9 @@ export function SongListItem({ song }: { song: SongSummary }) {
       ) : null}
       {shareMutation.isError ? (
         <p className="mt-3 text-sm text-red-400">{shareMutation.error.message}</p>
+      ) : null}
+      {reanalyzeMutation.isError ? (
+        <p className="mt-3 text-sm text-red-400">{reanalyzeMutation.error.message}</p>
       ) : null}
 
       {showProgress ? (

@@ -17,14 +17,14 @@ export function JobStatusTracker({
   const jobQuery = useQuery({
     queryKey: ["job", jobId],
     queryFn: () => fetchJob(jobId),
-    refetchInterval: (query) => (query.state.data && isJobFinished(query.state.data.status) ? false : 2000),
+    refetchInterval: (query) => (query.state.data && isJobFinished(query.state.data.status) ? false : 5000),
   });
 
   const songQuery = useQuery({
     queryKey: ["song", songId],
     queryFn: () => fetchSong(songId),
     refetchInterval: (query) =>
-      query.state.data?.status === "completed" || query.state.data?.status === "failed" ? false : 3000,
+      query.state.data?.status === "completed" || query.state.data?.status === "failed" ? false : 5000,
   });
 
   const job = jobQuery.data;

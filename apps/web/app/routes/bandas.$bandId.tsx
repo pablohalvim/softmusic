@@ -178,9 +178,11 @@ function RolesTab({ bandId, canManage }: { bandId: string; canManage: boolean })
             createMutation.mutate();
           }}
         >
-          <label className={`${labelClass} flex-1`}>
+          <label htmlFor="role-name" className={`${labelClass} flex-1`}>
             <span>Nova função</span>
             <input
+              id="role-name"
+              name="role-name"
               className={inputClass}
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -203,6 +205,9 @@ function RolesTab({ bandId, canManage }: { bandId: string; canManage: boolean })
           <div key={role.id} className={`${panelClass} flex flex-wrap items-center justify-between gap-3 p-3`}>
             {editingId === role.id ? (
               <input
+                id={`role-name-edit-${role.id}`}
+                name={`role-name-edit-${role.id}`}
+                aria-label="Editar nome da função"
                 className={`${inputClass} max-w-xs`}
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
@@ -421,8 +426,14 @@ function MemberEditModal({
             {roles.map((role) => {
               const checked = roleIds.has(role.id);
               return (
-                <label key={role.id} className="flex items-center gap-2 text-sm text-slate-300">
+                <label
+                  key={role.id}
+                  htmlFor={`member-role-${role.id}`}
+                  className="flex items-center gap-2 text-sm text-slate-300"
+                >
                   <input
+                    id={`member-role-${role.id}`}
+                    name={`member-role-${role.id}`}
                     type="checkbox"
                     checked={checked}
                     onChange={() => {
@@ -444,20 +455,44 @@ function MemberEditModal({
         {!member.is_owner ? (
           <fieldset className="space-y-2">
             <legend className="text-sm text-slate-300">Gestão da banda</legend>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={canAnalyze} onChange={(e) => setCanAnalyze(e.target.checked)} />
+            <label htmlFor="member-can-analyze" className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                id="member-can-analyze"
+                name="member-can-analyze"
+                type="checkbox"
+                checked={canAnalyze}
+                onChange={(e) => setCanAnalyze(e.target.checked)}
+              />
               Pode enviar/analisar músicas
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={canInvite} onChange={(e) => setCanInvite(e.target.checked)} />
+            <label htmlFor="member-can-invite" className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                id="member-can-invite"
+                name="member-can-invite"
+                type="checkbox"
+                checked={canInvite}
+                onChange={(e) => setCanInvite(e.target.checked)}
+              />
               Pode convidar membros
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={canManage} onChange={(e) => setCanManage(e.target.checked)} />
+            <label htmlFor="member-can-manage" className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                id="member-can-manage"
+                name="member-can-manage"
+                type="checkbox"
+                checked={canManage}
+                onChange={(e) => setCanManage(e.target.checked)}
+              />
               Pode gerenciar funções, membros e agenda
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={canDelete} onChange={(e) => setCanDelete(e.target.checked)} />
+            <label htmlFor="member-can-delete" className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                id="member-can-delete"
+                name="member-can-delete"
+                type="checkbox"
+                checked={canDelete}
+                onChange={(e) => setCanDelete(e.target.checked)}
+              />
               Pode excluir músicas da biblioteca
             </label>
           </fieldset>

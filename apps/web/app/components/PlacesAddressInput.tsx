@@ -24,6 +24,7 @@ type DropdownCoords = {
 
 export function PlacesAddressInput({ label, value, onChange, disabled }: Props) {
   const listId = useId();
+  const inputId = useId();
   const [query, setQuery] = useState(value?.formatted_address ?? "");
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [open, setOpen] = useState(false);
@@ -169,9 +170,11 @@ export function PlacesAddressInput({ label, value, onChange, disabled }: Props) 
 
   return (
     <div ref={wrapRef} className="relative space-y-1.5">
-      <label className={labelClass}>
+      <label htmlFor={inputId} className={labelClass}>
         <span>{label}</span>
         <input
+          id={inputId}
+          name="address-search"
           ref={inputRef}
           disabled={disabled || busyDetail}
           className={inputClass}

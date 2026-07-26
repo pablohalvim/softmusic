@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { PlacesAddressInput } from "./PlacesAddressInput";
@@ -333,9 +333,11 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
         <>
           <div className={`${panelClass} space-y-4 p-4`}>
             <h3 className="font-medium">Evento</h3>
-            <label className={labelClass}>
+            <label htmlFor="schedule-title" className={labelClass}>
               <span>Título</span>
               <input
+                id="schedule-title"
+                name="schedule-title"
                 required
                 className={inputClass}
                 value={title}
@@ -344,9 +346,11 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
               />
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className={labelClass}>
+              <label htmlFor="event-start" className={labelClass}>
                 <span>Início do evento</span>
                 <input
+                  id="event-start"
+                  name="event-start"
                   type="datetime-local"
                   required
                   className={inputClass}
@@ -354,9 +358,11 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
                   onChange={(e) => setEventStart(e.target.value)}
                 />
               </label>
-              <label className={labelClass}>
+              <label htmlFor="event-end" className={labelClass}>
                 <span>Fim do evento</span>
                 <input
+                  id="event-end"
+                  name="event-end"
                   type="datetime-local"
                   required
                   className={inputClass}
@@ -417,9 +423,11 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
                   Título no grid: Ensaio {title.trim() || "…"}
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className={labelClass}>
+                  <label htmlFor={`rehearsal-start-${reh.key}`} className={labelClass}>
                     <span>Início do ensaio</span>
                     <input
+                      id={`rehearsal-start-${reh.key}`}
+                      name={`rehearsal-start-${reh.key}`}
                       type="datetime-local"
                       required
                       className={inputClass}
@@ -433,9 +441,11 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
                       }
                     />
                   </label>
-                  <label className={labelClass}>
+                  <label htmlFor={`rehearsal-end-${reh.key}`} className={labelClass}>
                     <span>Fim do ensaio</span>
                     <input
+                      id={`rehearsal-end-${reh.key}`}
+                      name={`rehearsal-end-${reh.key}`}
                       type="datetime-local"
                       required
                       className={inputClass}
@@ -450,8 +460,13 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
                     />
                   </label>
                 </div>
-                <label className="flex items-center gap-2 text-sm text-slate-300">
+                <label
+                  htmlFor={`rehearsal-same-address-${reh.key}`}
+                  className="flex items-center gap-2 text-sm text-slate-300"
+                >
                   <input
+                    id={`rehearsal-same-address-${reh.key}`}
+                    name={`rehearsal-same-address-${reh.key}`}
                     type="checkbox"
                     checked={reh.sameAsEvent}
                     onChange={(e) =>
@@ -512,9 +527,11 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
         <div className={`${panelClass} space-y-4 p-4`}>
           <h3 className="font-medium">{editKind === "event" ? "Evento" : "Ensaio"}</h3>
           {editKind === "event" ? (
-            <label className={labelClass}>
+            <label htmlFor="edit-schedule-title" className={labelClass}>
               <span>Título</span>
               <input
+                id="edit-schedule-title"
+                name="edit-schedule-title"
                 required
                 className={inputClass}
                 value={title}
@@ -525,9 +542,11 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
             <p className="text-sm text-slate-400">Título: {title ? `Ensaio ${title}` : "—"}</p>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className={labelClass}>
+            <label htmlFor="edit-start" className={labelClass}>
               <span>Início</span>
               <input
+                id="edit-start"
+                name="edit-start"
                 type="datetime-local"
                 required
                 className={inputClass}
@@ -535,9 +554,11 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
                 onChange={(e) => setEditStart(e.target.value)}
               />
             </label>
-            <label className={labelClass}>
+            <label htmlFor="edit-end" className={labelClass}>
               <span>Fim</span>
               <input
+                id="edit-end"
+                name="edit-end"
                 type="datetime-local"
                 required
                 className={inputClass}
@@ -581,8 +602,10 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
                 key={member.id}
                 className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-slate-300"
               >
-                <label className="flex items-start gap-2">
+                <label htmlFor={`schedule-member-${member.id}`} className="flex items-start gap-2">
                   <input
+                    id={`schedule-member-${member.id}`}
+                    name={`schedule-member-${member.id}`}
                     type="checkbox"
                     className="mt-1"
                     checked={checked}
@@ -605,9 +628,12 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
                     {member.roles.map((role) => (
                       <label
                         key={role.id}
+                        htmlFor={`schedule-member-role-${member.id}-${role.id}`}
                         className="flex items-center gap-2 text-xs text-slate-300"
                       >
                         <input
+                          id={`schedule-member-role-${member.id}-${role.id}`}
+                          name={`schedule-member-role-${member.id}-${role.id}`}
                           type="checkbox"
                           checked={picked.has(role.id)}
                           onChange={() => toggleMemberRole(member.id, role.id)}
@@ -675,11 +701,18 @@ function AddressFields({
   label: string;
   hideSave?: boolean;
 }) {
+  const fieldId = useId();
+  const savedAddressId = `${fieldId}-saved-address`;
+  const saveAddressId = `${fieldId}-save-address`;
+  const saveLabelId = `${fieldId}-save-label`;
+
   return (
     <div className="space-y-3">
-      <label className={labelClass}>
+      <label htmlFor={savedAddressId} className={labelClass}>
         <span>Endereço salvo</span>
         <select
+          id={savedAddressId}
+          name={savedAddressId}
           className={inputClass}
           value={savedId}
           onChange={(e) => onSavedId(e.target.value)}
@@ -697,8 +730,10 @@ function AddressFields({
       ) : null}
       {!hideSave && !savedId ? (
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label htmlFor={saveAddressId} className="flex items-center gap-2 text-sm text-slate-300">
             <input
+              id={saveAddressId}
+              name={saveAddressId}
               type="checkbox"
               checked={saveAddress}
               onChange={(e) => onSaveAddress(e.target.checked)}
@@ -706,13 +741,18 @@ function AddressFields({
             Salvar endereço para reutilizar
           </label>
           {saveAddress ? (
-            <input
-              className={inputClass}
-              placeholder="Nome do local (ex.: Igreja Central)"
-              value={saveLabel}
-              onChange={(e) => onSaveLabel(e.target.value)}
-              required={saveAddress}
-            />
+            <label htmlFor={saveLabelId} className={labelClass}>
+              <span className="sr-only">Nome do local</span>
+              <input
+                id={saveLabelId}
+                name={saveLabelId}
+                className={inputClass}
+                placeholder="Nome do local (ex.: Igreja Central)"
+                value={saveLabel}
+                onChange={(e) => onSaveLabel(e.target.value)}
+                required={saveAddress}
+              />
+            </label>
           ) : null}
         </div>
       ) : null}

@@ -34,8 +34,16 @@ interface LineModalTarget {
   mode: "add" | "edit";
   sectionId?: string;
   lineId?: string;
+  /**
+   * Só em mode=add:
+   * - undefined: append no final da última seção (botão global)
+   * - null: início da seção
+   * - string: logo após essa linha
+   */
+  insertAfterLineId?: string | null;
   initialNotas: string;
   initialLetra: string;
+  addHint?: string;
 }
 
 function placementKey(lineId: string, placementId: string): string {
@@ -290,6 +298,9 @@ export function ImportedCifraEditor({
         }}
       >
         <input
+          id={`imported-chord-edit-${placement.id}`}
+          name={`imported-chord-edit-${placement.id}`}
+          aria-label="Editar acorde"
           autoFocus
           defaultValue={displayChord}
           className="w-full rounded border border-green-500/50 bg-slate-950 px-2 py-1 text-center text-sm font-bold text-green-400 outline-none ring-1 ring-green-500/30"
@@ -373,13 +384,26 @@ export function ImportedCifraEditor({
     setActiveMenu(null);
   };
 
+  const removeSection = (sectionId: string) => {
+    setSheet((current) => ({
+      sections: current.sections.filter((section) => section.id !== sectionId),
+    }));
+    setActiveMenu(null);
+    setLineModal(null);
+  };
+
   const applyLineModal = (notasInput: string, letraInput: string) => {
     const lyrics = letraInput;
     const chords = parseChordTokens(notasInput).map((chord) => toOriginalChord(chord));
-    if (!lyrics.trim() && chords.length === 0) return;
+    const isEmpty = !lyrics.trim() && chords.length === 0;
 
     if (lineModal?.mode === "edit" && lineModal.sectionId && lineModal.lineId) {
       const { sectionId, lineId } = lineModal;
+      // Salvar vazio = remover a linha (e a seção, se ficar sem linhas).
+      if (isEmpty) {
+        removeLine(sectionId, lineId);
+        return;
+      }
       setSheet((current) => ({
         sections: current.sections.map((section) =>
           section.id !== sectionId
@@ -397,7 +421,11 @@ export function ImportedCifraEditor({
       return;
     }
 
+    if (isEmpty) return;
+
     const newLine = lineFromNotasAndLetra({ lyrics, chords });
+    const targetSectionId = lineModal?.sectionId;
+    const insertAfterLineId = lineModal?.insertAfterLineId;
 
     setSheet((current) => {
       if (current.sections.length === 0) {
@@ -412,6 +440,28 @@ export function ImportedCifraEditor({
         };
       }
 
+      // Inserção no meio (ou início) de uma seção específica.
+      if (targetSectionId) {
+        const sections = current.sections.map((section) => {
+          if (section.id !== targetSectionId) return section;
+          if (insertAfterLineId === null) {
+            return { ...section, lines: [newLine, ...section.lines] };
+          }
+          if (typeof insertAfterLineId === "string") {
+            const index = section.lines.findIndex((line) => line.id === insertAfterLineId);
+            if (index < 0) {
+              return { ...section, lines: [...section.lines, newLine] };
+            }
+            const lines = [...section.lines];
+            lines.splice(index + 1, 0, newLine);
+            return { ...section, lines };
+          }
+          return { ...section, lines: [...section.lines, newLine] };
+        });
+        return { sections };
+      }
+
+      // Botão global: final da última seção.
       const sections = [...current.sections];
       const lastIndex = sections.length - 1;
       const lastSection = sections[lastIndex]!;
@@ -423,8 +473,19 @@ export function ImportedCifraEditor({
     });
   };
 
-  const openAddLineModal = () => {
-    setLineModal({ mode: "add", initialNotas: "", initialLetra: "" });
+  const openAddLineModal = (opts?: {
+    sectionId?: string;
+    insertAfterLineId?: string | null;
+    addHint?: string;
+  }) => {
+    setLineModal({
+      mode: "add",
+      sectionId: opts?.sectionId,
+      insertAfterLineId: opts?.insertAfterLineId,
+      addHint: opts?.addHint,
+      initialNotas: "",
+      initialLetra: "",
+    });
   };
 
   const openEditLineModal = (
@@ -448,6 +509,7 @@ export function ImportedCifraEditor({
         mode={lineModal?.mode ?? "add"}
         initialNotas={lineModal?.initialNotas ?? ""}
         initialLetra={lineModal?.initialLetra ?? ""}
+        addHint={lineModal?.addHint}
         onClose={() => setLineModal(null)}
         onSave={applyLineModal}
       />
@@ -457,20 +519,54 @@ export function ImportedCifraEditor({
           <button
             type="button"
             className="rounded-lg bg-green-500 px-3 py-1.5 text-sm font-medium text-slate-950 transition hover:bg-green-400"
-            onClick={openAddLineModal}
+            onClick={() => openAddLineModal()}
           >
-            + Linha (notas + letra)
+            + Linha no final
           </button>
           <span className="text-xs text-slate-500">
-            Use o lápis ao lado de cada linha para editar letra e acordes
+            Use “+ Linha abaixo” em cada verso para inserir no meio · lápis edita a linha
           </span>
         </div>
       ) : null}
 
       {sheet.sections.map((section) => (
         <section key={section.id}>
-          <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-bold text-slate-200">[{section.label}]</h2>
+            {editable ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded border border-dashed border-slate-600 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-green-500/50 hover:bg-green-500/5 hover:text-green-300"
+                  onClick={() =>
+                    openAddLineModal({
+                      sectionId: section.id,
+                      insertAfterLineId: null,
+                      addHint: `A nova linha será inserida no início de [${section.label}].`,
+                    })
+                  }
+                  title="Inserir linha no início desta seção"
+                >
+                  + Linha no início
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-red-500/50 hover:bg-red-950/30 hover:text-red-300"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Remover a seção [${section.label}] e todas as linhas dela?`,
+                      )
+                    ) {
+                      removeSection(section.id);
+                    }
+                  }}
+                  title="Remove o bloco inteiro (ex.: Solo, Cifra, Intro)"
+                >
+                  Remover seção
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-6">
@@ -484,16 +580,32 @@ export function ImportedCifraEditor({
 
               return (
                 <div key={line.id} className="group/line max-w-full">
-                  <div className="mb-1 flex items-center justify-end gap-2">
+                  <div className="mb-1 flex flex-wrap items-center justify-end gap-2">
                     {editable ? (
-                      <button
-                        type="button"
-                        className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-red-500/50 hover:bg-red-950/30 hover:text-red-300"
-                        onClick={() => removeLine(section.id, line.id)}
-                        title="Remover linha (notas e letra)"
-                      >
-                        Remover linha
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="rounded border border-dashed border-slate-600 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-green-500/50 hover:bg-green-500/5 hover:text-green-300"
+                          onClick={() =>
+                            openAddLineModal({
+                              sectionId: section.id,
+                              insertAfterLineId: line.id,
+                              addHint: `A nova linha será inserida logo abaixo desta, em [${section.label}].`,
+                            })
+                          }
+                          title="Inserir nova linha logo abaixo desta"
+                        >
+                          + Linha abaixo
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-red-500/50 hover:bg-red-950/30 hover:text-red-300"
+                          onClick={() => removeLine(section.id, line.id)}
+                          title="Remover linha (notas e letra)"
+                        >
+                          Remover linha
+                        </button>
+                      </>
                     ) : null}
                   </div>
                   <div className="flex max-w-full items-end gap-2">
@@ -609,9 +721,9 @@ export function ImportedCifraEditor({
           <button
             type="button"
             className="rounded-full border border-dashed border-slate-600 px-4 py-2 text-sm text-slate-400 transition hover:border-green-500/60 hover:bg-green-500/5 hover:text-green-400"
-            onClick={openAddLineModal}
+            onClick={() => openAddLineModal()}
           >
-            + Linha (notas + letra)
+            + Linha no final
           </button>
         </div>
       ) : null}

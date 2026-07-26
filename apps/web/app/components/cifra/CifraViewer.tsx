@@ -772,10 +772,15 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
           </button>
 
           <div className={`${panelClass} !p-3`}>
-            <label className="mb-2 block text-xs uppercase tracking-wide text-slate-500">
+            <label
+              htmlFor="cifra-variation"
+              className="mb-2 block text-xs uppercase tracking-wide text-slate-500"
+            >
               Variações da banda
             </label>
             <select
+              id="cifra-variation"
+              name="cifra-variation"
               className={selectClass}
               value={activeVariationId}
               onChange={(event) => handleVariationSelect(event.target.value)}
@@ -844,6 +849,9 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
               </button>
             </div>
             <select
+              id="cifra-key"
+              name="cifra-key"
+              aria-label="Tom"
               className={`${selectClass} mt-3`}
               value={currentKey.replace("m", "")}
               onChange={(event) => {
@@ -865,10 +873,15 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
           </div>
 
           <div className={`${panelClass} !p-3`}>
-            <label className="mb-2 block text-xs uppercase tracking-wide text-slate-500">
+            <label
+              htmlFor="cifra-capo"
+              className="mb-2 block text-xs uppercase tracking-wide text-slate-500"
+            >
               Capotraste
             </label>
             <select
+              id="cifra-capo"
+              name="cifra-capo"
               className={selectClass}
               value={capo}
               onChange={(event) => setCapo(Number(event.target.value))}
@@ -891,9 +904,11 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
               .
             </p>
 
-            <label className="block text-xs text-slate-400">
+            <label htmlFor="cifra-scroll-speed" className="block text-xs text-slate-400">
               Velocidade ({Math.round(autoScrollSpeed * 100)}%)
               <input
+                id="cifra-scroll-speed"
+                name="cifra-scroll-speed"
                 type="range"
                 min={50}
                 max={200}
@@ -904,8 +919,13 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
               />
             </label>
 
-            <label className="mt-3 flex cursor-pointer items-center gap-2">
+            <label
+              htmlFor="cifra-scroll-sync-audio"
+              className="mt-3 flex cursor-pointer items-center gap-2"
+            >
               <input
+                id="cifra-scroll-sync-audio"
+                name="cifra-scroll-sync-audio"
                 type="checkbox"
                 checked={autoScrollSyncAudio}
                 onChange={(event) => setAutoScrollSyncAudio(event.target.checked)}
@@ -930,8 +950,13 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
             </p>
           </div>
 
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-800 px-3 py-2">
+          <label
+            htmlFor="cifra-show-degrees"
+            className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-800 px-3 py-2"
+          >
             <input
+              id="cifra-show-degrees"
+              name="cifra-show-degrees"
               type="checkbox"
               checked={showDegrees}
               onChange={(event) => setShowDegrees(event.target.checked)}
@@ -1011,9 +1036,14 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
 
               {showImportedCifra && showKeyPicker ? (
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label
+                    htmlFor="cifra-pick-key"
+                    className="flex items-center gap-2 text-xs text-slate-400"
+                  >
                     Nota
                     <select
+                      id="cifra-pick-key"
+                      name="cifra-pick-key"
                       className={`${selectClass} w-auto min-w-[4.5rem]`}
                       value={pickKey}
                       onChange={(event) => setPickKey(event.target.value)}
@@ -1025,9 +1055,14 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                       ))}
                     </select>
                   </label>
-                  <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <label
+                    htmlFor="cifra-pick-mode"
+                    className="flex items-center gap-2 text-xs text-slate-400"
+                  >
                     Modo
                     <select
+                      id="cifra-pick-mode"
+                      name="cifra-pick-mode"
                       className={`${selectClass} w-auto min-w-[5.5rem]`}
                       value={pickMode}
                       onChange={(event) =>
@@ -1119,6 +1154,9 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
 
                           {isEditing ? (
                             <input
+                              id={`cifra-chord-edit-${key}`}
+                              name={`cifra-chord-edit-${key}`}
+                              aria-label="Editar acorde"
                               autoFocus
                               defaultValue={chord}
                               className="chord-note-input w-20 px-1 py-0.5"

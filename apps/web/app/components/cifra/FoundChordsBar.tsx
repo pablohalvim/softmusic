@@ -66,6 +66,9 @@ export function FoundChordsBar({ chords, onReplace, editable = false }: FoundCho
                     Trocar <strong className="text-green-300">{chord}</strong> em toda a cifra
                   </p>
                   <input
+                    id={`chord-replace-${chord}`}
+                    name={`chord-replace-${chord}`}
+                    aria-label={`Substituir acorde ${chord}`}
                     autoFocus
                     value={replacement}
                     onChange={(event) => setReplacement(event.target.value)}

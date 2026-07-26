@@ -89,7 +89,15 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
         {result.pix.copy_paste ? (
           <div className="space-y-2">
             <p className="text-sm text-slate-400">Copia e cola:</p>
-            <textarea readOnly value={result.pix.copy_paste} className={`${inputClass} text-xs`} rows={3} />
+            <textarea
+              id="pix-copy-paste"
+              name="pix-copy-paste"
+              aria-label="Código PIX copia e cola"
+              readOnly
+              value={result.pix.copy_paste}
+              className={`${inputClass} text-xs`}
+              rows={3}
+            />
             <button
               type="button"
               onClick={() => void navigator.clipboard.writeText(result.pix!.copy_paste!)}
@@ -142,18 +150,22 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
 
       {method === "credit_card" ? (
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className={`${labelClass} sm:col-span-2`}>
+          <label htmlFor="card_holder_name" className={`${labelClass} sm:col-span-2`}>
             <span>Nome no cartão</span>
             <input
+              id="card_holder_name"
+              name="card_holder_name"
               required
               value={card.holder_name}
               onChange={(e) => setCard((c) => ({ ...c, holder_name: e.target.value }))}
               className={inputClass}
             />
           </label>
-          <label className={`${labelClass} sm:col-span-2`}>
+          <label htmlFor="card_number" className={`${labelClass} sm:col-span-2`}>
             <span>Número</span>
             <input
+              id="card_number"
+              name="card_number"
               required
               inputMode="numeric"
               value={card.number}
@@ -161,9 +173,11 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
               className={inputClass}
             />
           </label>
-          <label className={labelClass}>
+          <label htmlFor="expiry_month" className={labelClass}>
             <span>Mês (MM)</span>
             <input
+              id="expiry_month"
+              name="expiry_month"
               required
               maxLength={2}
               value={card.expiry_month}
@@ -171,9 +185,11 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
               className={inputClass}
             />
           </label>
-          <label className={labelClass}>
+          <label htmlFor="expiry_year" className={labelClass}>
             <span>Ano (AAAA)</span>
             <input
+              id="expiry_year"
+              name="expiry_year"
               required
               maxLength={4}
               value={card.expiry_year}
@@ -181,9 +197,11 @@ export function BillingCheckout({ monthlyTotalCents, onSuccess }: BillingCheckou
               className={inputClass}
             />
           </label>
-          <label className={labelClass}>
+          <label htmlFor="ccv" className={labelClass}>
             <span>CVV</span>
             <input
+              id="ccv"
+              name="ccv"
               required
               maxLength={4}
               value={card.ccv}

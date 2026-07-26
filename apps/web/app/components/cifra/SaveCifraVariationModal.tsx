@@ -76,9 +76,11 @@ export function SaveCifraVariationModal({
         </p>
 
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-          <label className="block text-sm text-slate-300">
+          <label htmlFor="variation-name" className="block text-sm text-slate-300">
             Nome da nova variação
             <input
+              id="variation-name"
+              name="variation-name"
               autoFocus
               className={`${inputClass} mt-1.5`}
               value={name}

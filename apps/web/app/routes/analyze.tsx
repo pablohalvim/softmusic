@@ -220,9 +220,11 @@ export default function Analyze() {
       </div>
 
       <div className={`${panelClass} space-y-2`}>
-        <label className={labelClass}>
+        <label htmlFor="cifra-club-url" className={labelClass}>
           <span>Link do Cifra Club (opcional)</span>
           <input
+            id="cifra-club-url"
+            name="cifra-club-url"
             type="url"
             placeholder="https://www.cifraclub.com.br/artista/musica/"
             value={cifraClubUrl}
@@ -235,8 +237,10 @@ export default function Analyze() {
           Se informado, a cifra com letra será importada do Cifra Club e usada na página de cifra em
           vez da detecção automática.
         </p>
-        <label className="flex items-start gap-2 pt-2 text-sm text-slate-300">
+        <label htmlFor="share-to-global" className="flex items-start gap-2 pt-2 text-sm text-slate-300">
           <input
+            id="share-to-global"
+            name="share-to-global"
             type="checkbox"
             className="mt-1"
             checked={shareToGlobal}
@@ -277,9 +281,11 @@ export default function Analyze() {
             }
           }}
         >
-          <label className={labelClass}>
+          <label htmlFor="song-title" className={labelClass}>
             <span>Nome da Música</span>
             <input
+              id="song-title"
+              name="song-title"
               type="text"
               required
               maxLength={200}
@@ -290,9 +296,11 @@ export default function Analyze() {
               className={inputClass}
             />
           </label>
-          <label className={labelClass}>
+          <label htmlFor="song-artist" className={labelClass}>
             <span>Nome do Artista</span>
             <input
+              id="song-artist"
+              name="song-artist"
               type="text"
               maxLength={200}
               placeholder="Ex.: Fernandinho"
@@ -302,12 +310,17 @@ export default function Analyze() {
               className={inputClass}
             />
           </label>
-          <input
-            type="file"
-            accept="audio/*"
-            className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-gradient-to-b file:from-red-400 file:to-red-600 file:px-4 file:py-2 file:font-medium file:text-white"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          />
+          <label htmlFor="audio-file" className={labelClass}>
+            <span>Arquivo de áudio</span>
+            <input
+              id="audio-file"
+              name="audio-file"
+              type="file"
+              accept="audio/*"
+              className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-gradient-to-b file:from-red-400 file:to-red-600 file:px-4 file:py-2 file:font-medium file:text-white"
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
           <button
             type="submit"
             disabled={!file || !songTitle.trim() || isPending}
@@ -330,9 +343,11 @@ export default function Analyze() {
             }
           }}
         >
-          <label className={labelClass}>
+          <label htmlFor="youtube-url" className={labelClass}>
             <span>Link do YouTube</span>
             <input
+              id="youtube-url"
+              name="youtube-url"
               type="url"
               required
               placeholder="https://www.youtube.com/watch?v=..."

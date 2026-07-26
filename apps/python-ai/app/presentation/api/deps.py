@@ -6,9 +6,19 @@ from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.auth_service import AuthService
-from app.infrastructure.database.models import AdminUser, User
+from app.infrastructure.database.models import AdminRole, AdminUser, User
 from app.infrastructure.database.session import get_session
 from app.infrastructure.security.jwt_tokens import decode_token
+
+
+def normalize_admin_role(role: str | None) -> str:
+    if role == AdminRole.SALESPERSON.value:
+        return AdminRole.SALESPERSON.value
+    return AdminRole.FULL_ADMIN.value
+
+
+def is_full_admin(admin: AdminUser) -> bool:
+    return normalize_admin_role(admin.role) == AdminRole.FULL_ADMIN.value
 
 
 async def get_current_user(
@@ -52,6 +62,14 @@ async def get_current_admin(
     admin = result.scalar_one_or_none()
     if admin is None:
         raise HTTPException(status_code=401, detail="Admin não encontrado")
+    # Normaliza roles legados em runtime (fonte da verdade = DB).
+    admin.role = normalize_admin_role(admin.role)
+    return admin
+
+
+async def require_full_admin(admin: AdminUser = Depends(get_current_admin)) -> AdminUser:
+    if not is_full_admin(admin):
+        raise HTTPException(status_code=403, detail="Acesso restrito a administradores")
     return admin
 
 

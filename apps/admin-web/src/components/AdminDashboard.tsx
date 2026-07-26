@@ -75,29 +75,76 @@ export function AdminDashboard({ onUnauthorized }: { onUnauthorized?: () => void
     return null;
   }
 
+  if (stats.scope === "salesperson") {
+    const salesCards = [
+      {
+        label: "Meus clientes",
+        value: String(stats.users_total ?? 0),
+        hint: "Usuários cadastrados por você",
+      },
+      {
+        label: "Minhas bandas",
+        value: String(stats.bands_total ?? 0),
+        hint: "Bandas no seu portfólio",
+      },
+      {
+        label: "Bandas inadimplentes",
+        value: String(stats.delinquent_bands ?? 0),
+        hint: "Atraso / suspensas / pendentes",
+      },
+      {
+        label: "Clientes com atraso",
+        value: String(stats.delinquent_users ?? 0),
+        hint: "Owners com risco de cobrança",
+      },
+    ];
+    return (
+      <section className="dashboard">
+        <div className="dashboard-header">
+          <div>
+            <h2>Minhas vendas</h2>
+            <p className="muted">Resumo do seu portfólio comercial.</p>
+          </div>
+          <p className="muted small">
+            Atualizado {formatRelativeTime(stats.generated_at)} · refresh a cada 10s
+          </p>
+        </div>
+        <div className="stats-grid">
+          {salesCards.map((card) => (
+            <article key={card.label} className="stat-card">
+              <p className="muted">{card.label}</p>
+              <p className="stat-value">{card.value}</p>
+              <p className="muted small">{card.hint}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   const cards = [
     {
       label: "Análises concluídas",
-      value: String(stats.songs.completed),
-      hint: `${stats.songs.total} músicas na plataforma`,
+      value: String(stats.songs?.completed ?? 0),
+      hint: `${stats.songs?.total ?? 0} músicas na plataforma`,
     },
     {
       label: "Jobs em fila",
-      value: String(stats.jobs.queued),
+      value: String(stats.jobs?.queued ?? 0),
       hint:
-        stats.jobs.processing > 0
-          ? `${stats.jobs.processing} processando agora`
+        (stats.jobs?.processing ?? 0) > 0
+          ? `${stats.jobs?.processing} processando agora`
           : "Nenhum job em execução",
     },
     {
       label: "Tempo médio",
-      value: formatDuration(stats.pipeline.average_duration_seconds),
+      value: formatDuration(stats.pipeline?.average_duration_seconds ?? null),
       hint: "Pipeline completo · últimas 24h",
     },
     {
       label: "Taxa de sucesso",
-      value: formatPercent(stats.pipeline.success_rate_24h),
-      hint: `${stats.pipeline.completed_24h} ok · ${stats.pipeline.failed_24h} falhas (24h)`,
+      value: formatPercent(stats.pipeline?.success_rate_24h ?? null),
+      hint: `${stats.pipeline?.completed_24h ?? 0} ok · ${stats.pipeline?.failed_24h ?? 0} falhas (24h)`,
     },
   ];
 
@@ -126,11 +173,11 @@ export function AdminDashboard({ onUnauthorized }: { onUnauthorized?: () => void
       <div className="dashboard-columns">
         <article className="card">
           <h3>Em processamento</h3>
-          {stats.active_jobs.length === 0 ? (
+          {(stats.active_jobs ?? []).length === 0 ? (
             <p className="muted">Nenhuma análise ativa no momento.</p>
           ) : (
             <ul className="job-list">
-              {stats.active_jobs.map((job) => (
+              {(stats.active_jobs ?? []).map((job) => (
                 <li key={job.job_id}>
                   <div className="job-row">
                     <span>{job.title ?? "Música sem título"}</span>
@@ -151,11 +198,11 @@ export function AdminDashboard({ onUnauthorized }: { onUnauthorized?: () => void
 
         <article className="card">
           <h3>Atividade recente</h3>
-          {stats.recent_songs.length === 0 ? (
+          {(stats.recent_songs ?? []).length === 0 ? (
             <p className="muted">Nenhuma música analisada ainda.</p>
           ) : (
             <ul className="job-list">
-              {stats.recent_songs.map((song) => (
+              {(stats.recent_songs ?? []).map((song) => (
                 <li key={song.id}>
                   <div className="job-row">
                     <div>
@@ -176,15 +223,15 @@ export function AdminDashboard({ onUnauthorized }: { onUnauthorized?: () => void
       <div className="stats-grid compact">
         <div className="mini-stat">
           <span className="muted">Pendentes</span>
-          <strong>{stats.songs.pending}</strong>
+          <strong>{stats.songs?.pending ?? 0}</strong>
         </div>
         <div className="mini-stat">
           <span className="muted">Falhas</span>
-          <strong className="danger">{stats.songs.failed}</strong>
+          <strong className="danger">{stats.songs?.failed ?? 0}</strong>
         </div>
         <div className="mini-stat">
           <span className="muted">Processando</span>
-          <strong className="accent">{stats.songs.processing}</strong>
+          <strong className="accent">{stats.songs?.processing ?? 0}</strong>
         </div>
       </div>
     </section>

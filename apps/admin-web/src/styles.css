@@ -305,6 +305,25 @@ button:hover {
   white-space: nowrap;
 }
 
+.badge.danger {
+  color: var(--accent-bright);
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.form-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.form-grid label,
+.sale-form label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
 .progress-row {
   display: flex;
   align-items: center;

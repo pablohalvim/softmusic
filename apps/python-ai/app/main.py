@@ -26,7 +26,7 @@ async def _bootstrap_admin() -> None:
             email=settings.admin_bootstrap_email.strip().lower(),
             password_hash=hash_password(settings.admin_bootstrap_password),
             full_name=settings.admin_bootstrap_name,
-            role="superadmin",
+            role="full_admin",
             status="active",
         )
         session.add(admin)

@@ -35,7 +35,7 @@ export default function SongCifraPage() {
     queryKey: ["song", songId],
     queryFn: () => fetchSong(songId!),
     enabled: Boolean(songId) && !blocked,
-    refetchInterval: (query) => (query.state.data?.status === "completed" ? false : 3000),
+    refetchInterval: (query) => (query.state.data?.status === "completed" ? false : 5000),
   });
 
   const chordsQuery = useQuery({

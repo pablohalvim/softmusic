@@ -34,6 +34,21 @@ export const LoginSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+export const ForgotPasswordSchema = z.object({
+  email: z.string().email().max(320),
+});
+
+export const VerifyResetCodeSchema = z.object({
+  email: z.string().email().max(320),
+  code: z.string().regex(/^\d{6}$/),
+});
+
+export const ResetPasswordWithCodeSchema = z.object({
+  email: z.string().email().max(320),
+  code: z.string().regex(/^\d{6}$/),
+  password: z.string().min(8).max(128),
+});
+
 export const CreateBandSchema = z.object({
   name: z.string().min(2).max(200),
   plan_code: PlanCodeSchema,
@@ -173,6 +188,9 @@ export const PendingInviteSchema = z.object({
 export type PlanCode = z.infer<typeof PlanCodeSchema>;
 export type RegisterUser = z.infer<typeof RegisterUserSchema>;
 export type LoginRequest = z.infer<typeof LoginSchema>;
+export type ForgotPasswordRequest = z.infer<typeof ForgotPasswordSchema>;
+export type VerifyResetCodeRequest = z.infer<typeof VerifyResetCodeSchema>;
+export type ResetPasswordWithCodeRequest = z.infer<typeof ResetPasswordWithCodeSchema>;
 export type BandSummary = z.infer<typeof BandSummarySchema>;
 export type PendingInvite = z.infer<typeof PendingInviteSchema>;
 export type BandRole = z.infer<typeof BandRoleSchema>;

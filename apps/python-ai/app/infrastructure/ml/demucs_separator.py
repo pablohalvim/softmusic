@@ -58,8 +58,13 @@ class DemucsSeparator:
         import torch
         import torchaudio
 
-        from app.infrastructure.ml.device import get_compute_device, log_compute_device
+        from app.infrastructure.ml.device import (
+            configure_compute_threads,
+            get_compute_device,
+            log_compute_device,
+        )
 
+        configure_compute_threads("demucs")
         device_info = log_compute_device("demucs")
         device = get_compute_device()
 

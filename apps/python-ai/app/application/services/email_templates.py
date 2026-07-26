@@ -232,6 +232,48 @@ def invite_member_email_text(*, band_name: str, invite_url: str) -> str:
     )
 
 
+def password_reset_code_email_html(*, full_name: str, code: str, web_origin: str) -> str:
+    name = escape(full_name or "olá")
+    safe_code = escape(code)
+    body = f"""
+      <p style="margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:{BRAND_BRIGHT};">Recuperação de senha</p>
+      <h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;font-weight:700;color:{TEXT};">Seu código de verificação</h1>
+      <p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:{MUTED};">
+        Olá, <strong style="color:{TEXT};">{name}</strong>. Use o código abaixo para redefinir sua senha no SoftMusic.
+        Ele expira em 15 minutos.
+      </p>
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;background:{SURFACE_ELEVATED};border:1px solid {BORDER_BRIGHT};border-radius:14px;">
+        <tr>
+          <td align="center" style="padding:22px 20px;">
+            <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:{MUTED};">Código</p>
+            <p style="margin:0;font-size:32px;font-weight:800;letter-spacing:0.28em;color:{BRAND_BRIGHT};font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">{safe_code}</p>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:0;font-size:13px;line-height:1.55;color:{MUTED};">
+        Se você não pediu a redefinição, ignore este e-mail. Sua senha permanecerá a mesma.
+      </p>
+      <p style="margin:16px 0 0;font-size:12px;color:{MUTED};">
+        SoftMusic · <a href="{escape(web_origin)}" style="color:{BRAND_BRIGHT};">{escape(web_origin)}</a>
+      </p>
+    """
+    return _shell(
+        preheader=f"Código SoftMusic: {code}",
+        body_inner=body,
+    )
+
+
+def password_reset_code_email_text(*, full_name: str, code: str) -> str:
+    return (
+        f"Olá, {full_name or 'olá'}.\n\n"
+        f"Seu código para redefinir a senha no SoftMusic é: {code}\n"
+        "Ele expira em 15 minutos.\n\n"
+        "Se você não pediu isso, ignore este e-mail.\n"
+    )
+
+
 def schedule_occurrence_email_text(
     *,
     kind_label: str,

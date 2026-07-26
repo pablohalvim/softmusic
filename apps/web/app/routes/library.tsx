@@ -4,15 +4,17 @@ import { useState } from "react";
 
 import { SongListItem } from "../components/analysis/SongListItem";
 import { GlobalLibraryModal } from "../components/library/GlobalLibraryModal";
+import { NewSongModal } from "../components/library/NewSongModal";
 import { fetchSongs, isActiveSong } from "../lib/api";
 import { useBand } from "../lib/band-context";
 import { useToast } from "../lib/toast";
-import { alertInfoClass, btnAccent, btnGhost, panelClass } from "../lib/ui-classes";
+import { alertInfoClass, btnAccent, btnGhost, btnPrimary, panelClass } from "../lib/ui-classes";
 
 export default function Library() {
   const { activeBand } = useBand();
   const toast = useToast();
   const [globalOpen, setGlobalOpen] = useState(false);
+  const [newSongOpen, setNewSongOpen] = useState(false);
   const blocked = Boolean(activeBand?.is_blocked);
   const songsQuery = useQuery({
     queryKey: ["songs", activeBand?.id ?? null],
@@ -20,12 +22,20 @@ export default function Library() {
     enabled: Boolean(activeBand?.id),
     refetchInterval: (query) => {
       const hasActive = query.state.data?.items.some((song) => isActiveSong(song.status));
-      return hasActive ? 3000 : false;
+      return hasActive ? 5000 : false;
     },
   });
 
   const songs = songsQuery.data?.items ?? [];
   const activeCount = songs.filter((song) => isActiveSong(song.status)).length;
+
+  const openNewSong = () => {
+    if (blocked) {
+      toast.warn("Banda bloqueada. Não é possível criar ou analisar música.");
+      return;
+    }
+    setNewSongOpen(true);
+  };
 
   return (
     <section className="space-y-6">
@@ -44,6 +54,14 @@ export default function Library() {
             className={`${btnGhost} disabled:opacity-50`}
           >
             Adicionar da biblioteca global
+          </button>
+          <button
+            type="button"
+            onClick={openNewSong}
+            disabled={!activeBand?.id}
+            className={`${btnPrimary} disabled:opacity-50 ${blocked ? "opacity-50" : ""}`}
+          >
+            Nova música
           </button>
           {blocked ? (
             <button
@@ -68,6 +86,7 @@ export default function Library() {
         bandId={activeBand?.id}
         onClose={() => setGlobalOpen(false)}
       />
+      <NewSongModal open={newSongOpen} onClose={() => setNewSongOpen(false)} />
 
       {activeCount > 0 ? (
         <div className={`${alertInfoClass} px-4 py-3 text-sm`}>
@@ -81,22 +100,31 @@ export default function Library() {
         <p className="text-red-400">Não foi possível carregar a biblioteca.</p>
       ) : songs.length === 0 ? (
         <div className={`${panelClass} border-dashed p-10 text-center`}>
-          <p className="text-slate-400">Nenhuma música analisada ainda.</p>
-          {blocked ? (
+          <p className="text-slate-400">Nenhuma música na biblioteca ainda.</p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
             <button
               type="button"
-              className={`${btnAccent} mt-4 inline-flex opacity-50`}
-              onClick={() =>
-                toast.warn("Banda bloqueada. Não é possível enviar música para análise.")
-              }
+              className={`${btnPrimary} inline-flex ${blocked ? "opacity-50" : ""}`}
+              onClick={openNewSong}
             >
-              Analisar primeira música
+              Nova música
             </button>
-          ) : (
-            <Link to="/analyze" className={`${btnAccent} mt-4 inline-flex`}>
-              Analisar primeira música
-            </Link>
-          )}
+            {blocked ? (
+              <button
+                type="button"
+                className={`${btnAccent} inline-flex opacity-50`}
+                onClick={() =>
+                  toast.warn("Banda bloqueada. Não é possível enviar música para análise.")
+                }
+              >
+                Analisar com YouTube/áudio
+              </button>
+            ) : (
+              <Link to="/analyze" className={`${btnAccent} inline-flex`}>
+                Analisar com YouTube/áudio
+              </Link>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-4">

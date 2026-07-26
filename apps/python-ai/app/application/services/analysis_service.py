@@ -326,22 +326,32 @@ class AnalysisService:
         filename: str,
         content: bytes,
         options: dict[str, Any] | None = None,
+        *,
+        replace: bool = False,
     ) -> AnalysisJob:
         song = await self.get_song(song_id)
         if song is None:
             raise ValueError("Song not found")
-        if song.file_path:
+        if song.status in {SongStatus.PENDING.value, SongStatus.PROCESSING.value}:
+            raise ValueError("Há uma análise em andamento para esta música")
+        if song.file_path and not replace:
             raise ValueError("Esta música já possui áudio analisado")
 
         opts = dict(options or {})
         if song.cifra_club_url and "cifra_club_url" not in opts:
             opts["cifra_club_url"] = song.cifra_club_url
+        if song.title and "title" not in opts:
+            opts["title"] = song.title
+        if song.artist and "artist" not in opts:
+            opts["artist"] = song.artist
 
         key = f"{song_id}/{filename}"
         file_path = await self.storage.save(key, content)
         song.source_type = "upload"
         song.source_ref = filename
         song.file_path = file_path
+        song.youtube_url = None
+        song.youtube_video_id = None
         song.status = SongStatus.PENDING.value
 
         job = AnalysisJob(

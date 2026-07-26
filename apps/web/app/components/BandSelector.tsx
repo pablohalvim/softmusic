@@ -8,9 +8,14 @@ export function BandSelector() {
   }
 
   return (
-    <label className="flex max-w-[9.5rem] items-center gap-2 text-sm text-slate-300 sm:max-w-none">
+    <label
+      htmlFor="active-band"
+      className="flex max-w-[9.5rem] items-center gap-2 text-sm text-slate-300 sm:max-w-none"
+    >
       <span className="hidden lg:inline">Banda</span>
       <select
+        id="active-band"
+        name="active-band"
         value={activeBand?.id ?? ""}
         onChange={(event) => setActiveBandId(event.target.value)}
         className="sm-input max-w-full truncate py-1.5 text-sm"

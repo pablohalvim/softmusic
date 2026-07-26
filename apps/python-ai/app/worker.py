@@ -5,7 +5,7 @@ from celery.signals import worker_process_init
 from app.config import get_settings
 from app.infrastructure.database.models import JobStatus, SongStatus
 from app.infrastructure.database.session import dispose_engine_after_fork, run_async_in_worker
-from app.infrastructure.ml.device import log_compute_device
+from app.infrastructure.ml.device import configure_compute_threads, log_compute_device
 
 settings = get_settings()
 
@@ -43,6 +43,7 @@ celery_app.conf.update(
 @worker_process_init.connect
 def on_worker_process_init(**_: object) -> None:
     dispose_engine_after_fork()
+    configure_compute_threads("celery_worker")
     log_compute_device("celery_worker")
 
 

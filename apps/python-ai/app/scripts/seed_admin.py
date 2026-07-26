@@ -75,7 +75,7 @@ def main() -> None:
     parser.add_argument("--email", default=settings.admin_bootstrap_email)
     parser.add_argument("--password", default=settings.admin_bootstrap_password)
     parser.add_argument("--name", default=settings.admin_bootstrap_name)
-    parser.add_argument("--role", default="superadmin")
+    parser.add_argument("--role", default="full_admin")
     parser.add_argument(
         "--update-password",
         action="store_true",

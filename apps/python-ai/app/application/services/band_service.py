@@ -64,7 +64,14 @@ class BandService:
             items.append(self._serialize_band(band, member, count))
         return items
 
-    async def create_band(self, owner: User, name: str, plan_code: str) -> dict[str, Any]:
+    async def create_band(
+        self,
+        owner: User,
+        name: str,
+        plan_code: str,
+        *,
+        registered_by_admin_id: str | None = None,
+    ) -> dict[str, Any]:
         if plan_code not in PLAN_LIMITS:
             raise ValueError("Plano inválido")
         cleaned_name = name.strip()
@@ -110,6 +117,7 @@ class BandService:
             member_limit=member_limit,
             extra_member_price_cents=extra_cents,
             trial_ends_at=datetime.now(UTC) + timedelta(days=2) if with_trial else None,
+            registered_by_admin_id=registered_by_admin_id,
         )
         owner_member = BandMember(
             id=_new_id("mbr"),
@@ -216,21 +224,53 @@ class BandService:
         result = await self.session.execute(select(Band).where(Band.id == band_id))
         return result.scalar_one_or_none()
 
-    async def link_song(self, band_id: str, song_id: str, user_id: str) -> None:
+    async def link_song(
+        self,
+        band_id: str,
+        song_id: str,
+        user_id: str,
+        *,
+        link_source: str = "created",
+    ) -> None:
         existing = await self.session.execute(
             select(BandSong).where(BandSong.band_id == band_id, BandSong.song_id == song_id)
         )
         if existing.scalar_one_or_none():
             return
+        source = link_source if link_source in {"created", "imported_global"} else "created"
         self.session.add(
             BandSong(
                 id=_new_id("bsg"),
                 band_id=band_id,
                 song_id=song_id,
                 linked_by_user_id=user_id,
+                link_source=source,
             )
         )
         await self.session.commit()
+
+    async def get_band_song_link_sources(
+        self, band_id: str, song_ids: list[str]
+    ) -> dict[str, str]:
+        if not song_ids:
+            return {}
+        result = await self.session.execute(
+            select(BandSong.song_id, BandSong.link_source).where(
+                BandSong.band_id == band_id,
+                BandSong.song_id.in_(song_ids),
+            )
+        )
+        return {song_id: (link_source or "created") for song_id, link_source in result.all()}
+
+    async def band_owns_song_origin(self, band_id: str, song_id: str) -> bool:
+        result = await self.session.execute(
+            select(BandSong.link_source).where(
+                BandSong.band_id == band_id,
+                BandSong.song_id == song_id,
+            )
+        )
+        link_source = result.scalar_one_or_none()
+        return link_source == "created"
 
     async def unlink_song(self, band_id: str, song_id: str) -> None:
         result = await self.session.execute(

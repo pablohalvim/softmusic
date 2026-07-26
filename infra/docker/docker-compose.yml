@@ -220,6 +220,9 @@ services:
     container_name: softmusic-worker
     restart: unless-stopped
     logging: *default-logging
+    # Reserva CPU/RAM para API/MySQL/UI no mesmo host (Demucs em CPU satura tudo sem isso).
+    cpus: ${WORKER_CPUS:-2.0}
+    mem_limit: ${WORKER_MEM_LIMIT:-6g}
     command: ["celery", "-A", "app.worker", "worker", "--loglevel=info", "--concurrency=${CELERY_CONCURRENCY:-1}", "-Q", "analysis,billing"]
     depends_on:
       mysql:
@@ -238,6 +241,10 @@ services:
       CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-1}
       DEMUCS_ENABLED: ${DEMUCS_ENABLED:-true}
       DEMUCS_MODEL: ${DEMUCS_MODEL:-htdemucs_6s}
+      TORCH_NUM_THREADS: ${TORCH_NUM_THREADS:-2}
+      OMP_NUM_THREADS: ${TORCH_NUM_THREADS:-2}
+      MKL_NUM_THREADS: ${TORCH_NUM_THREADS:-2}
+      OPENBLAS_NUM_THREADS: ${TORCH_NUM_THREADS:-2}
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-local}
       STORAGE_BUCKET: ${STORAGE_BUCKET:-softmusic}
       STORAGE_LOCAL_PATH: /app/uploads

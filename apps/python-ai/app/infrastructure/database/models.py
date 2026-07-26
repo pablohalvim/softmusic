@@ -111,6 +111,11 @@ class UserStatus(StrEnum):
     DELETED = "deleted"
 
 
+class AdminRole(StrEnum):
+    FULL_ADMIN = "full_admin"
+    SALESPERSON = "salesperson"
+
+
 class BandStatus(StrEnum):
     DRAFT = "draft"
     TRIAL = "trial"
@@ -154,6 +159,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(32), default=UserStatus.ACTIVE.value)
     asaas_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    registered_by_admin_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -170,7 +176,7 @@ class AdminUser(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     full_name: Mapped[str] = mapped_column(String(200))
     password_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(32), default="support")
+    role: Mapped[str] = mapped_column(String(32), default=AdminRole.FULL_ADMIN.value)
     status: Mapped[str] = mapped_column(String(32), default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
@@ -213,6 +219,7 @@ class Band(Base):
     member_limit: Mapped[int] = mapped_column(Integer)
     extra_member_price_cents: Mapped[int] = mapped_column(Integer)
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    registered_by_admin_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -373,6 +380,8 @@ class BandSong(Base):
     band_id: Mapped[str] = mapped_column(String(32), index=True)
     song_id: Mapped[str] = mapped_column(String(32), index=True)
     linked_by_user_id: Mapped[str] = mapped_column(String(32))
+    # created = analisada/criada nesta banda; imported_global = veio da biblioteca global
+    link_source: Mapped[str] = mapped_column(String(32), default="created")
     linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
@@ -500,4 +509,17 @@ class RefreshToken(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class PasswordResetCode(Base):
+    __tablename__ = "password_reset_codes"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(32), index=True)
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

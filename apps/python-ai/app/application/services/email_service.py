@@ -12,6 +12,8 @@ import httpx
 from app.application.services.email_templates import (
     invite_member_email_html,
     invite_member_email_text,
+    password_reset_code_email_html,
+    password_reset_code_email_text,
     schedule_occurrence_email_html,
     schedule_occurrence_email_text,
 )
@@ -164,6 +166,20 @@ class EmailService:
         return self.send(
             email,
             f"Convite para a banda {band_name} — SoftMusic",
+            text,
+            html=html,
+        )
+
+    def password_reset_code(self, email: str, code: str, full_name: str) -> bool:
+        html = password_reset_code_email_html(
+            full_name=full_name,
+            code=code,
+            web_origin=self.settings.web_origin,
+        )
+        text = password_reset_code_email_text(full_name=full_name, code=code)
+        return self.send(
+            email,
+            "Código para redefinir sua senha — SoftMusic",
             text,
             html=html,
         )

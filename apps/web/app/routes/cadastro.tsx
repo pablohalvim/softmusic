@@ -182,18 +182,22 @@ export default function CadastroPage() {
       {inviteLoading ? <p className="text-slate-400">Carregando convite...</p> : null}
 
       <form onSubmit={(e) => void handleSubmit(e)} className="glass-panel grid gap-4 sm:grid-cols-2">
-        <label className={`${labelClass} sm:col-span-2`}>
+        <label htmlFor="full_name" className={`${labelClass} sm:col-span-2`}>
           <span>Nome completo</span>
           <input
+            id="full_name"
+            name="full_name"
             required
             className={fieldClass}
             value={form.full_name}
             onChange={(e) => updateField("full_name", e.target.value)}
           />
         </label>
-        <label className={labelClass}>
+        <label htmlFor="cpf" className={labelClass}>
           <span>CPF</span>
           <input
+            id="cpf"
+            name="cpf"
             required
             inputMode="numeric"
             placeholder="000.000.000-00"
@@ -206,9 +210,11 @@ export default function CadastroPage() {
           />
           {cpfError ? <span className="text-xs text-red-400">{cpfError}</span> : null}
         </label>
-        <label className={labelClass}>
+        <label htmlFor="birth_date" className={labelClass}>
           <span>Data de nascimento</span>
           <input
+            id="birth_date"
+            name="birth_date"
             required
             type="date"
             className={fieldClass}
@@ -216,9 +222,11 @@ export default function CadastroPage() {
             onChange={(e) => updateField("birth_date", e.target.value)}
           />
         </label>
-        <label className={labelClass}>
+        <label htmlFor="email" className={labelClass}>
           <span>E-mail</span>
           <input
+            id="email"
+            name="email"
             required
             type="email"
             className={fieldClass}
@@ -232,9 +240,11 @@ export default function CadastroPage() {
             <span className="text-xs text-slate-500">E-mail do convite (não pode ser alterado).</span>
           ) : null}
         </label>
-        <label className={labelClass}>
+        <label htmlFor="phone" className={labelClass}>
           <span>Telefone</span>
           <input
+            id="phone"
+            name="phone"
             required
             type="tel"
             inputMode="numeric"
@@ -244,12 +254,14 @@ export default function CadastroPage() {
             onChange={(e) => updateField("phone", cleanDigits(e.target.value).slice(0, 11))}
           />
         </label>
-        <label className={`${labelClass} sm:col-span-2`}>
+        <label htmlFor="address_zip" className={`${labelClass} sm:col-span-2`}>
           <span className="flex items-center gap-2">
             CEP
             {cepLoading ? <span className="text-xs text-slate-400">buscando…</span> : null}
           </span>
           <input
+            id="address_zip"
+            name="address_zip"
             required
             inputMode="numeric"
             placeholder="00000-000"
@@ -266,53 +278,65 @@ export default function CadastroPage() {
             </span>
           )}
         </label>
-        <label className={`${labelClass} sm:col-span-2`}>
+        <label htmlFor="address_street" className={`${labelClass} sm:col-span-2`}>
           <span>Rua</span>
           <input
+            id="address_street"
+            name="address_street"
             required
             className={fieldClass}
             value={form.address_street}
             onChange={(e) => updateField("address_street", e.target.value)}
           />
         </label>
-        <label className={labelClass}>
+        <label htmlFor="address_number" className={labelClass}>
           <span>Número</span>
           <input
+            id="address_number"
+            name="address_number"
             required
             className={fieldClass}
             value={form.address_number}
             onChange={(e) => updateField("address_number", e.target.value)}
           />
         </label>
-        <label className={labelClass}>
+        <label htmlFor="address_complement" className={labelClass}>
           <span>Complemento</span>
           <input
+            id="address_complement"
+            name="address_complement"
             className={fieldClass}
             value={form.address_complement}
             onChange={(e) => updateField("address_complement", e.target.value)}
           />
         </label>
-        <label className={labelClass}>
+        <label htmlFor="address_neighborhood" className={labelClass}>
           <span>Bairro</span>
           <input
+            id="address_neighborhood"
+            name="address_neighborhood"
             required
             className={fieldClass}
             value={form.address_neighborhood}
             onChange={(e) => updateField("address_neighborhood", e.target.value)}
           />
         </label>
-        <label className={labelClass}>
+        <label htmlFor="address_city" className={labelClass}>
           <span>Cidade</span>
           <input
+            id="address_city"
+            name="address_city"
             required
             className={fieldClass}
             value={form.address_city}
             onChange={(e) => updateField("address_city", e.target.value)}
           />
         </label>
-        <label className={labelClass}>
+        <label htmlFor="address_state" className={labelClass}>
           <span>UF</span>
           <input
+            id="address_state"
+            name="address_state"
             required
             maxLength={2}
             className={fieldClass}
@@ -320,9 +344,11 @@ export default function CadastroPage() {
             onChange={(e) => updateField("address_state", e.target.value.toUpperCase())}
           />
         </label>
-        <label className={`${labelClass} sm:col-span-2`}>
+        <label htmlFor="password" className={`${labelClass} sm:col-span-2`}>
           <span>Senha</span>
           <input
+            id="password"
+            name="password"
             required
             type="password"
             minLength={8}
@@ -335,9 +361,11 @@ export default function CadastroPage() {
         {!isInviteFlow ? (
           <div className="sm:col-span-2 space-y-3 rounded-xl border border-slate-800 p-4">
             <h2 className="font-medium">Primeira banda (opcional)</h2>
-            <label className={labelClass}>
+            <label htmlFor="band_name" className={labelClass}>
               <span>Nome da banda</span>
               <input
+                id="band_name"
+                name="band_name"
                 className={fieldClass}
                 value={form.band_name}
                 onChange={(e) => updateField("band_name", e.target.value)}

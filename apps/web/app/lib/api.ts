@@ -212,10 +212,27 @@ export interface SongSummary {
   duration_seconds: number | null;
   status: "pending" | "processing" | "completed" | "failed";
   source_type?: string;
+  has_audio?: boolean;
   is_global?: boolean;
   created_by_user_id?: string | null;
+  link_source?: "created" | "imported_global";
+  can_reanalyze?: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface AnalyzeSongResponse {
+  duplicate?: boolean;
+  job_id: string | null;
+  song_id: string;
+  message?: string | null;
+  variation?: {
+    id: string;
+    name: string;
+    createdAt: string;
+    updatedAt: string;
+    snapshot: Record<string, unknown>;
+  } | null;
 }
 
 export interface SongsListResponse {
@@ -697,6 +714,75 @@ export async function cancelSongAnalysis(songId: string): Promise<Job> {
   const response = await authFetch(`/songs/${songId}/cancel`, { method: "POST" });
   if (!response.ok) {
     throw new Error(await parseError(response, "Não foi possível cancelar a análise"));
+  }
+  return response.json();
+}
+
+export async function createCifraDraft(input: {
+  title: string;
+  artist?: string;
+  share_to_global?: boolean;
+}): Promise<AnalyzeSongResponse> {
+  const response = await authFetch("/songs/cifra-draft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: input.title,
+      artist: input.artist?.trim() || null,
+      share_to_global: input.share_to_global ?? true,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível criar a música"));
+  }
+  return response.json();
+}
+
+export async function uploadSongForAnalysis(input: {
+  file: File;
+  title: string;
+  artist?: string;
+  share_to_global?: boolean;
+}): Promise<AnalyzeSongResponse> {
+  const formData = new FormData();
+  formData.set("file", input.file);
+  const options: Record<string, string | boolean> = {
+    title: input.title,
+    educational_level: "intermediate",
+    share_to_global: input.share_to_global ?? true,
+  };
+  if (input.artist?.trim()) {
+    options.artist = input.artist.trim();
+  }
+  formData.set("options", JSON.stringify(options));
+  const response = await authFetch("/songs/upload", {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível enviar a música"));
+  }
+  return response.json();
+}
+
+export async function reanalyzeSongAudio(
+  songId: string,
+  file: File,
+  options?: { replace?: boolean },
+): Promise<AnalyzeSongResponse> {
+  const formData = new FormData();
+  formData.set("file", file);
+  formData.set("options", JSON.stringify({ educational_level: "intermediate" }));
+  const replace = options?.replace ?? true;
+  const response = await authFetch(
+    `/songs/${encodeURIComponent(songId)}/analyze-audio-upload?replace=${replace ? "true" : "false"}`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível iniciar a nova análise"));
   }
   return response.json();
 }
