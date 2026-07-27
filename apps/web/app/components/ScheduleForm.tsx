@@ -2,12 +2,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
+import { KEY_OPTIONS } from "@softmusic/shared/chords";
+
 import { PlacesAddressInput } from "./PlacesAddressInput";
 import {
   createBandSchedule,
   fetchBandAddresses,
   fetchBandMembers,
   fetchBandSchedule,
+  fetchSongs,
   updateScheduleOccurrence,
 } from "../lib/api";
 import { fromDatetimeLocalValue, toDatetimeLocalValue } from "../lib/datetime-local";
@@ -25,6 +28,12 @@ type RehearsalDraft = {
   saveLabel: string;
 };
 
+type SongDraft = {
+  key: string;
+  songId: string;
+  musicalKey: string;
+};
+
 function newRehearsal(): RehearsalDraft {
   return {
     key: `reh_${Math.random().toString(36).slice(2, 9)}`,
@@ -35,6 +44,14 @@ function newRehearsal(): RehearsalDraft {
     savedId: "",
     saveAddress: false,
     saveLabel: "",
+  };
+}
+
+function newSongDraft(songId = "", musicalKey = ""): SongDraft {
+  return {
+    key: `song_${Math.random().toString(36).slice(2, 9)}`,
+    songId,
+    musicalKey,
   };
 }
 
@@ -58,6 +75,7 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
   const [saveEventAddress, setSaveEventAddress] = useState(false);
   const [saveEventLabel, setSaveEventLabel] = useState("");
   const [rehearsals, setRehearsals] = useState<RehearsalDraft[]>([newRehearsal()]);
+  const [songs, setSongs] = useState<SongDraft[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   /** Funções escolhidas por integrante nesta escala. */
   const [selectedRoles, setSelectedRoles] = useState<Map<string, Set<string>>>(() => new Map());
@@ -76,6 +94,10 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
   const addressesQuery = useQuery({
     queryKey: ["band-addresses", bandId],
     queryFn: () => fetchBandAddresses(bandId),
+  });
+  const songsQuery = useQuery({
+    queryKey: ["band-songs-picker", bandId],
+    queryFn: () => fetchSongs(200),
   });
   const scheduleQuery = useQuery({
     queryKey: ["band-schedule", bandId, scheduleId],
@@ -112,6 +134,12 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
       }
     }
     setSelectedRoles(rolesMap);
+
+    setSongs(
+      (schedule.songs ?? []).map((item) =>
+        newSongDraft(item.song_id, item.musical_key || ""),
+      ),
+    );
 
     const occ =
       schedule.occurrences.find((o) => o.id === occurrenceId) ?? schedule.occurrences[0];
@@ -160,6 +188,25 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
         throw new Error(`Escolha a função de ${profile.full_name} nesta escala`);
       }
     }
+  }
+
+  function buildSongsPayload() {
+    const payload: Array<{ song_id: string; musical_key: string }> = [];
+    const seen = new Set<string>();
+    for (const item of songs) {
+      if (!item.songId) {
+        throw new Error("Selecione a música em cada linha do repertório");
+      }
+      if (seen.has(item.songId)) {
+        throw new Error("Não repita a mesma música no repertório");
+      }
+      if (!item.musicalKey.trim()) {
+        throw new Error("Informe o tom de cada música");
+      }
+      seen.add(item.songId);
+      payload.push({ song_id: item.songId, musical_key: item.musicalKey.trim() });
+    }
+    return payload;
   }
 
   function toggleMember(memberId: string, roleIds: string[]) {
@@ -261,6 +308,7 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
         members: buildMembersPayload(),
         event: eventBlock,
         rehearsals: rehearsalsPayload,
+        songs: buildSongsPayload(),
         save_event_address: saveEventAddress && !saved,
         save_event_address_label: saveEventLabel.trim() || null,
       });
@@ -283,6 +331,7 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
         starts_at: fromDatetimeLocalValue(editStart),
         ends_at: fromDatetimeLocalValue(editEnd),
         members: buildMembersPayload(),
+        songs: buildSongsPayload(),
       };
       if (editKind === "event") {
         body.title = title.trim();
@@ -647,6 +696,116 @@ export function ScheduleForm({ bandId, mode, scheduleId, occurrenceId }: Props) 
             );
           })}
         </div>
+      </div>
+
+      <div className={`${panelClass} space-y-3 p-4`}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-medium">Músicas</h3>
+            <p className="text-xs text-slate-500">
+              Repertório desta escala — escolha músicas da banda e o tom de cada uma.
+            </p>
+          </div>
+          <button
+            type="button"
+            className={`${btnGhost} shrink-0 rounded-full px-3 py-1.5 text-sm`}
+            onClick={() => setSongs((prev) => [...prev, newSongDraft()])}
+          >
+            + Adicionar música
+          </button>
+        </div>
+
+        {songs.length === 0 ? (
+          <p className="text-sm text-slate-500">Nenhuma música adicionada ainda.</p>
+        ) : null}
+
+        <div className="space-y-3">
+          {songs.map((entry, index) => {
+            const selectedIds = new Set(songs.map((item) => item.songId).filter(Boolean));
+            return (
+              <div
+                key={entry.key}
+                className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-slate-200">Música {index + 1}</p>
+                  <button
+                    type="button"
+                    className="text-sm text-red-400 hover:text-red-300"
+                    onClick={() =>
+                      setSongs((prev) => prev.filter((item) => item.key !== entry.key))
+                    }
+                  >
+                    Remover
+                  </button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+                  <label htmlFor={`schedule-song-${entry.key}`} className={labelClass}>
+                    <span>Música</span>
+                    <select
+                      id={`schedule-song-${entry.key}`}
+                      name={`schedule-song-${entry.key}`}
+                      className={inputClass}
+                      value={entry.songId}
+                      onChange={(e) =>
+                        setSongs((prev) =>
+                          prev.map((item) =>
+                            item.key === entry.key ? { ...item, songId: e.target.value } : item,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="">Selecione...</option>
+                      {(songsQuery.data?.items ?? []).map((song) => {
+                        const taken = selectedIds.has(song.id) && song.id !== entry.songId;
+                        return (
+                          <option key={song.id} value={song.id} disabled={taken}>
+                            {song.title || "Sem título"}
+                            {song.artist ? ` — ${song.artist}` : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+                  <label htmlFor={`schedule-song-key-${entry.key}`} className={labelClass}>
+                    <span>Tom</span>
+                    <select
+                      id={`schedule-song-key-${entry.key}`}
+                      name={`schedule-song-key-${entry.key}`}
+                      className={inputClass}
+                      value={entry.musicalKey}
+                      onChange={(e) =>
+                        setSongs((prev) =>
+                          prev.map((item) =>
+                            item.key === entry.key
+                              ? { ...item, musicalKey: e.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="">—</option>
+                      {KEY_OPTIONS.map((key) => (
+                        <option key={key} value={key}>
+                          {key}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {songsQuery.isLoading ? (
+          <p className="text-xs text-slate-500">Carregando músicas da banda...</p>
+        ) : null}
+        {!songsQuery.isLoading && (songsQuery.data?.items.length ?? 0) === 0 ? (
+          <p className="text-xs text-amber-400/90">
+            Esta banda ainda não tem músicas vinculadas. Adicione em Biblioteca antes.
+          </p>
+        ) : null}
       </div>
 
       {error ? <p className="text-sm text-red-400">{error}</p> : null}

@@ -635,6 +635,38 @@ async def get_song(
     return _serialize_song(song, link_source=link_source)
 
 
+class UpdateSongBody(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    artist: str | None = Field(default=None, max_length=200)
+
+
+@router.patch("/songs/{song_id}")
+async def update_song(
+    song_id: str,
+    body: UpdateSongBody,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    await _ensure_song_access(session, band_id, user.id, song_id)
+    service = AnalysisService(session)
+    try:
+        song = await service.update_song_metadata(
+            song_id,
+            title=body.title,
+            artist=body.artist,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status = 404 if detail == "Song not found" else 400
+        raise HTTPException(status_code=status, detail=detail) from exc
+    link_source = "created"
+    if band_id:
+        sources = await BandService(session).get_band_song_link_sources(band_id, [song_id])
+        link_source = sources.get(song_id, "created")
+    return _serialize_song(song, link_source=link_source)
+
+
 @router.delete("/songs/{song_id}")
 async def delete_song(
     song_id: str,

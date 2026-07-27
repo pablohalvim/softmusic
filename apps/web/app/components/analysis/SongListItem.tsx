@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { formatDateTime } from "@softmusic/shared/datetime";
 
+import { EditSongModal } from "../library/EditSongModal";
 import {
   cancelSongAnalysis,
   deleteSong,
@@ -31,6 +32,7 @@ export function SongListItem({ song }: { song: SongSummary }) {
   const { confirm } = useConfirm();
   const toast = useToast();
   const reanalyzeInputRef = useRef<HTMLInputElement>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const isActive = isActiveSong(song.status);
   const blocked = Boolean(activeBand?.is_blocked);
   const canDelete = Boolean(activeBand?.is_owner || activeBand?.can_delete_songs);
@@ -132,6 +134,14 @@ export function SongListItem({ song }: { song: SongSummary }) {
 
         {!blocked ? (
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => setEditOpen(true)}
+              className={`${btnGhost} px-3 py-1.5 text-sm disabled:opacity-50`}
+            >
+              Editar
+            </button>
             {canReanalyze ? (
               <>
                 <input
@@ -291,6 +301,8 @@ export function SongListItem({ song }: { song: SongSummary }) {
           <p className="mt-2 text-xs text-slate-500">Atualizando status...</p>
         </div>
       ) : null}
+
+      <EditSongModal open={editOpen} song={song} onClose={() => setEditOpen(false)} />
     </article>
   );
 }

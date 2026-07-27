@@ -9,7 +9,7 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
-    "prepare": "node scripts/install-git-hooks.mjs",
+    "prepare": "node -e \"const{existsSync}=require('fs');if(existsSync('scripts/install-git-hooks.mjs'))require('child_process').execSync('node scripts/install-git-hooks.mjs',{stdio:'inherit'})\"",
     "hooks:install": "node scripts/install-git-hooks.mjs",
     "version:bump": "node scripts/bump-app-version.mjs",
     "dev:api": "pnpm --filter @softmusic/api dev",

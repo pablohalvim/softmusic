@@ -19,6 +19,9 @@ from app.infrastructure.database.models import (
     BandScheduleMember,
     BandScheduleMemberRole,
     BandScheduleOccurrence,
+    BandScheduleSong,
+    BandSong,
+    Song,
     User,
 )
 from app.logging import logger
@@ -246,6 +249,7 @@ class ScheduleService:
                     )
 
         await self._replace_schedule_members(schedule.id, members, role_ids_by_member)
+        await self._replace_schedule_songs(band_id, schedule.id, payload.get("songs") or [])
 
         if bool(payload.get("save_event_address")) and (payload.get("save_event_address_label") or "").strip():
             if not event_addr.get("saved_address_id"):
@@ -357,6 +361,9 @@ class ScheduleService:
             await self._replace_schedule_members(schedule.id, current_members, role_ids_by_member)
         else:
             current_members = await self._members_for_schedule(schedule.id)
+
+        if "songs" in payload:
+            await self._replace_schedule_songs(band_id, schedule.id, payload.get("songs") or [])
 
         await self.session.commit()
         await self.session.refresh(occ)
@@ -674,6 +681,7 @@ class ScheduleService:
             for occ in occ_result.scalars().all()
         ]
         members = await self._roster_for_schedule(schedule.id)
+        songs = await self._serialize_schedule_songs(schedule.id)
         return {
             "id": schedule.id,
             "band_id": schedule.band_id,
@@ -681,7 +689,79 @@ class ScheduleService:
             "created_at": schedule.created_at.isoformat(),
             "occurrences": occurrences,
             "members": members,
+            "songs": songs,
         }
+
+    async def _serialize_schedule_songs(self, schedule_id: str) -> list[dict[str, Any]]:
+        result = await self.session.execute(
+            select(BandScheduleSong, Song)
+            .join(Song, Song.id == BandScheduleSong.song_id)
+            .where(BandScheduleSong.schedule_id == schedule_id)
+            .order_by(BandScheduleSong.sort_order.asc(), BandScheduleSong.created_at.asc())
+        )
+        items: list[dict[str, Any]] = []
+        for link, song in result.all():
+            items.append(
+                {
+                    "id": link.id,
+                    "song_id": song.id,
+                    "title": song.title,
+                    "artist": song.artist,
+                    "musical_key": link.musical_key or "",
+                    "sort_order": link.sort_order,
+                }
+            )
+        return items
+
+    async def _replace_schedule_songs(
+        self,
+        band_id: str,
+        schedule_id: str,
+        songs_payload: list[Any],
+    ) -> None:
+        existing = await self.session.execute(
+            select(BandScheduleSong).where(BandScheduleSong.schedule_id == schedule_id)
+        )
+        for link in existing.scalars().all():
+            await self.session.delete(link)
+
+        cleaned: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for raw in songs_payload:
+            if not isinstance(raw, dict):
+                continue
+            song_id = str(raw.get("song_id") or "").strip()
+            if not song_id or song_id in seen:
+                continue
+            musical_key = str(raw.get("musical_key") or "").strip()[:16]
+            cleaned.append((song_id, musical_key))
+            seen.add(song_id)
+
+        if not cleaned:
+            return
+
+        song_ids = [song_id for song_id, _ in cleaned]
+        linked = await self.session.execute(
+            select(BandSong.song_id).where(
+                BandSong.band_id == band_id,
+                BandSong.song_id.in_(song_ids),
+            )
+        )
+        allowed = {row[0] for row in linked.all()}
+        missing = [song_id for song_id in song_ids if song_id not in allowed]
+        if missing:
+            raise ValueError("Selecione apenas músicas vinculadas à banda")
+
+        for index, (song_id, musical_key) in enumerate(cleaned):
+            self.session.add(
+                BandScheduleSong(
+                    id=_new_id("scs"),
+                    schedule_id=schedule_id,
+                    song_id=song_id,
+                    musical_key=musical_key,
+                    sort_order=index,
+                )
+            )
 
     async def _roster_for_schedule(self, schedule_id: str) -> list[dict[str, Any]]:
         mem_result = await self.session.execute(

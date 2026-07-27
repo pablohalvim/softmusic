@@ -357,6 +357,17 @@ class BandScheduleMemberRole(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
+class BandScheduleSong(Base):
+    __tablename__ = "band_schedule_songs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    schedule_id: Mapped[str] = mapped_column(String(32), index=True)
+    song_id: Mapped[str] = mapped_column(String(32), index=True)
+    musical_key: Mapped[str] = mapped_column(String(16), default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
 class BandInvite(Base):
     __tablename__ = "band_invites"
 

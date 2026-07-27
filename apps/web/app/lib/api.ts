@@ -435,6 +435,15 @@ export interface ScheduleGridRow {
   members: ScheduleMember[];
 }
 
+export interface BandScheduleSong {
+  id?: string;
+  song_id: string;
+  title?: string | null;
+  artist?: string | null;
+  musical_key: string;
+  sort_order?: number;
+}
+
 export interface BandSchedule {
   id: string;
   band_id: string;
@@ -442,6 +451,7 @@ export interface BandSchedule {
   created_at: string;
   occurrences: ScheduleOccurrence[];
   members: ScheduleMember[];
+  songs?: BandScheduleSong[];
 }
 
 export interface UpcomingOccurrence {
@@ -708,6 +718,24 @@ export async function deleteSong(songId: string): Promise<void> {
   if (!response.ok) {
     throw new Error(await parseError(response, "Não foi possível excluir a música"));
   }
+}
+
+export async function updateSongMetadata(
+  songId: string,
+  input: { title: string; artist?: string | null },
+): Promise<SongSummary> {
+  const response = await authFetch(`/songs/${songId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: input.title.trim(),
+      artist: input.artist?.trim() || null,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível atualizar a música"));
+  }
+  return response.json();
 }
 
 export async function cancelSongAnalysis(songId: string): Promise<Job> {

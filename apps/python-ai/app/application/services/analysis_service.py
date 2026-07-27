@@ -370,6 +370,27 @@ class AnalysisService:
         result = await self.session.execute(select(Song).where(Song.id == song_id, Song.deleted_at.is_(None)))
         return result.scalar_one_or_none()
 
+    async def update_song_metadata(
+        self,
+        song_id: str,
+        *,
+        title: str,
+        artist: str | None,
+    ) -> Song:
+        song = await self.get_song(song_id)
+        if song is None:
+            raise ValueError("Song not found")
+        trimmed_title = title.strip() if isinstance(title, str) else ""
+        if not trimmed_title:
+            raise ValueError("Informe o nome da música")
+        trimmed_artist = artist.strip() if isinstance(artist, str) and artist.strip() else None
+        song.title = trimmed_title
+        song.artist = trimmed_artist
+        song.updated_at = datetime.now(UTC)
+        await self.session.commit()
+        await self.session.refresh(song)
+        return song
+
     async def find_song_by_youtube_video_id(self, url: str) -> Song | None:
         video_id = extract_youtube_video_id(url)
         if not video_id:

@@ -13,18 +13,18 @@ import { HarmonicFieldPanel } from "../components/analysis/HarmonicFieldPanel";
 import { MusicMapPanel } from "../components/analysis/MusicMapPanel";
 import { RelatedKeysPanel } from "../components/analysis/RelatedKeysPanel";
 import { JobProgressDetails, StatusBadge } from "../components/analysis/StatusBadge";
+import { EditSongModal } from "../components/library/EditSongModal";
 import {
   alertErrorClass,
   alertInfoClass,
+  btnGhost,
   btnPrimary,
   panelClass,
 } from "../lib/ui-classes";
 import {
-  deleteSong,
   fetchSong,
   fetchSongJob,
   authFetch,
-  isActiveSong,
   isJobFinished,
   isSongFinished,
 } from "../lib/api";
@@ -36,6 +36,7 @@ export default function SongDetail() {
   const { activeBand } = useBand();
   const blocked = Boolean(activeBand?.is_blocked);
   const [blockModalOpen, setBlockModalOpen] = useState(blocked);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (blocked) setBlockModalOpen(true);
@@ -148,12 +149,25 @@ export default function SongDetail() {
             {song.duration_seconds ? `${Math.round(song.duration_seconds)}s` : "Duração desconhecida"}
           </p>
         </div>
-        {song.status === "completed" ? (
-          <Link to={`/songs/${songId}/cifra`} className={`${btnPrimary} text-sm`}>
-            Abrir cifra
-          </Link>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {!blocked ? (
+            <button
+              type="button"
+              className={`${btnGhost} text-sm`}
+              onClick={() => setEditOpen(true)}
+            >
+              Editar nome
+            </button>
+          ) : null}
+          {song.status === "completed" ? (
+            <Link to={`/songs/${songId}/cifra`} className={`${btnPrimary} text-sm`}>
+              Abrir cifra
+            </Link>
+          ) : null}
+        </div>
       </div>
+
+      <EditSongModal open={editOpen} song={song} onClose={() => setEditOpen(false)} />
 
       {isProcessing && job ? (
         <div className={`${alertInfoClass} p-5`}>

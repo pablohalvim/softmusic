@@ -139,12 +139,18 @@ class ScheduleMemberSelectionBody(BaseModel):
     role_ids: list[str] = Field(default_factory=list)
 
 
+class ScheduleSongBody(BaseModel):
+    song_id: str
+    musical_key: str = ""
+
+
 class CreateScheduleBody(BaseModel):
     title: str
     member_ids: list[str] = Field(default_factory=list)
     members: list[ScheduleMemberSelectionBody] = Field(default_factory=list)
     event: ScheduleOccurrenceBody
     rehearsals: list[ScheduleOccurrenceBody] = Field(default_factory=list)
+    songs: list[ScheduleSongBody] = Field(default_factory=list)
     # Compat payloads antigos
     rehearsal: ScheduleOccurrenceBody | None = None
     rehearsal_same_as_event_address: bool = False
@@ -163,6 +169,7 @@ class UpdateOccurrenceBody(BaseModel):
     saved_address_id: str | None = None
     member_ids: list[str] | None = None
     members: list[ScheduleMemberSelectionBody] | None = None
+    songs: list[ScheduleSongBody] | None = None
 
 
 class AdminLoginBody(BaseModel):
