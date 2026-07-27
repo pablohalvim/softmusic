@@ -7,6 +7,11 @@ const MemberSelectionSchema = z.object({
   role_ids: z.array(z.string()).default([]),
 });
 
+const ScheduleSongSchema = z.object({
+  song_id: z.string().min(1),
+  musical_key: z.string().max(16).optional().default(""),
+});
+
 const UpdateOccurrenceSchema = z.object({
   title: z.string().optional().nullable(),
   starts_at: z.string().optional(),
@@ -18,6 +23,7 @@ const UpdateOccurrenceSchema = z.object({
   saved_address_id: z.string().optional().nullable(),
   member_ids: z.array(z.string()).optional(),
   members: z.array(MemberSelectionSchema).optional(),
+  songs: z.array(ScheduleSongSchema).optional(),
 });
 
 export async function action({ request, params }: Route.ActionArgs) {

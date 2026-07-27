@@ -613,25 +613,31 @@ function AgendaTab({ bandId, canManage }: { bandId: string; canManage: boolean }
                     </button>
                   </td>
                   <td className="px-3 py-3">
-                    {canManage ? (
-                      <div className="flex flex-wrap gap-2">
-                        <Link
-                          to={`/bandas/${bandId}/agenda/${row.schedule_id}/editar?occurrenceId=${row.occurrence_id}`}
-                          className={`${btnGhost} px-2.5 py-1 text-xs`}
-                        >
-                          Editar
-                        </Link>
-                        <button
-                          type="button"
-                          className="rounded-lg border border-red-500/30 px-2.5 py-1 text-xs text-red-300 hover:bg-red-500/10"
-                          onClick={() => setCancelRow(row)}
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-500">—</span>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        to={`/agenda/${bandId}/${row.schedule_id}`}
+                        className={`${btnGhost} px-2.5 py-1 text-xs`}
+                      >
+                        Ver
+                      </Link>
+                      {canManage ? (
+                        <>
+                          <Link
+                            to={`/bandas/${bandId}/agenda/${row.schedule_id}/editar?occurrenceId=${row.occurrence_id}`}
+                            className={`${btnGhost} px-2.5 py-1 text-xs`}
+                          >
+                            Editar
+                          </Link>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-red-500/30 px-2.5 py-1 text-xs text-red-300 hover:bg-red-500/10"
+                            onClick={() => setCancelRow(row)}
+                          >
+                            Cancelar
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}

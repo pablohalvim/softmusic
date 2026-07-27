@@ -20,6 +20,11 @@ const MemberSelectionSchema = z.object({
   role_ids: z.array(z.string()).default([]),
 });
 
+const ScheduleSongSchema = z.object({
+  song_id: z.string().min(1),
+  musical_key: z.string().max(16).optional().default(""),
+});
+
 const ScheduleSchema = z
   .object({
     title: z.string().min(1),
@@ -27,6 +32,7 @@ const ScheduleSchema = z
     members: z.array(MemberSelectionSchema).optional().default([]),
     event: OccurrenceSchema,
     rehearsals: z.array(OccurrenceSchema).optional().default([]),
+    songs: z.array(ScheduleSongSchema).optional().default([]),
     save_event_address: z.boolean().optional(),
     save_event_address_label: z.string().optional().nullable(),
   })

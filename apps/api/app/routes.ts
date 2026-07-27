@@ -34,6 +34,7 @@ export default [
   ),
   route("bands/:bandId/schedules/:scheduleId", "routes/bands.$bandId.schedules.$scheduleId.tsx"),
   route("schedule/upcoming", "routes/schedule.upcoming.tsx"),
+  route("schedule/mine", "routes/schedule.mine.tsx"),
   route("geo/autocomplete", "routes/geo.autocomplete.tsx"),
   route("invites/pending", "routes/invites.pending.tsx"),
   route("invites/preview", "routes/invites.preview.tsx"),

@@ -15,6 +15,8 @@ export default [
   ),
   route("faturas", "routes/faturas.tsx"),
   route("dashboard", "routes/dashboard.tsx"),
+  route("agenda", "routes/agenda.tsx"),
+  route("agenda/:bandId/:scheduleId", "routes/agenda.$bandId.$scheduleId.tsx"),
   route("library", "routes/library.tsx"),
   route("analyze", "routes/analyze.tsx"),
   route("jobs/:jobId", "routes/jobs.$jobId.tsx"),

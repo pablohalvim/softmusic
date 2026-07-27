@@ -480,6 +480,68 @@ class ScheduleService:
 
         return {"next_rehearsal": next_rehearsal, "next_event": next_event}
 
+    async def list_mine_for_user(self, user: User) -> list[dict[str, Any]]:
+        """Ocorrências futuras em que o usuário está escalado (todas as bandas)."""
+        member_result = await self.session.execute(
+            select(BandMember).where(
+                BandMember.user_id == user.id,
+                BandMember.status == "active",
+            )
+        )
+        members = list(member_result.scalars().all())
+        if not members:
+            return []
+
+        member_ids = [m.id for m in members]
+        now = datetime.now(UTC)
+        link_result = await self.session.execute(
+            select(BandScheduleMember, BandScheduleOccurrence, BandSchedule, Band)
+            .join(BandSchedule, BandSchedule.id == BandScheduleMember.schedule_id)
+            .join(
+                BandScheduleOccurrence,
+                BandScheduleOccurrence.schedule_id == BandSchedule.id,
+            )
+            .join(Band, Band.id == BandSchedule.band_id)
+            .where(
+                BandScheduleMember.member_id.in_(member_ids),
+                BandScheduleOccurrence.starts_at >= now,
+                BandScheduleOccurrence.removed_at.is_(None),
+            )
+            .order_by(BandScheduleOccurrence.starts_at.asc())
+        )
+
+        roster_cache: dict[str, list[dict[str, Any]]] = {}
+        songs_cache: dict[str, list[dict[str, Any]]] = {}
+        items: list[dict[str, Any]] = []
+        for _link, occurrence, schedule, band in link_result.all():
+            if schedule.id not in roster_cache:
+                roster_cache[schedule.id] = await self._roster_for_schedule(schedule.id)
+            if schedule.id not in songs_cache:
+                songs_cache[schedule.id] = await self._serialize_schedule_songs(schedule.id)
+            roster = roster_cache[schedule.id]
+            songs = songs_cache[schedule.id]
+            items.append(
+                {
+                    "id": occurrence.id,
+                    "occurrence_id": occurrence.id,
+                    "schedule_id": schedule.id,
+                    "kind": occurrence.kind,
+                    "title": occurrence.title or schedule.title,
+                    "band_id": band.id,
+                    "band_name": band.name,
+                    "starts_at": occurrence.starts_at.isoformat(),
+                    "ends_at": occurrence.ends_at.isoformat(),
+                    "formatted_address": occurrence.formatted_address,
+                    "lat": occurrence.lat,
+                    "lng": occurrence.lng,
+                    "maps_url": self._maps_url(occurrence.lat, occurrence.lng),
+                    "member_count": len(roster),
+                    "members": roster,
+                    "songs": songs,
+                }
+            )
+        return items
+
     def _build_occurrence(
         self,
         *,
@@ -528,6 +590,9 @@ class ScheduleService:
         members_lines = [
             format_member_with_roles(item["full_name"], item["role_names"]) for item in roster
         ]
+        schedule_id = occurrences[0].schedule_id
+        songs = await self._serialize_schedule_songs(schedule_id)
+        songs_lines = [self._format_song_line(item) for item in songs]
         email = EmailService()
         try:
             for occ in occurrences:
@@ -544,10 +609,21 @@ class ScheduleService:
                     calendar_uid=occ.calendar_uid,
                     calendar_sequence=int(occ.calendar_sequence or 0),
                     members_lines=members_lines,
+                    songs_lines=songs_lines,
                     action=action,
                 )
         except Exception as exc:
             logger.warning("schedule_email_failed", band_id=band.id, error=str(exc))
+
+    @staticmethod
+    def _format_song_line(item: dict[str, Any]) -> str:
+        title = str(item.get("title") or "").strip() or "Sem título"
+        artist = str(item.get("artist") or "").strip()
+        key = str(item.get("musical_key") or "").strip()
+        label = f"{title} — {artist}" if artist else title
+        if key:
+            label = f"{label} (Tom: {key})"
+        return label
 
     async def _load_active_members(self, band_id: str, member_ids: list[str]) -> list[BandMember]:
         if not member_ids:

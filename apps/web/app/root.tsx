@@ -105,6 +105,7 @@ function AppHeader() {
             <>
               <BandSelector />
               <NavLink to="/dashboard">Dashboard</NavLink>
+              <NavLink to="/agenda">Agenda</NavLink>
               <NavLink to="/library">Biblioteca</NavLink>
               <NavLink to="/bandas">Bandas</NavLink>
               {showBilling ? <NavLink to="/faturas">Faturas</NavLink> : null}
@@ -160,6 +161,9 @@ function AppHeader() {
             <>
               <NavLink to="/dashboard" onNavigate={closeMenu}>
                 Dashboard
+              </NavLink>
+              <NavLink to="/agenda" onNavigate={closeMenu}>
+                Agenda
               </NavLink>
               <NavLink to="/library" onNavigate={closeMenu}>
                 Biblioteca

@@ -468,6 +468,12 @@ export interface UpcomingOccurrence {
   lng: number;
   maps_url: string;
   members?: ScheduleMember[];
+  songs?: BandScheduleSong[];
+}
+
+export interface MyScheduleItem extends UpcomingOccurrence {
+  occurrence_id?: string;
+  member_count?: number;
 }
 
 export function formatScheduleMemberLabel(member: {
@@ -638,6 +644,12 @@ export async function fetchUpcomingSchedule(): Promise<{
 }> {
   const response = await authFetch("/schedule/upcoming");
   return readJsonOrThrow(response, "Não foi possível carregar a agenda");
+}
+
+export async function fetchMySchedules(): Promise<MyScheduleItem[]> {
+  const response = await authFetch("/schedule/mine");
+  const payload = await readJsonOrThrow(response, "Não foi possível carregar sua agenda");
+  return payload.items ?? [];
 }
 
 export async function fetchJob(jobId: string): Promise<Job> {

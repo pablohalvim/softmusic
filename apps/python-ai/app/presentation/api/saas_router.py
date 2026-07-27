@@ -644,6 +644,15 @@ async def upcoming_schedule(
     return await ScheduleService(session).upcoming_for_user(user)
 
 
+@router.get("/schedule/mine")
+async def my_schedules(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    items = await ScheduleService(session).list_mine_for_user(user)
+    return {"items": items}
+
+
 @router.get("/geo/autocomplete")
 async def geo_autocomplete(
     q: str = "",

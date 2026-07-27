@@ -250,6 +250,7 @@ class EmailService:
         calendar_uid: str,
         calendar_sequence: int = 0,
         members_lines: Sequence[str] | None = None,
+        songs_lines: Sequence[str] | None = None,
         action: str = "create",
     ) -> bool:
         kind_label = "Ensaio" if kind == "rehearsal" else "Evento"
@@ -259,6 +260,7 @@ class EmailService:
         when_label = start_local.strftime("%d/%m/%Y às %H:%M")
         ends_label = end_local.strftime("%d/%m/%Y às %H:%M")
         roster = [line for line in (members_lines or []) if str(line).strip()]
+        repertoire = [line for line in (songs_lines or []) if str(line).strip()]
 
         summary = title or f"{kind_label} — {band_name}"
         if action == "cancel":
@@ -275,6 +277,9 @@ class EmailService:
         if roster and action != "cancel":
             details_parts.append("Integrantes:")
             details_parts.extend(f"- {line}" for line in roster)
+        if repertoire and action != "cancel":
+            details_parts.append("Músicas:")
+            details_parts.extend(f"- {line}" for line in repertoire)
         details_parts.append("SoftMusic")
         description = "\n".join(details_parts)
         maps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
@@ -301,6 +306,7 @@ class EmailService:
             maps_url=maps_url,
             web_origin=self.settings.web_origin,
             members_lines=list(roster),
+            songs_lines=list(repertoire),
             action=action,
         )
         text = schedule_occurrence_email_text(
@@ -312,6 +318,7 @@ class EmailService:
             address=address,
             maps_url=maps_url,
             members_lines=list(roster),
+            songs_lines=list(repertoire),
             action=action,
         )
         return self.send(

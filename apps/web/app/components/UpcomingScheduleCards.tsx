@@ -1,12 +1,13 @@
 import { formatRelativeTime } from "@softmusic/shared/datetime";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router";
 
 import {
   fetchUpcomingSchedule,
   formatScheduleMemberLabel,
   type UpcomingOccurrence,
 } from "../lib/api";
-import { btnPrimary, panelClass } from "../lib/ui-classes";
+import { btnGhost, btnPrimary, panelClass } from "../lib/ui-classes";
 
 export function UpcomingScheduleCards() {
   const query = useQuery({
@@ -77,14 +78,22 @@ function OccurrenceCard({
           </ul>
         </div>
       ) : null}
-      <a
-        href={occurrence.maps_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`${btnPrimary} mt-4 inline-flex w-full justify-center px-4 py-2.5 text-sm sm:w-auto`}
-      >
-        Localização
-      </a>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          to={`/agenda/${occurrence.band_id}/${occurrence.schedule_id}`}
+          className={`${btnPrimary} inline-flex flex-1 justify-center px-4 py-2.5 text-sm sm:flex-none`}
+        >
+          Ver agenda
+        </Link>
+        <a
+          href={occurrence.maps_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`${btnGhost} inline-flex flex-1 justify-center px-4 py-2.5 text-sm sm:flex-none`}
+        >
+          Localização
+        </a>
+      </div>
     </article>
   );
 }

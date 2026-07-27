@@ -102,6 +102,7 @@ def schedule_occurrence_email_html(
     maps_url: str,
     web_origin: str,
     members_lines: list[str] | None = None,
+    songs_lines: list[str] | None = None,
     action: str = "create",
 ) -> str:
     band = escape(band_name)
@@ -133,6 +134,24 @@ def schedule_occurrence_email_html(
         """
     else:
         members_block = ""
+    songs = [line for line in (songs_lines or []) if line.strip()]
+    if songs and action != "cancel":
+        songs_html = "".join(
+            f'<li style="margin:0 0 6px;font-size:13px;color:{MUTED};">{escape(line)}</li>'
+            for line in songs
+        )
+        songs_block = f"""
+            <p style="margin:14px 0 6px;font-size:13px;color:{MUTED};"><strong style="color:{TEXT};">Músicas</strong></p>
+            <ul style="margin:0;padding-left:18px;">{songs_html}</ul>
+        """
+    else:
+        songs_block = ""
+    agenda_href = escape(f"{web_origin.rstrip('/')}/agenda")
+    agenda_link = (
+        f' · <a href="{agenda_href}" style="color:{BRAND_BRIGHT};text-decoration:underline;">Ver minha agenda</a>'
+        if action != "cancel"
+        else ""
+    )
     body = f"""
       <p style="margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:{BRAND_BRIGHT};">{escape(accent_label)}</p>
       <h1 style="margin:0 0 8px;font-size:24px;line-height:1.25;font-weight:700;color:{TEXT};">{band}</h1>
@@ -148,6 +167,7 @@ def schedule_occurrence_email_html(
             <p style="margin:0 0 10px;font-size:13px;color:{MUTED};"><strong style="color:{TEXT};">Até</strong><br />{escape(ends_label)}</p>
             <p style="margin:0;font-size:13px;color:{MUTED};"><strong style="color:{TEXT};">Local</strong><br />{escape(address)}</p>
             {members_block}
+            {songs_block}
           </td>
         </tr>
       </table>
@@ -166,6 +186,7 @@ def schedule_occurrence_email_html(
       <p style="margin:0;font-size:13px;color:{MUTED};">
         Acesse o SoftMusic:
         <a href="{escape(web_origin)}" style="color:{BRAND_BRIGHT};text-decoration:underline;">{escape(web_origin)}</a>
+        {agenda_link}
       </p>
     """
     return _shell(
@@ -284,6 +305,7 @@ def schedule_occurrence_email_text(
     address: str,
     maps_url: str,
     members_lines: list[str] | None = None,
+    songs_lines: list[str] | None = None,
     action: str = "create",
 ) -> str:
     action_label = {
@@ -309,6 +331,11 @@ def schedule_occurrence_email_text(
         lines.append("")
         lines.append("Integrantes:")
         lines.extend(f"- {line}" for line in members)
+    songs = [line for line in (songs_lines or []) if line.strip()]
+    if songs and action != "cancel":
+        lines.append("")
+        lines.append("Músicas:")
+        lines.extend(f"- {line}" for line in songs)
     lines.extend(
         [
             "",
