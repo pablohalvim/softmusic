@@ -1,5 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Link } from "react-router";
 
+import { fetchBandMembers } from "../lib/api";
 import { useBand } from "../lib/band-context";
 import { linkClass } from "../lib/ui-classes";
 
@@ -14,10 +17,24 @@ export function BandManageChrome({
   activeTab: TabId;
   children: React.ReactNode;
 }) {
-  const { bands, loading } = useBand();
+  const { bands, loading, patchBand } = useBand();
   const band = bands.find((item) => item.id === bandId) ?? null;
+  const membersQuery = useQuery({
+    queryKey: ["band-members", bandId],
+    queryFn: () => fetchBandMembers(bandId),
+    enabled: Boolean(bandId),
+    refetchOnWindowFocus: true,
+  });
 
-  if (loading) {
+  useEffect(() => {
+    if (!bandId || !membersQuery.data) return;
+    const count = membersQuery.data.length;
+    if (band && band.member_count !== count) {
+      patchBand(bandId, { member_count: count });
+    }
+  }, [band, bandId, membersQuery.data, patchBand]);
+
+  if (loading && !band) {
     return <p className="text-slate-400">Carregando...</p>;
   }
   if (!band) {
@@ -30,6 +47,8 @@ export function BandManageChrome({
       </section>
     );
   }
+
+  const memberCount = membersQuery.data?.length ?? band.member_count;
 
   const tabs: Array<{ id: TabId; label: string; to: string }> = [
     { id: "funcoes", label: "Funções", to: `/bandas/${bandId}?tab=funcoes` },
@@ -51,7 +70,7 @@ export function BandManageChrome({
         </p>
         <h1 className="sm-page-title">{band.name}</h1>
         <p className="sm-page-subtitle">
-          {band.plan_code} · {band.member_count}/{band.member_limit} membros
+          {band.plan_code} · {memberCount}/{band.member_limit} membros
         </p>
       </div>
 

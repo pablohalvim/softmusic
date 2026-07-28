@@ -5,12 +5,18 @@ import { authFetch } from "./api";
 import { clearActiveBandId, loadActiveBandId, saveActiveBandId } from "./auth-storage";
 import { useAuth } from "./auth-context";
 
+interface RefreshBandsOptions {
+  /** Evita flash de "Carregando..." em atualizações em background. */
+  silent?: boolean;
+}
+
 interface BandContextValue {
   bands: BandSummary[];
   activeBand: BandSummary | null;
   loading: boolean;
   setActiveBandId: (bandId: string) => void;
-  refreshBands: () => Promise<void>;
+  refreshBands: (options?: RefreshBandsOptions) => Promise<void>;
+  patchBand: (bandId: string, patch: Partial<BandSummary>) => void;
   createBand: (name: string, planCode: string) => Promise<BandSummary>;
 }
 
@@ -22,14 +28,15 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
   const [activeBandId, setActiveBandIdState] = useState<string | null>(loadActiveBandId);
   const [loading, setLoading] = useState(true);
 
-  const refreshBands = useCallback(async () => {
+  const refreshBands = useCallback(async (options?: RefreshBandsOptions) => {
     if (!getAccessToken()) {
       setBands([]);
       setActiveBandIdState(null);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    const silent = Boolean(options?.silent);
+    if (!silent) setLoading(true);
     try {
       const response = await authFetch("/bands");
       if (!response.ok) {
@@ -52,7 +59,7 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Não zera bands em falha transitória — evita AuthGuard mandar para /bandas.
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [getAccessToken]);
 
@@ -66,9 +73,22 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, refreshBands]);
 
+  useEffect(() => {
+    if (!user) return;
+    const onFocus = () => {
+      void refreshBands({ silent: true });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [user, refreshBands]);
+
   const setActiveBandId = useCallback((bandId: string) => {
     saveActiveBandId(bandId);
     setActiveBandIdState(bandId);
+  }, []);
+
+  const patchBand = useCallback((bandId: string, patch: Partial<BandSummary>) => {
+    setBands((prev) => prev.map((band) => (band.id === bandId ? { ...band, ...patch } : band)));
   }, []);
 
   const createBand = useCallback(async (name: string, planCode: string) => {
@@ -109,9 +129,10 @@ export function BandProvider({ children }: { children: React.ReactNode }) {
       loading,
       setActiveBandId,
       refreshBands,
+      patchBand,
       createBand,
     }),
-    [bands, activeBand, loading, setActiveBandId, refreshBands, createBand],
+    [bands, activeBand, loading, setActiveBandId, refreshBands, patchBand, createBand],
   );
 
   return <BandContext.Provider value={value}>{children}</BandContext.Provider>;

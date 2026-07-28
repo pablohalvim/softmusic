@@ -39,9 +39,10 @@ export function PendingInvitesCard() {
       const invite = invitesQuery.data?.find((item) => item.id === inviteId);
       setActionError(null);
       await queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
-      await refreshBands();
+      await refreshBands({ silent: true });
       if (invite?.band_id) {
         setActiveBandId(invite.band_id);
+        await queryClient.invalidateQueries({ queryKey: ["band-members", invite.band_id] });
       }
     },
     onError: (err) => {

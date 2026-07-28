@@ -1,6 +1,6 @@
 import { PLANS, formatBrl } from "@softmusic/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import {
@@ -34,7 +34,7 @@ type TabId = "funcoes" | "membros" | "agenda" | "plano";
 export default function BandManagePage() {
   const { bandId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { bands, loading, refreshBands } = useBand();
+  const { bands, loading, refreshBands, patchBand } = useBand();
   const band = bands.find((item) => item.id === bandId) ?? null;
 
   const tabParam = searchParams.get("tab") as TabId | null;
@@ -42,6 +42,21 @@ export default function BandManagePage() {
     tabParam && ["funcoes", "membros", "agenda", "plano"].includes(tabParam)
       ? tabParam
       : "funcoes";
+
+  const membersQuery = useQuery({
+    queryKey: ["band-members", bandId],
+    queryFn: () => fetchBandMembers(bandId),
+    enabled: Boolean(bandId),
+    refetchOnWindowFocus: true,
+  });
+
+  useEffect(() => {
+    if (!bandId || !membersQuery.data) return;
+    const count = membersQuery.data.length;
+    if (band && band.member_count !== count) {
+      patchBand(bandId, { member_count: count });
+    }
+  }, [band, bandId, membersQuery.data, patchBand]);
 
   const tabs = useMemo(() => {
     const base: Array<{ id: TabId; label: string }> = [
@@ -55,7 +70,7 @@ export default function BandManagePage() {
     return base;
   }, [band]);
 
-  if (loading) {
+  if (loading && !band) {
     return <p className="text-slate-400">Carregando...</p>;
   }
 
@@ -70,6 +85,8 @@ export default function BandManagePage() {
     );
   }
 
+  const memberCount = membersQuery.data?.length ?? band.member_count;
+
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -82,7 +99,7 @@ export default function BandManagePage() {
           </p>
           <h1 className="sm-page-title">{band.name}</h1>
           <p className="sm-page-subtitle">
-            {band.plan_code} · {band.member_count}/{band.member_limit} membros
+            {band.plan_code} · {memberCount}/{band.member_limit} membros
           </p>
         </div>
       </div>
@@ -122,7 +139,7 @@ export default function BandManagePage() {
           bandId={band.id}
           currentPlan={band.plan_code}
           isOwner={band.is_owner}
-          onChanged={() => void refreshBands()}
+          onChanged={() => void refreshBands({ silent: true })}
         />
       ) : null}
     </section>
@@ -270,12 +287,14 @@ function RolesTab({ bandId, canManage }: { bandId: string; canManage: boolean })
 
 function MembersTab({ bandId, canManage }: { bandId: string; canManage: boolean }) {
   const queryClient = useQueryClient();
+  const { refreshBands, patchBand } = useBand();
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<BandMemberDetail | null>(null);
 
   const membersQuery = useQuery({
     queryKey: ["band-members", bandId],
     queryFn: () => fetchBandMembers(bandId),
+    refetchOnWindowFocus: true,
   });
   const rolesQuery = useQuery({
     queryKey: ["band-roles", bandId],
@@ -310,6 +329,9 @@ function MembersTab({ bandId, canManage }: { bandId: string; canManage: boolean 
     mutationFn: (memberId: string) => removeBandMember(bandId, memberId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["band-members", bandId] });
+      const nextCount = Math.max(0, (membersQuery.data?.length ?? 1) - 1);
+      patchBand(bandId, { member_count: nextCount });
+      await refreshBands({ silent: true });
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Erro"),
   });
