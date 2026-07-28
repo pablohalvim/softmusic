@@ -39,15 +39,15 @@ class AudioPipeline:
 
     def run(self, context: PipelineContext) -> dict[str, Any]:
         device_info = log_compute_device("audio_pipeline")
+        # Áudio de análise (mono 22 kHz) — só para beat/chroma/key. O player NÃO usa isto.
         wav_path = self._convert_to_wav(context)
         start_ms, end_ms = self._detect_trim_bounds(wav_path)
         trimmed_path = self._apply_trim(wav_path, start_ms, end_ms, context.working_dir / "trimmed.wav")
+        # Playback + Demucs: estéreo, sample rate original (ou ≥44.1 kHz), com o mesmo trim.
+        self._write_playback_audio(context, start_ms, end_ms)
         y, sr = librosa.load(trimmed_path, sr=self.sample_rate, mono=True)
         duration = float(librosa.get_duration(y=y, sr=sr))
 
-        # A separação roda sobre o áudio em qualidade máxima (estéreo, sample rate
-        # original) para preservar detalhe e informação estéreo — o mesmo recorte de
-        # silêncio (start_ms/end_ms) é aplicado para manter o alinhamento temporal.
         separation = self._separate_stems(context, start_ms, end_ms)
         stem_paths = {stem.name: stem.path for stem in separation.stems} if separation else {}
 
@@ -132,27 +132,42 @@ class AudioPipeline:
             logger.warning("stem_separation_failed", song_id=context.song_id, error=str(exc))
             return None
 
+    def _write_playback_audio(
+        self,
+        context: PipelineContext,
+        start_ms: int,
+        end_ms: int,
+    ) -> Path:
+        """Áudio para o player e para o Demucs: estéreo, alta fidelidade.
+
+        O ``trimmed.wav``/``normalized.wav`` ficam em mono 22 kHz só para análise
+        (librosa). Ouvir esses arquivos soava “ruim” — daí o ``playback.wav``.
+        """
+        target = context.working_dir / "playback.wav"
+        audio = AudioSegment.from_file(context.source_path)
+        if audio.channels == 1:
+            audio = audio.set_channels(2)
+        elif audio.channels > 2:
+            audio = audio.set_channels(2)
+        # YouTube costuma vir em 44.1/48 kHz; evita ficar abaixo disso.
+        if audio.frame_rate < 44100:
+            audio = audio.set_frame_rate(44100)
+        if end_ms > start_ms:
+            audio = audio[start_ms:end_ms]
+        audio.export(target, format="wav", parameters=["-acodec", "pcm_s16le"])
+        return target
+
     def _prepare_separation_input(
         self,
         context: PipelineContext,
         start_ms: int,
         end_ms: int,
     ) -> Path:
-        """Gera o áudio de entrada da separação em qualidade máxima.
-
-        Mantém o sample rate original (o Demucs reamostra para 44.1kHz internamente
-        quando necessário) e o estéreo, ao contrário do áudio de análise que é
-        rebaixado para mono/22kHz. Isso preserva a banda completa de frequências e as
-        pistas estéreo, resultando em stems bem mais definidos.
-        """
-        target = context.working_dir / "separation_input.wav"
-        audio = AudioSegment.from_file(context.source_path)
-        if audio.channels != 2:
-            audio = audio.set_channels(2)
-        if end_ms > start_ms:
-            audio = audio[start_ms:end_ms]
-        audio.export(target, format="wav")
-        return target
+        """Reusa ``playback.wav`` (qualidade máxima) como entrada do Demucs."""
+        playback = context.working_dir / "playback.wav"
+        if playback.exists() and playback.is_file():
+            return playback
+        return self._write_playback_audio(context, start_ms, end_ms)
 
     def _load_harmony_signal(self, stem_paths: dict[str, Path], fallback: Path) -> np.ndarray:
         """Combina os stems harmônicos (other/guitar/piano) para estimar acordes.

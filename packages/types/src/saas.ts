@@ -12,22 +12,41 @@ export const BandStatusSchema = z.enum([
 ]);
 export const UserStatusSchema = z.enum(["active", "suspended", "deleted"]);
 
-export const RegisterUserSchema = z.object({
-  full_name: z.string().min(3).max(200),
-  cpf: z.string().regex(/^\d{11}$/),
-  birth_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  email: z.string().email().max(320),
-  phone: z.string().min(10).max(20),
-  address_street: z.string().min(1).max(200),
-  address_number: z.string().min(1).max(20),
-  address_complement: z.string().max(100).optional(),
-  address_neighborhood: z.string().min(1).max(100),
-  address_city: z.string().min(1).max(100),
-  address_state: z.string().length(2),
-  address_zip: z.string().regex(/^\d{8}$/),
-  password: z.string().min(8).max(128),
-  invite_token: z.string().min(1).optional(),
-});
+export const RegisterUserSchema = z
+  .object({
+    full_name: z.string().min(3).max(200),
+    cpf: z.string().regex(/^\d{11,14}$/),
+    is_company: z.boolean().optional().default(false),
+    birth_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    email: z.string().email().max(320),
+    phone: z.string().min(10).max(20),
+    address_street: z.string().min(1).max(200),
+    address_number: z.string().min(1).max(20),
+    address_complement: z.string().max(100).optional(),
+    address_neighborhood: z.string().min(1).max(100),
+    address_city: z.string().min(1).max(100),
+    address_state: z.string().length(2),
+    address_zip: z.string().regex(/^\d{8}$/),
+    password: z.string().min(8).max(128),
+    invite_token: z.string().min(1).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.is_company) {
+      if (!/^\d{14}$/.test(data.cpf)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "CNPJ deve ter 14 dígitos",
+          path: ["cpf"],
+        });
+      }
+    } else if (!/^\d{11}$/.test(data.cpf)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "CPF deve ter 11 dígitos",
+        path: ["cpf"],
+      });
+    }
+  });
 
 export const LoginSchema = z.object({
   login: z.string().min(3).max(320),

@@ -934,12 +934,22 @@ class AnalysisService:
 
     def resolve_playback_path(self, song_id: str, song: Song) -> Path | None:
         song_dir = Path(self.storage.base_path) / song_id  # type: ignore[attr-defined]
+        # Mesma prioridade do StorageService.playback_target (HQ primeiro).
         candidates: list[Path] = [
-            song_dir / "trimmed.wav",
-            song_dir / "normalized.wav",
+            song_dir / "playback.wav",
+            song_dir / "separation_input.wav",
+            song_dir / "source.flac",
+            song_dir / "source.opus",
+            song_dir / "source.webm",
+            song_dir / "source.m4a",
+            song_dir / "source.wav",
+            song_dir / "source.mp3",
         ]
         if song.file_path:
-            candidates.append(Path(song.file_path))
+            original = Path(song.file_path)
+            if original not in candidates:
+                candidates.append(original)
+        candidates.extend([song_dir / "trimmed.wav", song_dir / "normalized.wav"])
 
         for path in candidates:
             if path.exists() and path.is_file():

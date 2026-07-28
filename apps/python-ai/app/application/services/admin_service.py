@@ -186,6 +186,7 @@ class AdminService:
                     "full_name": user.full_name,
                     "email": user.email,
                     "cpf": user.cpf,
+                    "is_company": bool(user.is_company),
                     "status": user.status,
                     "registered_by_admin_id": user.registered_by_admin_id,
                     "is_delinquent": delinquent,

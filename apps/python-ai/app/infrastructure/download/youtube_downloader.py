@@ -29,17 +29,16 @@ def _download_youtube_sync(url: str, working_dir: Path) -> DownloadResult:
     working_dir.mkdir(parents=True, exist_ok=True)
     output_template = str(working_dir / "source.%(ext)s")
     ydl_opts: dict = {
-        # Baixa a melhor faixa de áudio disponível (maior bitrate/sample rate).
-        "format": "bestaudio/best",
-        # Ordena candidatos priorizando maior bitrate (abr) e sample rate (asr).
-        "format_sort": ["abr", "asr"],
+        # Melhor faixa de áudio do YouTube (geralmente Opus ~160–251 kbps).
+        # Preferir opus/webm de alto bitrate antes de m4a/aac intermediários.
+        "format": "bestaudio[acodec=opus]/bestaudio[ext=webm]/bestaudio/best",
+        "format_sort": ["abr", "asr", "size"],
         "outtmpl": output_template,
         "ffmpeg_location": ensure_ffmpeg_available(),
         "postprocessors": [
             {
-                # Extrai para FLAC (lossless) para preservar o máximo de detalhe do
-                # áudio de origem para a análise/separação. "preferredquality": 0
-                # instrui o ffmpeg a não reduzir a qualidade.
+                # FLAC lossless a partir do stream baixado — não degrada o decode
+                # e evita recompressão com perdas no pipeline.
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "flac",
                 "preferredquality": "0",

@@ -144,8 +144,10 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     full_name: Mapped[str] = mapped_column(String(200))
-    cpf: Mapped[str] = mapped_column(String(11))
+    # CPF (11) ou CNPJ (14); coluna mantém o nome histórico.
+    cpf: Mapped[str] = mapped_column(String(14))
     cpf_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    is_company: Mapped[bool] = mapped_column(Boolean, default=False)
     birth_date: Mapped[date] = mapped_column(Date)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     phone: Mapped[str] = mapped_column(String(20))

@@ -15,7 +15,14 @@ from app.infrastructure.security.jwt_tokens import (
     create_refresh_token,
     decode_token,
 )
-from app.infrastructure.security.passwords import hash_cpf, hash_password, normalize_cpf, verify_password
+from app.infrastructure.security.passwords import (
+    hash_cpf,
+    hash_password,
+    is_valid_cnpj,
+    is_valid_cpf,
+    normalize_cpf,
+    verify_password,
+)
 
 PASSWORD_RESET_TTL = timedelta(minutes=15)
 PASSWORD_RESET_MAX_ATTEMPTS = 5
@@ -45,7 +52,13 @@ class AuthService:
     async def register(self, payload: dict[str, Any]) -> dict[str, Any]:
         from app.application.services.band_service import BandService
 
+        is_company = bool(payload.get("is_company"))
         cpf = normalize_cpf(str(payload["cpf"]))
+        if is_company:
+            if not is_valid_cnpj(cpf):
+                raise ValueError("CNPJ inválido")
+        elif not is_valid_cpf(cpf):
+            raise ValueError("CPF inválido")
         cpf_hash = hash_cpf(cpf, self.settings.cpf_pepper)
         email = str(payload["email"]).strip().lower()
         invite_token = (payload.get("invite_token") or "").strip() or None
@@ -66,13 +79,14 @@ class AuthService:
             )
         )
         if existing.scalar_one_or_none():
-            raise ValueError("E-mail ou CPF já cadastrado")
+            raise ValueError("E-mail ou documento já cadastrado")
 
         user = User(
             id=_new_id("usr"),
             full_name=str(payload["full_name"]).strip(),
             cpf=cpf,
             cpf_hash=cpf_hash,
+            is_company=is_company,
             birth_date=date.fromisoformat(str(payload["birth_date"])),
             email=email,
             phone=str(payload["phone"]).strip(),
@@ -273,6 +287,7 @@ class AuthService:
             "full_name": user.full_name,
             "email": user.email,
             "cpf": user.cpf,
+            "is_company": bool(user.is_company),
             "phone": user.phone,
             "birth_date": user.birth_date.isoformat(),
             "address": {

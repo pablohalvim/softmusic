@@ -121,9 +121,22 @@ class StorageService:
     # -- serving ---------------------------------------------------------------
 
     async def playback_target(self, song_id: str, file_path: str | None) -> PlaybackTarget | None:
-        candidates = ["trimmed.wav", "normalized.wav"]
+        # Preferir qualidade de audição (estéreo / source), nunca o mono 22 kHz da análise.
+        candidates = [
+            "playback.wav",
+            "separation_input.wav",
+            "source.flac",
+            "source.opus",
+            "source.webm",
+            "source.m4a",
+            "source.wav",
+            "source.mp3",
+        ]
         if file_path:
-            candidates.append(Path(file_path).name)
+            name = Path(file_path).name
+            if name not in candidates:
+                candidates.append(name)
+        candidates.extend(["trimmed.wav", "normalized.wav"])
 
         if self._remote is not None:
             for rel in candidates:
@@ -134,9 +147,11 @@ class StorageService:
                     return PlaybackTarget(kind="remote", url=url)
 
         song_dir = self.song_dir(song_id)
-        local_candidates = [song_dir / "trimmed.wav", song_dir / "normalized.wav"]
+        local_candidates = [song_dir / name for name in candidates]
         if file_path:
-            local_candidates.append(Path(file_path))
+            original = Path(file_path)
+            if original not in local_candidates:
+                local_candidates.append(original)
         for path in local_candidates:
             if path.exists() and path.is_file():
                 return PlaybackTarget(kind="local", path=path)

@@ -5,8 +5,10 @@ import { useAuth } from "../lib/auth-context";
 import {
   cleanDigits,
   formatCep,
+  formatCnpj,
   formatCpf,
   formatPhone,
+  isValidCnpj,
   isValidCpf,
   isValidPhone,
 } from "../lib/br-format";
@@ -28,11 +30,12 @@ export default function CadastroPage() {
   const inviteToken = searchParams.get("token")?.trim() || null;
 
   const [error, setError] = useState<string | null>(null);
-  const [cpfError, setCpfError] = useState<string | null>(null);
+  const [docError, setDocError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(Boolean(inviteToken));
   const [inviteBandName, setInviteBandName] = useState<string | null>(null);
   const [form, setForm] = useState({
+    is_company: false,
     full_name: "",
     cpf: "",
     birth_date: "",
@@ -97,20 +100,37 @@ export default function CadastroPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  function handleCpfChange(value: string) {
-    const digits = cleanDigits(value).slice(0, 11);
-    updateField("cpf", digits);
-    if (cpfError && (digits.length < 11 || isValidCpf(digits))) {
-      setCpfError(null);
-    }
+  function handleCompanyToggle(checked: boolean) {
+    setForm((prev) => ({
+      ...prev,
+      is_company: checked,
+      cpf: "",
+    }));
+    setDocError(null);
   }
 
-  function validateCpf(): boolean {
-    if (!isValidCpf(form.cpf)) {
-      setCpfError("CPF inválido");
+  function handleDocChange(value: string) {
+    const max = form.is_company ? 14 : 11;
+    const digits = cleanDigits(value).slice(0, max);
+    updateField("cpf", digits);
+    if (!docError) return;
+    const ok = form.is_company
+      ? digits.length < 14 || isValidCnpj(digits)
+      : digits.length < 11 || isValidCpf(digits);
+    if (ok) setDocError(null);
+  }
+
+  function validateDocument(): boolean {
+    if (form.is_company) {
+      if (!isValidCnpj(form.cpf)) {
+        setDocError("CNPJ inválido");
+        return false;
+      }
+    } else if (!isValidCpf(form.cpf)) {
+      setDocError("CPF inválido");
       return false;
     }
-    setCpfError(null);
+    setDocError(null);
     return true;
   }
 
@@ -120,7 +140,7 @@ export default function CadastroPage() {
       setError("Convite inválido ou expirado");
       return;
     }
-    if (!validateCpf()) {
+    if (!validateDocument()) {
       return;
     }
     if (!isValidPhone(form.phone)) {
@@ -135,6 +155,7 @@ export default function CadastroPage() {
       const zipDigits = cleanDigits(userPayload.address_zip);
       await register({
         ...userPayload,
+        is_company: Boolean(userPayload.is_company),
         cpf: cpfDigits,
         address_zip: zipDigits,
         address_complement: userPayload.address_complement || undefined,
@@ -182,8 +203,22 @@ export default function CadastroPage() {
       {inviteLoading ? <p className="text-slate-400">Carregando convite...</p> : null}
 
       <form onSubmit={(e) => void handleSubmit(e)} className="glass-panel grid gap-4 sm:grid-cols-2">
+        <label
+          htmlFor="is_company"
+          className="sm:col-span-2 flex cursor-pointer items-center gap-3 text-sm text-slate-200"
+        >
+          <input
+            id="is_company"
+            name="is_company"
+            type="checkbox"
+            className="size-4 rounded border-slate-600 bg-slate-950 text-green-500 focus:ring-green-500/40"
+            checked={form.is_company}
+            onChange={(e) => handleCompanyToggle(e.target.checked)}
+          />
+          <span>Pessoa Jurídica</span>
+        </label>
         <label htmlFor="full_name" className={`${labelClass} sm:col-span-2`}>
-          <span>Nome completo</span>
+          <span>{form.is_company ? "Razão Social" : "Nome completo"}</span>
           <input
             id="full_name"
             name="full_name"
@@ -194,24 +229,24 @@ export default function CadastroPage() {
           />
         </label>
         <label htmlFor="cpf" className={labelClass}>
-          <span>CPF</span>
+          <span>{form.is_company ? "CNPJ" : "CPF"}</span>
           <input
             id="cpf"
             name="cpf"
             required
             inputMode="numeric"
-            placeholder="000.000.000-00"
-            className={`${fieldClass} ${cpfError ? "border-red-500/60 ring-red-500/20" : ""}`}
-            value={formatCpf(form.cpf)}
-            onChange={(e) => handleCpfChange(e.target.value)}
+            placeholder={form.is_company ? "00.000.000/0000-00" : "000.000.000-00"}
+            className={`${fieldClass} ${docError ? "border-red-500/60 ring-red-500/20" : ""}`}
+            value={form.is_company ? formatCnpj(form.cpf) : formatCpf(form.cpf)}
+            onChange={(e) => handleDocChange(e.target.value)}
             onBlur={() => {
-              if (form.cpf) validateCpf();
+              if (form.cpf) validateDocument();
             }}
           />
-          {cpfError ? <span className="text-xs text-red-400">{cpfError}</span> : null}
+          {docError ? <span className="text-xs text-red-400">{docError}</span> : null}
         </label>
         <label htmlFor="birth_date" className={labelClass}>
-          <span>Data de nascimento</span>
+          <span>{form.is_company ? "Data de abertura" : "Data de nascimento"}</span>
           <input
             id="birth_date"
             name="birth_date"

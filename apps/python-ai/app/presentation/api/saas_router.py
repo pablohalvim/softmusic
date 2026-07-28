@@ -31,6 +31,7 @@ router = APIRouter(prefix="/internal", tags=["saas"])
 class RegisterBody(BaseModel):
     full_name: str
     cpf: str
+    is_company: bool = False
     birth_date: str
     email: str
     phone: str
@@ -214,6 +215,7 @@ class UpdateAdminBody(BaseModel):
 class SalesRegisterBody(BaseModel):
     full_name: str
     cpf: str
+    is_company: bool = False
     birth_date: str
     email: str
     phone: str

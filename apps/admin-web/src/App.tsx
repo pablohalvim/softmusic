@@ -28,6 +28,8 @@ import {
   type AdminRole,
   type AsaasSettings,
 } from "./lib/api";
+import { formatCnpj, formatCpf, isValidCnpj, isValidCpf } from "./lib/br-format";
+import { cleanDigits, formatCep, useViaCep } from "./lib/use-viacep";
 import { AdminDashboard } from "./components/AdminDashboard";
 
 function AppFooter() {
@@ -60,6 +62,7 @@ const PLAN_OPTIONS = [
 ];
 
 const EMPTY_SALE = {
+  is_company: false,
   full_name: "",
   cpf: "",
   birth_date: "",
@@ -122,6 +125,17 @@ export function App() {
     role: "salesperson" as AdminRole,
   });
   const [paymentBusyId, setPaymentBusyId] = useState<string | null>(null);
+
+  const { loading: cepLoading, error: cepError } = useViaCep(saleForm.address_zip, (address) => {
+    setSaleForm((prev) => ({
+      ...prev,
+      address_street: address.street || prev.address_street,
+      address_neighborhood: address.neighborhood || prev.address_neighborhood,
+      address_city: address.city || prev.address_city,
+      address_state: address.state || prev.address_state,
+      address_complement: address.complement || prev.address_complement,
+    }));
+  });
 
   const fullAdmin = isFullAdmin(admin);
 
@@ -244,9 +258,25 @@ export function App() {
   async function handleSaleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    const doc = cleanDigits(saleForm.cpf);
+    if (saleForm.is_company) {
+      if (!isValidCnpj(doc)) {
+        setError("CNPJ inválido");
+        return;
+      }
+    } else if (!isValidCpf(doc)) {
+      setError("CPF inválido");
+      return;
+    }
     setSaleBusy(true);
     try {
-      const payload: Record<string, unknown> = { ...saleForm };
+      const payload: Record<string, unknown> = {
+        ...saleForm,
+        is_company: Boolean(saleForm.is_company),
+        cpf: doc,
+        address_zip: cleanDigits(saleForm.address_zip).slice(0, 8),
+        address_state: saleForm.address_state.trim().toUpperCase().slice(0, 2),
+      };
       if (!String(payload.password || "").trim()) {
         delete payload.password;
       }
@@ -383,9 +413,23 @@ export function App() {
           <h2>Nova venda</h2>
           <p className="muted">Cadastra usuário do app + banda com ownership do vendedor.</p>
           <form onSubmit={(e) => void handleSaleSubmit(e)} className="stack sale-form">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={saleForm.is_company}
+                onChange={(e) =>
+                  setSaleForm({
+                    ...saleForm,
+                    is_company: e.target.checked,
+                    cpf: "",
+                  })
+                }
+              />
+              <span>Pessoa Jurídica</span>
+            </label>
             <div className="form-grid">
               <label>
-                Nome completo
+                {saleForm.is_company ? "Razão Social" : "Nome completo"}
                 <input
                   required
                   value={saleForm.full_name}
@@ -393,15 +437,22 @@ export function App() {
                 />
               </label>
               <label>
-                CPF
+                {saleForm.is_company ? "CNPJ" : "CPF"}
                 <input
                   required
-                  value={saleForm.cpf}
-                  onChange={(e) => setSaleForm({ ...saleForm, cpf: e.target.value })}
+                  inputMode="numeric"
+                  placeholder={saleForm.is_company ? "00.000.000/0000-00" : "000.000.000-00"}
+                  value={saleForm.is_company ? formatCnpj(saleForm.cpf) : formatCpf(saleForm.cpf)}
+                  onChange={(e) =>
+                    setSaleForm({
+                      ...saleForm,
+                      cpf: cleanDigits(e.target.value).slice(0, saleForm.is_company ? 14 : 11),
+                    })
+                  }
                 />
               </label>
               <label>
-                Data de nascimento
+                {saleForm.is_company ? "Data de abertura" : "Data de nascimento"}
                 <input
                   required
                   type="date"
@@ -459,11 +510,21 @@ export function App() {
               </label>
               <label>
                 CEP
+                {cepLoading ? <small> buscando…</small> : null}
                 <input
                   required
-                  value={saleForm.address_zip}
-                  onChange={(e) => setSaleForm({ ...saleForm, address_zip: e.target.value })}
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={9}
+                  value={formatCep(saleForm.address_zip)}
+                  onChange={(e) =>
+                    setSaleForm({
+                      ...saleForm,
+                      address_zip: cleanDigits(e.target.value).slice(0, 8),
+                    })
+                  }
                 />
+                {cepError ? <small className="error">{cepError}</small> : null}
               </label>
               <label>
                 Rua
@@ -601,7 +662,10 @@ export function App() {
               <tbody>
                 {invoices.map((invoice) => {
                   const invoiceId = String(invoice.id);
-                  const isOverdue = String(invoice.status) === "overdue";
+                  const status = String(invoice.status);
+                  const isOverdue = status === "overdue";
+                  // Pagas/canceladas/estornadas não geram nem copiam link.
+                  const canPaymentLink = Boolean(invoice.can_pay);
                   return (
                     <tr key={invoiceId}>
                       <td>{String(invoice.invoice_number ?? "—")}</td>
@@ -618,7 +682,7 @@ export function App() {
                           : "—"}
                       </td>
                       <td>
-                        {STATUS_LABEL[String(invoice.status)] ?? String(invoice.status)}
+                        {STATUS_LABEL[status] ?? status}
                         {isOverdue || invoice.is_delinquent ? (
                           <span className="badge danger">Inadimplente</span>
                         ) : null}
@@ -649,17 +713,21 @@ export function App() {
                         </ul>
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          disabled={paymentBusyId === invoiceId}
-                          onClick={() => void handlePaymentLink(invoiceId)}
-                        >
-                          {paymentBusyId === invoiceId
-                            ? "Gerando..."
-                            : invoice.has_asaas_link
-                              ? "Copiar link"
-                              : "Gerar link"}
-                        </button>
+                        {canPaymentLink ? (
+                          <button
+                            type="button"
+                            disabled={paymentBusyId === invoiceId}
+                            onClick={() => void handlePaymentLink(invoiceId)}
+                          >
+                            {paymentBusyId === invoiceId
+                              ? "Gerando..."
+                              : invoice.has_asaas_link
+                                ? "Copiar link"
+                                : "Gerar link"}
+                          </button>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                     </tr>
                   );
