@@ -289,21 +289,31 @@ class BandService:
         return result.scalar_one_or_none() is not None
 
     async def list_band_songs(
-        self, band_id: str, limit: int = 50, offset: int = 0
+        self,
+        band_id: str,
+        limit: int = 50,
+        offset: int = 0,
+        q: str | None = None,
     ) -> tuple[list[Song], int]:
         safe_limit = max(1, min(limit, 100))
         safe_offset = max(0, offset)
+        filters = [BandSong.band_id == band_id, Song.deleted_at.is_(None)]
+        query_text = (q or "").strip()
+        if query_text:
+            pattern = f"%{query_text}%"
+            filters.append(or_(Song.title.ilike(pattern), Song.artist.ilike(pattern)))
+
         count_result = await self.session.execute(
             select(func.count())
             .select_from(BandSong)
             .join(Song, Song.id == BandSong.song_id)
-            .where(BandSong.band_id == band_id, Song.deleted_at.is_(None))
+            .where(*filters)
         )
         total = int(count_result.scalar_one())
         result = await self.session.execute(
             select(Song)
             .join(BandSong, BandSong.song_id == Song.id)
-            .where(BandSong.band_id == band_id, Song.deleted_at.is_(None))
+            .where(*filters)
             .order_by(Song.created_at.desc())
             .offset(safe_offset)
             .limit(safe_limit)

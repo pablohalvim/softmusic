@@ -467,6 +467,7 @@ async def dashboard_stats(
 async def list_songs(
     limit: int = 50,
     offset: int = 0,
+    q: str = "",
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
     band_id: str | None = Depends(get_band_id),
@@ -479,7 +480,9 @@ async def list_songs(
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    songs, total = await band_service.list_band_songs(band_id, limit=limit, offset=offset)
+    songs, total = await band_service.list_band_songs(
+        band_id, limit=limit, offset=offset, q=q
+    )
     link_sources = await band_service.get_band_song_link_sources(
         band_id, [song.id for song in songs]
     )
@@ -491,6 +494,7 @@ async def list_songs(
         "total": total,
         "limit": max(1, min(limit, 100)),
         "offset": max(0, offset),
+        "q": (q or "").strip(),
     }
 
 

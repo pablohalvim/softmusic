@@ -240,6 +240,13 @@ export interface SongsListResponse {
   total: number;
   limit: number;
   offset: number;
+  q?: string;
+}
+
+export interface FetchSongsOptions {
+  limit?: number;
+  offset?: number;
+  q?: string;
 }
 
 export interface DashboardStats {
@@ -676,8 +683,20 @@ export async function fetchSongJob(songId: string): Promise<Job> {
   return response.json();
 }
 
-export async function fetchSongs(limit = 50): Promise<SongsListResponse> {
-  const response = await authFetch(`/songs?limit=${limit}`);
+export async function fetchSongs(
+  limitOrOptions: number | FetchSongsOptions = 50,
+): Promise<SongsListResponse> {
+  const options: FetchSongsOptions =
+    typeof limitOrOptions === "number" ? { limit: limitOrOptions } : limitOrOptions;
+  const limit = options.limit ?? 50;
+  const offset = options.offset ?? 0;
+  const q = options.q?.trim() ?? "";
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (q) params.set("q", q);
+  const response = await authFetch(`/songs?${params.toString()}`);
   if (!response.ok) {
     throw new Error("Não foi possível carregar a biblioteca");
   }
