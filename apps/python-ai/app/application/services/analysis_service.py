@@ -862,12 +862,20 @@ class AnalysisService:
         job.progress = 90
         await self.session.commit()
 
-        result = AnalysisResult(
-            song_id=song.id,
-            version=payload["version"],
-            payload_json=json.dumps(payload),
-        )
-        self.session.add(result)
+        existing = await self.get_analysis(song.id)
+        payload_text = json.dumps(payload)
+        if existing is not None:
+            existing.version = payload["version"]
+            existing.payload_json = payload_text
+            existing.created_at = datetime.now(UTC)
+        else:
+            self.session.add(
+                AnalysisResult(
+                    song_id=song.id,
+                    version=payload["version"],
+                    payload_json=payload_text,
+                )
+            )
         song.status = SongStatus.COMPLETED.value
         song.duration_seconds = payload["metadata"]["duration_seconds"]
         # Não sobrescreve título/artista já definidos (ex.: nome informado no upload).
