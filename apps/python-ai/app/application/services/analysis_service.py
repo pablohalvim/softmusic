@@ -287,12 +287,17 @@ class AnalysisService:
         source_type: str,
         source_ref: str,
         options: dict[str, Any] | None = None,
+        *,
+        replace: bool = False,
     ) -> AnalysisJob:
-        """Anexa YouTube/HTTP a uma música cifra-only e enfileira análise de áudio."""
+        """Anexa YouTube/HTTP a uma música e enfileira análise de áudio."""
         song = await self.get_song(song_id)
         if song is None:
             raise ValueError("Song not found")
-        if song.file_path:
+        if song.status in {SongStatus.PENDING.value, SongStatus.PROCESSING.value}:
+            raise ValueError("Há uma análise em andamento para esta música")
+        has_audio = bool(song.file_path or song.youtube_url)
+        if has_audio and not replace:
             raise ValueError("Esta música já possui áudio analisado")
         if source_type not in {"youtube", "http", "s3", "azure_blob", "gcs"}:
             raise ValueError("Tipo de fonte de áudio inválido")
@@ -300,12 +305,21 @@ class AnalysisService:
         opts = dict(options or {})
         if song.cifra_club_url and "cifra_club_url" not in opts:
             opts["cifra_club_url"] = song.cifra_club_url
+        if song.title and "title" not in opts:
+            opts["title"] = song.title
+        if song.artist and "artist" not in opts:
+            opts["artist"] = song.artist
 
         song.source_type = source_type
         song.source_ref = source_ref
+        # Nova fonte remota: o worker baixa de novo (não reutiliza arquivo antigo).
+        song.file_path = None
         if source_type == "youtube":
             song.youtube_url = source_ref
             song.youtube_video_id = extract_youtube_video_id(source_ref)
+        else:
+            song.youtube_url = None
+            song.youtube_video_id = None
         song.status = SongStatus.PENDING.value
 
         job = AnalysisJob(

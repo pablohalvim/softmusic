@@ -278,11 +278,12 @@ class AttachAudioBody(BaseModel):
 async def analyze_audio_for_song(
     song_id: str,
     body: AttachAudioBody,
+    replace: bool = False,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
     band_id: str | None = Depends(get_band_id),
 ) -> dict[str, Any]:
-    """Anexa fonte de áudio (YouTube/URL) a uma música cifra-only e inicia análise."""
+    """Anexa fonte de áudio (YouTube/URL) e inicia análise (ou reanálise)."""
     if not band_id:
         raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
     band_service = BandService(session)
@@ -307,7 +308,11 @@ async def analyze_audio_for_song(
     service = AnalysisService(session)
     try:
         job = await service.attach_audio_source(
-            song_id, str(source_type), str(source_ref), body.options
+            song_id,
+            str(source_type),
+            str(source_ref),
+            body.options,
+            replace=replace,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

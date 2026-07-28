@@ -1,17 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 
 import { formatDateTime } from "@softmusic/shared/datetime";
 
 import { EditSongModal } from "../library/EditSongModal";
+import { ReanalyzeAudioModal } from "../library/ReanalyzeAudioModal";
 import {
   cancelSongAnalysis,
   deleteSong,
   fetchSongJob,
   isActiveSong,
   isJobFinished,
-  reanalyzeSongAudio,
   shareSongToGlobal,
   unshareSongFromGlobal,
   type SongSummary,
@@ -19,9 +19,7 @@ import {
 import { useAuth } from "../../lib/auth-context";
 import { useBand } from "../../lib/band-context";
 import { useConfirm } from "../../lib/confirm";
-import { ANALYSIS_MEDIA_ACCEPT } from "../../lib/media-upload";
 import { labelSongStatus } from "../../lib/status-labels";
-import { useToast } from "../../lib/toast";
 import { btnGhost, btnPrimary, panelClass } from "../../lib/ui-classes";
 import { JobProgressDetails, ProgressBar, StatusBadge } from "./StatusBadge";
 
@@ -30,9 +28,8 @@ export function SongListItem({ song }: { song: SongSummary }) {
   const { user } = useAuth();
   const { activeBand } = useBand();
   const { confirm } = useConfirm();
-  const toast = useToast();
-  const reanalyzeInputRef = useRef<HTMLInputElement>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [reanalyzeOpen, setReanalyzeOpen] = useState(false);
   const isActive = isActiveSong(song.status);
   const blocked = Boolean(activeBand?.is_blocked);
   const canDelete = Boolean(activeBand?.is_owner || activeBand?.can_delete_songs);
@@ -73,22 +70,6 @@ export function SongListItem({ song }: { song: SongSummary }) {
     onSuccess: invalidateLibrary,
   });
 
-  const reanalyzeMutation = useMutation({
-    mutationFn: (file: File) =>
-      reanalyzeSongAudio(song.id, file, { replace: Boolean(song.has_audio) }),
-    onSuccess: () => {
-      invalidateLibrary();
-      toast.success(
-        song.has_audio
-          ? "Nova análise iniciada com o áudio enviado."
-          : "Análise de áudio iniciada.",
-      );
-    },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
-  });
-
   const title = song.title ?? "Sem título";
   const subtitle = [
     song.artist,
@@ -110,10 +91,7 @@ export function SongListItem({ song }: { song: SongSummary }) {
     job?.status === "cancelled" || job?.status === "failed" ? "failed" : song.status;
   const showProgress = isActive && job && !isJobFinished(job.status);
   const isBusy =
-    deleteMutation.isPending ||
-    cancelMutation.isPending ||
-    shareMutation.isPending ||
-    reanalyzeMutation.isPending;
+    deleteMutation.isPending || cancelMutation.isPending || shareMutation.isPending;
 
   return (
     <article className={panelClass}>
@@ -143,44 +121,19 @@ export function SongListItem({ song }: { song: SongSummary }) {
               Editar
             </button>
             {canReanalyze ? (
-              <>
-                <input
-                  ref={reanalyzeInputRef}
-                  id={`reanalyze-audio-${song.id}`}
-                  name={`reanalyze-audio-${song.id}`}
-                  type="file"
-                  accept={ANALYSIS_MEDIA_ACCEPT}
-                  className="hidden"
-                  onChange={(event) => {
-                    const selected = event.target.files?.[0] ?? null;
-                    event.target.value = "";
-                    if (!selected) return;
-                    void (async () => {
-                      const ok = await confirm({
-                        title: song.has_audio ? "Nova análise" : "Analisar áudio",
-                        message: song.has_audio
-                          ? "Enviar um novo áudio substitui o atual e inicia outra análise. Continuar?"
-                          : "Enviar áudio para analisar esta música (stems, tom, etc.)?",
-                        confirmLabel: song.has_audio ? "Substituir e analisar" : "Analisar",
-                      });
-                      if (ok) reanalyzeMutation.mutate(selected);
-                    })();
-                  }}
-                />
-                <button
-                  type="button"
-                  disabled={isBusy}
-                  onClick={() => reanalyzeInputRef.current?.click()}
-                  className={`${btnGhost} border-green-500/30 px-3 py-1.5 text-sm text-green-200 hover:border-green-400 disabled:opacity-50`}
-                  title={
-                    song.has_audio
-                      ? "Envia um novo áudio e reanalisa (somente músicas criadas nesta banda)"
-                      : "Anexa áudio e inicia a primeira análise"
-                  }
-                >
-                  {reanalyzeMutation.isPending ? "Enviando..." : reanalyzeLabel}
-                </button>
-              </>
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => setReanalyzeOpen(true)}
+                className={`${btnGhost} border-green-500/30 px-3 py-1.5 text-sm text-green-200 hover:border-green-400 disabled:opacity-50`}
+                title={
+                  song.has_audio
+                    ? "Arquivo ou YouTube — substitui o áudio e reanalisa"
+                    : "Arquivo ou YouTube — inicia a primeira análise"
+                }
+              >
+                {reanalyzeLabel}
+              </button>
             ) : null}
 
             {isActive ? (
@@ -278,10 +231,6 @@ export function SongListItem({ song }: { song: SongSummary }) {
       {shareMutation.isError ? (
         <p className="mt-3 text-sm text-red-400">{shareMutation.error.message}</p>
       ) : null}
-      {reanalyzeMutation.isError ? (
-        <p className="mt-3 text-sm text-red-400">{reanalyzeMutation.error.message}</p>
-      ) : null}
-
       {showProgress ? (
         <div className="mt-4 border-t border-white/10 pt-4">
           <JobProgressDetails
@@ -303,6 +252,12 @@ export function SongListItem({ song }: { song: SongSummary }) {
       ) : null}
 
       <EditSongModal open={editOpen} song={song} onClose={() => setEditOpen(false)} />
+      <ReanalyzeAudioModal
+        open={reanalyzeOpen}
+        song={song}
+        onClose={() => setReanalyzeOpen(false)}
+        onStarted={invalidateLibrary}
+      />
     </article>
   );
 }

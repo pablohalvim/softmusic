@@ -846,6 +846,29 @@ export async function reanalyzeSongAudio(
   return response.json();
 }
 
+export async function reanalyzeSongYoutube(
+  songId: string,
+  url: string,
+  options?: { replace?: boolean },
+): Promise<AnalyzeSongResponse> {
+  const replace = options?.replace ?? true;
+  const response = await authFetch(
+    `/songs/${encodeURIComponent(songId)}/analyze-audio?replace=${replace ? "true" : "false"}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: { type: "youtube", url },
+        options: { educational_level: "intermediate" },
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível iniciar a análise do YouTube"));
+  }
+  return response.json();
+}
+
 export function isActiveSong(status: SongSummary["status"]): boolean {
   return status === "pending" || status === "processing";
 }
