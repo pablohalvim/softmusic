@@ -87,11 +87,11 @@ export function ImportCifraVariationModal({
         </p>
 
         <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-          <label htmlFor="cifra-club-url" className="block text-sm text-slate-300">
+          <label htmlFor="import-cifra-club-url" className="block text-sm text-slate-300">
             Link do Cifra Club
             <input
-              id="cifra-club-url"
-              name="cifra-club-url"
+              id="import-cifra-club-url"
+              name="import-cifra-club-url"
               autoFocus
               type="url"
               className={`${inputClass} mt-1.5`}

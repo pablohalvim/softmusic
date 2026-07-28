@@ -13,6 +13,7 @@ import {
   replaceChordInSheetByDisplay,
   sheetFromImportedSections,
   updateLineNotasAndLetra,
+  wrapCifraLine,
 } from "./cifra-layout.js";
 
 describe("cifra-layout", () => {
@@ -167,5 +168,55 @@ describe("cifra-layout", () => {
     });
     expect(normalized.sections[0]?.lines[0]?.placements).toEqual([]);
     expect(lineDisplayWidth("Pra onde eu posso ir?", undefined)).toBeGreaterThan(0);
+  });
+
+  it("does not wrap short lines", () => {
+    const lyrics = "Meu prazer é Te louvar";
+    const placements = [
+      { id: "p1", chord: "E", offset: 0 },
+      { id: "p2", chord: "A", offset: 4 },
+    ];
+    const segments = wrapCifraLine(lyrics, placements, 40);
+    expect(segments).toHaveLength(1);
+    expect(segments[0]?.lyrics).toBe(lyrics);
+    expect(segments[0]?.placements).toHaveLength(2);
+  });
+
+  it("wraps long lines at whitespace and keeps chords with local offsets", () => {
+    const lyrics = "Meu prazer é viver na casa de Deus onde tem paz";
+    const placements = [
+      { id: "p1", chord: "E", offset: 0 },
+      { id: "p2", chord: "F#m", offset: 12 },
+      { id: "p3", chord: "A", offset: 30 },
+    ];
+    const segments = wrapCifraLine(lyrics, placements, 20);
+    expect(segments.length).toBeGreaterThan(1);
+    expect(segments.map((segment) => segment.lyrics).join("")).toBe(lyrics);
+    for (const segment of segments) {
+      for (const placement of segment.placements) {
+        expect(placement.offset).toBeGreaterThanOrEqual(0);
+        expect(placement.offset).toBeLessThan(Math.max(segment.lyrics.length, 1) + 8);
+      }
+    }
+    const reconstructed = segments.flatMap((segment) =>
+      segment.placements.map((placement) => ({
+        id: placement.id,
+        offset: segment.startCol + placement.offset,
+      })),
+    );
+    expect(reconstructed.map((item) => item.offset).sort((a, b) => a - b)).toEqual(
+      placements.map((item) => item.offset),
+    );
+  });
+
+  it("avoids splitting a chord across wrap segments", () => {
+    const lyrics = "abcdefghij klmnopqrst";
+    const placements = [{ id: "p1", chord: "F#m", offset: 18 }];
+    const segments = wrapCifraLine(lyrics, placements, 20);
+    const host = segments.find((segment) => segment.placements.some((item) => item.id === "p1"));
+    expect(host).toBeTruthy();
+    const local = host!.placements.find((item) => item.id === "p1")!;
+    expect(host!.startCol + local.offset).toBe(18);
+    expect(segments.some((segment) => segment.startCol > 18 && segment.startCol < 21)).toBe(false);
   });
 });

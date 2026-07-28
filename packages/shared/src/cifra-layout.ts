@@ -197,6 +197,105 @@ export function buildChordRowChars(
   return row;
 }
 
+export interface WrappedCifraSegment {
+  /** Coluna global (na linha lógica) onde este segmento começa. */
+  startCol: number;
+  lyrics: string;
+  placements: ChordPlacement[];
+}
+
+export interface WrapCifraLineOptions {
+  /** Largura visual do acorde em colunas (ex.: após transposição). */
+  chordLength?: (chord: string) => number;
+}
+
+/**
+ * Fatia uma linha de cifra em segmentos que cabem em `maxCols` colunas,
+ * preservando o alinhamento acorde ↔ letra (offsets locais por segmento).
+ * Prefere quebrar em espaço/hífen e evita partir um acorde ao meio.
+ */
+export function wrapCifraLine(
+  lyrics: string,
+  placements: ChordPlacement[] | undefined,
+  maxCols: number,
+  options?: WrapCifraLineOptions,
+): WrappedCifraSegment[] {
+  const chordLength = options?.chordLength ?? ((chord: string) => Math.max(1, chord.length));
+  const safeMax = Math.max(4, Math.floor(maxCols));
+  const safePlacements = [...(placements ?? [])].sort((a, b) => a.offset - b.offset);
+
+  const placementEnd = safePlacements.reduce(
+    (max, placement) => Math.max(max, placement.offset + chordLength(placement.chord)),
+    0,
+  );
+  const totalWidth = Math.max(lyrics.length, placementEnd);
+
+  if (totalWidth <= safeMax) {
+    return [{ startCol: 0, lyrics, placements: safePlacements }];
+  }
+
+  const segments: WrappedCifraSegment[] = [];
+  let cursor = 0;
+
+  while (cursor < totalWidth) {
+    let idealEnd = Math.min(cursor + safeMax, totalWidth);
+
+    for (const placement of safePlacements) {
+      const start = placement.offset;
+      const end = start + chordLength(placement.chord);
+      if (start < idealEnd && end > idealEnd && start > cursor) {
+        idealEnd = start;
+      }
+    }
+
+    let breakAt = idealEnd;
+    if (idealEnd < totalWidth) {
+      const searchEnd = Math.min(idealEnd, lyrics.length);
+      let whitespaceBreak = -1;
+      for (let index = searchEnd - 1; index > cursor; index -= 1) {
+        const char = lyrics[index];
+        if (char === " " || char === "\t" || char === "-") {
+          whitespaceBreak = index + 1;
+          break;
+        }
+      }
+      if (whitespaceBreak > cursor) {
+        breakAt = whitespaceBreak;
+      }
+
+      for (const placement of safePlacements) {
+        const start = placement.offset;
+        const end = start + chordLength(placement.chord);
+        if (start < breakAt && end > breakAt && start > cursor) {
+          breakAt = start;
+        }
+      }
+
+      if (breakAt <= cursor) {
+        breakAt = Math.min(cursor + safeMax, totalWidth);
+      }
+    }
+
+    const segmentPlacements = safePlacements
+      .filter((placement) => placement.offset >= cursor && placement.offset < breakAt)
+      .map((placement) => ({
+        ...placement,
+        offset: placement.offset - cursor,
+      }));
+
+    segments.push({
+      startCol: cursor,
+      lyrics: cursor >= lyrics.length ? "" : lyrics.slice(cursor, Math.min(breakAt, lyrics.length)),
+      placements: segmentPlacements,
+    });
+
+    cursor = breakAt;
+    if (segments.length > 500) break;
+  }
+
+  return segments.length > 0 ? segments : [{ startCol: 0, lyrics, placements: safePlacements }];
+}
+
 /** Acordes únicos na ordem de aparição (valores já transpostos para exibição). */
 export function collectUniqueDisplayChords(
   sheet: EditableCifraSheet,

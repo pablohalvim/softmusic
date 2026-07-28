@@ -11,6 +11,7 @@ import { PwaUpdateToast } from "./components/PwaUpdateToast";
 import { AuthProvider, useAuth } from "./lib/auth-context";
 import { BandProvider, useBand } from "./lib/band-context";
 import { ConfirmProvider } from "./lib/confirm";
+import { PwaInstallProvider } from "./lib/pwa-install-context";
 import { ToastProvider } from "./lib/toast";
 import "./app.css";
 
@@ -99,37 +100,37 @@ function AppHeader() {
           </span>
         </Link>
 
-        {/* Desktop */}
-        <nav className="hidden items-center gap-3 text-sm md:flex md:gap-4">
-          {user ? (
-            <>
-              <BandSelector />
-              <NavLink to="/dashboard">Dashboard</NavLink>
-              <NavLink to="/agenda">Agenda</NavLink>
-              <NavLink to="/library">Biblioteca</NavLink>
-              <NavLink to="/bandas">Bandas</NavLink>
-              {showBilling ? <NavLink to="/faturas">Faturas</NavLink> : null}
-              <button type="button" onClick={() => void logout()} className="nav-link">
-                Sair
-              </button>
-            </>
-          ) : (
-            <>
-              <NavLink to="/login">Entrar</NavLink>
-              <Link to="/cadastro" className="sm-btn-primary px-3 py-1.5 text-xs">
-                Cadastro
-              </Link>
-            </>
-          )}
-          <InstallButton className="sm-btn-ghost px-3 py-1.5 text-xs" />
-        </nav>
-
-        {/* Mobile controls */}
-        <div className="flex items-center gap-2 md:hidden">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {user ? <BandSelector /> : null}
+
+          {/* Desktop */}
+          <nav className="hidden items-center gap-3 text-sm md:flex md:gap-4">
+            {user ? (
+              <>
+                <NavLink to="/dashboard">Dashboard</NavLink>
+                <NavLink to="/agenda">Agenda</NavLink>
+                <NavLink to="/library">Biblioteca</NavLink>
+                <NavLink to="/bandas">Bandas</NavLink>
+                {showBilling ? <NavLink to="/faturas">Faturas</NavLink> : null}
+                <button type="button" onClick={() => void logout()} className="nav-link">
+                  Sair
+                </button>
+              </>
+            ) : (
+              <>
+                <NavLink to="/login">Entrar</NavLink>
+                <Link to="/cadastro" className="sm-btn-primary px-3 py-1.5 text-xs">
+                  Cadastro
+                </Link>
+              </>
+            )}
+            <InstallButton className="sm-btn-ghost px-3 py-1.5 text-xs" />
+          </nav>
+
+          {/* Mobile menu toggle */}
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-200"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-200 md:hidden"
             aria-expanded={menuOpen}
             aria-controls={menuId}
             aria-label={menuOpen ? "Fechar menu" : "Abrir menu"}
@@ -261,7 +262,9 @@ export default function App() {
         <ConfirmProvider>
           <AuthProvider>
             <BandProvider>
-              <AppShell />
+              <PwaInstallProvider>
+                <AppShell />
+              </PwaInstallProvider>
             </BandProvider>
           </AuthProvider>
         </ConfirmProvider>

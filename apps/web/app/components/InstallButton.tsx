@@ -1,9 +1,9 @@
 import { useState } from "react";
 
-import { usePwaInstall, type UsePwaInstallOptions } from "../lib/use-pwa-install";
+import { usePwaInstallContext } from "../lib/pwa-install-context";
 import { modalOverlayClass, modalPanelClass } from "../lib/ui-classes";
 
-interface InstallButtonProps extends UsePwaInstallOptions {
+interface InstallButtonProps {
   className?: string;
   label?: string;
 }
@@ -76,8 +76,8 @@ function InstallHelpModal({ open, onClose }: { open: boolean; onClose: () => voi
   );
 }
 
-export function InstallButton({ className, label = "Instalar app", ...options }: InstallButtonProps) {
-  const { showShortcut, install } = usePwaInstall(options);
+export function InstallButton({ className, label = "Instalar app" }: InstallButtonProps) {
+  const { showShortcut, install } = usePwaInstallContext();
   const [helpOpen, setHelpOpen] = useState(false);
 
   if (!showShortcut) return null;

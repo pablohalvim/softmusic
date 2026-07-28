@@ -9,11 +9,12 @@ import {
   placementsToChordList,
   sheetFromImportedSections,
   updateLineNotasAndLetra,
+  wrapCifraLine,
   type ChordPlacement,
   type EditableCifraSheet,
 } from "@softmusic/shared/cifra-layout";
 import { transposeChord } from "@softmusic/shared/chords";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { CifraLineModal } from "./AddCifraLineModal";
@@ -92,8 +93,33 @@ export function ImportedCifraEditor({
   const [activeMenu, setActiveMenu] = useState<ActiveChordMenu | null>(null);
   const [lineModal, setLineModal] = useState<LineModalTarget | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [maxCols, setMaxCols] = useState(80);
+  const wrapMeasureRef = useRef<HTMLDivElement>(null);
 
   const selectedKey = activeMenu?.key ?? null;
+
+  useLayoutEffect(() => {
+    const el = wrapMeasureRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      const probe = document.createElement("span");
+      probe.style.cssText =
+        "position:absolute;visibility:hidden;pointer-events:none;font:inherit;white-space:pre";
+      probe.textContent = "0";
+      el.appendChild(probe);
+      const chWidth = probe.getBoundingClientRect().width || 9;
+      el.removeChild(probe);
+      const sideButtons = editable ? 56 : 8;
+      const cols = Math.floor((el.clientWidth - sideButtons) / chWidth);
+      setMaxCols(Math.max(12, cols));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [editable]);
 
   useEffect(() => {
     try {
@@ -502,7 +528,10 @@ export function ImportedCifraEditor({
   };
 
   return (
-    <div className="min-w-0 max-w-full space-y-10 font-mono text-[15px] leading-7">
+    <div
+      ref={wrapMeasureRef}
+      className="min-w-0 max-w-full space-y-10 font-mono text-[15px] leading-7"
+    >
       {renderChordMenu()}
       <CifraLineModal
         open={lineModal !== null}
@@ -571,12 +600,13 @@ export function ImportedCifraEditor({
 
           <div className="space-y-6">
             {section.lines.map((line) => {
-              const contentWidth = lineContentWidth(line.lyrics, line.placements);
-              const chordChars = buildChordRowChars(line.lyrics, line.placements, contentWidth);
               const maxOffset = lineMaxChordOffset(line.lyrics, line.placements, {
                 sectionLabel: section.label,
               });
               const hasLyrics = line.lyrics.trim().length > 0;
+              const segments = wrapCifraLine(line.lyrics, line.placements, maxCols, {
+                chordLength: (chord) => Math.max(1, toDisplayChord(chord).length),
+              });
 
               return (
                 <div key={line.id} className="group/line max-w-full">
@@ -608,106 +638,146 @@ export function ImportedCifraEditor({
                       </>
                     ) : null}
                   </div>
-                  <div className="flex max-w-full items-end gap-2">
-                    <div className="relative min-h-6 min-w-0 flex-1 overflow-x-auto overscroll-x-contain pr-3 whitespace-pre leading-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {line.placements.map((placement) => {
-                        const key = placementKey(line.id, placement.id);
-                        const isSelected = selectedKey === key;
-                        const displayChord = toDisplayChord(placement.chord);
 
-                        return (
-                          <span
-                            key={placement.id}
-                            className="absolute bottom-0"
-                            style={{ left: `${placement.offset}ch` }}
-                          >
-                            {editable ? (
+                  <div className="space-y-3">
+                    {segments.map((segment, segmentIndex) => {
+                      const contentWidth = lineContentWidth(segment.lyrics, segment.placements);
+                      const chordChars = buildChordRowChars(
+                        segment.lyrics,
+                        segment.placements,
+                        contentWidth,
+                      );
+                      const showSideButtons = editable && segmentIndex === 0;
+                      const segmentHasLyrics = segment.lyrics.length > 0;
+
+                      return (
+                        <div key={`${line.id}-seg-${segment.startCol}`} className="max-w-full">
+                          <div className="flex max-w-full items-end gap-2">
+                            <div className="relative min-h-6 min-w-0 flex-1 overflow-x-hidden pr-1 whitespace-pre leading-6">
+                              {segment.placements.map((placement) => {
+                                const key = placementKey(line.id, placement.id);
+                                const isSelected = selectedKey === key;
+                                const displayChord = toDisplayChord(placement.chord);
+                                const originalPlacement =
+                                  line.placements.find((item) => item.id === placement.id) ??
+                                  placement;
+
+                                return (
+                                  <span
+                                    key={placement.id}
+                                    className="absolute bottom-0"
+                                    style={{ left: `${placement.offset}ch` }}
+                                  >
+                                    {editable ? (
+                                      <button
+                                        type="button"
+                                        data-chord-trigger
+                                        className={`font-bold transition ${
+                                          isSelected
+                                            ? "rounded bg-green-500/15 px-0.5 text-green-300 ring-1 ring-green-500/40"
+                                            : "text-green-400 hover:text-green-300"
+                                        }`}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          openChordMenu(
+                                            event,
+                                            section.id,
+                                            line.id,
+                                            originalPlacement,
+                                            section.label,
+                                          );
+                                        }}
+                                        title="Clique para editar acorde"
+                                      >
+                                        {displayChord}
+                                      </button>
+                                    ) : (
+                                      <span className="chord-note">{displayChord}</span>
+                                    )}
+                                  </span>
+                                );
+                              })}
+
+                              <span className="invisible whitespace-pre select-none" aria-hidden>
+                                {chordChars.join("")}
+                              </span>
+                            </div>
+
+                            {showSideButtons ? (
                               <button
                                 type="button"
-                                data-chord-trigger
-                                className={`font-bold transition ${
-                                  isSelected
-                                    ? "rounded bg-green-500/15 px-0.5 text-green-300 ring-1 ring-green-500/40"
-                                    : "text-green-400 hover:text-green-300"
-                                }`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openChordMenu(event, section.id, line.id, placement, section.label);
-                                }}
-                                title="Clique para editar acorde"
+                                className="shrink-0 rounded-full border border-dashed border-slate-600 px-2.5 py-1 text-xs text-slate-400 transition hover:border-green-500/60 hover:bg-green-500/5 hover:text-green-400"
+                                onClick={() => addPlacementAtEnd(section.id, line.id, section.label)}
+                                title="Adicionar acorde no final da linha"
                               >
-                                {displayChord}
+                                + Nota
                               </button>
+                            ) : editable ? (
+                              <span className="inline-block w-[4.25rem] shrink-0" aria-hidden />
+                            ) : null}
+                          </div>
+
+                          <div className="flex max-w-full items-start gap-2">
+                            {segmentHasLyrics ? (
+                              <p
+                                className={`min-w-0 flex-1 overflow-x-hidden pr-1 whitespace-pre text-left leading-7 text-slate-200 ${
+                                  editable ? "cursor-text" : "cursor-default"
+                                }`}
+                                onClick={
+                                  editable
+                                    ? (event) => {
+                                        const target = event.currentTarget;
+                                        const rect = target.getBoundingClientRect();
+                                        const style = window.getComputedStyle(target);
+                                        const charWidth =
+                                          Number.parseFloat(style.fontSize) * 0.6 || 9;
+                                        const localOffset = Math.max(
+                                          0,
+                                          Math.round((event.clientX - rect.left) / charWidth),
+                                        );
+                                        const offset = Math.min(
+                                          maxOffset,
+                                          segment.startCol + localOffset,
+                                        );
+                                        addPlacementAt(section.id, line.id, offset);
+                                      }
+                                    : undefined
+                                }
+                                title={
+                                  editable
+                                    ? "Clique na letra para posicionar acorde · use o lápis para editar a linha"
+                                    : undefined
+                                }
+                              >
+                                {segment.lyrics}
+                              </p>
+                            ) : segment.placements.length > 0 ? (
+                              <p className="flex-1 text-xs text-slate-500">
+                                {hasLyrics ? "\u00a0" : "Somente acordes"}
+                              </p>
                             ) : (
-                              <span className="chord-note">{displayChord}</span>
+                              <p className="flex-1 text-xs italic text-slate-600">
+                                {hasLyrics ? "\u00a0" : "Linha vazia"}
+                              </p>
                             )}
-                          </span>
-                        );
-                      })}
 
-                      <span className="invisible whitespace-pre select-none" aria-hidden>
-                        {chordChars.join("")}
-                      </span>
-                    </div>
-
-                    {editable ? (
-                      <button
-                        type="button"
-                        className="shrink-0 rounded-full border border-dashed border-slate-600 px-2.5 py-1 text-xs text-slate-400 transition hover:border-green-500/60 hover:bg-green-500/5 hover:text-green-400"
-                        onClick={() => addPlacementAtEnd(section.id, line.id, section.label)}
-                        title="Adicionar acorde no final da linha"
-                      >
-                        + Nota
-                      </button>
-                    ) : null}
-                  </div>
-
-                  <div className="flex max-w-full items-start gap-2">
-                    {hasLyrics ? (
-                      <p
-                        className={`min-w-0 flex-1 overflow-x-auto overscroll-x-contain pr-1 whitespace-pre text-left leading-7 text-slate-200 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
-                          editable ? "cursor-text" : "cursor-default"
-                        }`}
-                        onClick={
-                          editable
-                            ? (event) => {
-                                const target = event.currentTarget;
-                                const rect = target.getBoundingClientRect();
-                                const style = window.getComputedStyle(target);
-                                const charWidth = Number.parseFloat(style.fontSize) * 0.6 || 9;
-                                const offset = Math.min(
-                                  maxOffset,
-                                  Math.max(0, Math.round((event.clientX - rect.left) / charWidth)),
-                                );
-                                addPlacementAt(section.id, line.id, offset);
-                              }
-                            : undefined
-                        }
-                        title={
-                          editable
-                            ? "Clique na letra para posicionar acorde · use o lápis para editar a linha"
-                            : undefined
-                        }
-                      >
-                        {line.lyrics}
-                      </p>
-                    ) : line.placements.length > 0 ? (
-                      <p className="flex-1 text-xs text-slate-500">Somente acordes</p>
-                    ) : (
-                      <p className="flex-1 text-xs italic text-slate-600">Linha vazia</p>
-                    )}
-
-                    {editable ? (
-                      <button
-                        type="button"
-                        className="mt-0.5 shrink-0 rounded-lg border border-slate-600 bg-slate-900 p-1.5 text-slate-400 transition hover:border-green-500/60 hover:bg-green-950/30 hover:text-green-300"
-                        onClick={() => openEditLineModal(section.id, line)}
-                        title="Editar letra e notas desta linha"
-                        aria-label="Editar linha"
-                      >
-                        {pencilIcon}
-                      </button>
-                    ) : null}
+                            {showSideButtons ? (
+                              <button
+                                type="button"
+                                className="mt-0.5 shrink-0 rounded-lg border border-slate-600 bg-slate-900 p-1.5 text-slate-400 transition hover:border-green-500/60 hover:bg-green-950/30 hover:text-green-300"
+                                onClick={() => openEditLineModal(section.id, line)}
+                                title="Editar letra e notas desta linha"
+                                aria-label="Editar linha"
+                              >
+                                {pencilIcon}
+                              </button>
+                            ) : editable ? (
+                              <span className="mt-0.5 inline-block h-8 w-8 shrink-0" aria-hidden />
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
