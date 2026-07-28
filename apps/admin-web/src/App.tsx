@@ -6,6 +6,7 @@ import {
   adminLogin,
   clearAdminToken,
   createAdmin,
+  deleteBand,
   fetchAdminBands,
   fetchAdminInvoices,
   fetchAdminMe,
@@ -632,6 +633,27 @@ export function App() {
                       </button>
                       <button type="button" onClick={() => void suspendBand(String(band.id)).then(loadData)}>
                         Suspender
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-action"
+                        onClick={() => {
+                          const name = String(band.name);
+                          if (
+                            !window.confirm(
+                              `Remover a banda "${name}"?\n\nIsso cancela os boletos abertos e apaga os dados da banda. Esta ação não pode ser desfeita.`,
+                            )
+                          ) {
+                            return;
+                          }
+                          void deleteBand(String(band.id))
+                            .then(loadData)
+                            .catch((err: unknown) => {
+                              setStatus(err instanceof Error ? err.message : "Falha ao remover banda");
+                            });
+                        }}
+                      >
+                        Remover
                       </button>
                     </>
                   ) : null}

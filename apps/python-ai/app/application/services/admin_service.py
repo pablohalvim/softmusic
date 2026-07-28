@@ -292,6 +292,75 @@ class AdminService:
         band.status = BandStatus.SUSPENDED.value
         await self.session.commit()
 
+    async def delete_band(self, band_id: str) -> None:
+        from sqlalchemy import delete, update
+
+        from app.application.services.billing_service import BillingService
+        from app.infrastructure.database.models import (
+            BandInvite,
+            BandMember,
+            BandMemberRole,
+            BandRole,
+            BandSavedAddress,
+            BandSchedule,
+            BandScheduleMember,
+            BandScheduleMemberRole,
+            BandScheduleOccurrence,
+            BandScheduleSong,
+            BandSong,
+            CifraVariation,
+        )
+
+        result = await self.session.execute(select(Band).where(Band.id == band_id))
+        if result.scalar_one_or_none() is None:
+            raise ValueError("Banda não encontrada")
+
+        await BillingService(self.session).purge_band_charges(band_id)
+
+        schedule_ids = list(
+            (
+                await self.session.execute(select(BandSchedule.id).where(BandSchedule.band_id == band_id))
+            )
+            .scalars()
+            .all()
+        )
+        if schedule_ids:
+            await self.session.execute(
+                delete(BandScheduleMemberRole).where(BandScheduleMemberRole.schedule_id.in_(schedule_ids))
+            )
+            await self.session.execute(
+                delete(BandScheduleMember).where(BandScheduleMember.schedule_id.in_(schedule_ids))
+            )
+            await self.session.execute(
+                delete(BandScheduleSong).where(BandScheduleSong.schedule_id.in_(schedule_ids))
+            )
+            await self.session.execute(
+                delete(BandScheduleOccurrence).where(BandScheduleOccurrence.schedule_id.in_(schedule_ids))
+            )
+            await self.session.execute(delete(BandSchedule).where(BandSchedule.id.in_(schedule_ids)))
+
+        member_ids = list(
+            (await self.session.execute(select(BandMember.id).where(BandMember.band_id == band_id)))
+            .scalars()
+            .all()
+        )
+        if member_ids:
+            await self.session.execute(delete(BandMemberRole).where(BandMemberRole.member_id.in_(member_ids)))
+        await self.session.execute(delete(BandMember).where(BandMember.band_id == band_id))
+        await self.session.execute(delete(BandRole).where(BandRole.band_id == band_id))
+        await self.session.execute(delete(BandInvite).where(BandInvite.band_id == band_id))
+        await self.session.execute(delete(BandSavedAddress).where(BandSavedAddress.band_id == band_id))
+        await self.session.execute(delete(BandSong).where(BandSong.band_id == band_id))
+        await self.session.execute(
+            update(CifraVariation).where(CifraVariation.band_id == band_id).values(band_id=None)
+        )
+
+        band_result = await self.session.execute(select(Band).where(Band.id == band_id))
+        band = band_result.scalar_one_or_none()
+        if band is not None:
+            await self.session.delete(band)
+        await self.session.commit()
+
     async def register_sale(self, admin: AdminUser, payload: dict[str, Any]) -> dict[str, Any]:
         from app.application.services.auth_service import AuthService
         from app.application.services.band_service import BandService

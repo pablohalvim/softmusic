@@ -56,6 +56,7 @@ export default [
   route("admin/dashboard/stats", "routes/admin.dashboard.stats.tsx"),
   route("admin/users", "routes/admin.users.tsx"),
   route("admin/bands", "routes/admin.bands.tsx"),
+  route("admin/bands/:bandId", "routes/admin.bands.$bandId.tsx"),
   route("admin/bands/:bandId/exempt", "routes/admin.bands.$bandId.exempt.tsx"),
   route("admin/bands/:bandId/suspend", "routes/admin.bands.$bandId.suspend.tsx"),
   route("admin/songs/block", "routes/admin.songs.block.tsx"),

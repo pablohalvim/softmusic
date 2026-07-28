@@ -225,6 +225,11 @@ export async function suspendBand(bandId: string) {
   if (!response.ok) await parseAdminError(response, "Falha ao suspender banda");
 }
 
+export async function deleteBand(bandId: string) {
+  const response = await adminFetch(`/admin/bands/${bandId}`, { method: "DELETE" });
+  if (!response.ok) await parseAdminError(response, "Falha ao remover banda");
+}
+
 export async function suspendOverdueAccounts() {
   const response = await adminFetch("/admin/billing/suspend-overdue", { method: "POST" });
   if (!response.ok) await parseAdminError(response, "Falha ao suspender contas em atraso");

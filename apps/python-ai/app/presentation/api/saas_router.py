@@ -906,6 +906,20 @@ async def admin_suspend(
     return {"status": "ok"}
 
 
+@router.delete("/admin/bands/{band_id}")
+async def admin_delete_band(
+    band_id: str,
+    admin=Depends(require_full_admin),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    try:
+        await AdminService(session).delete_band(band_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    await AdminService(session).audit(admin.id, "delete", "band", band_id, None)
+    return {"status": "ok"}
+
+
 @router.post("/admin/songs/block")
 async def admin_block_song(
     body: BlockSongBody,

@@ -210,6 +210,16 @@ button:hover {
   padding: 0.4rem 0.65rem;
 }
 
+.actions button.danger-action {
+  border-color: #c44;
+  color: #ffb4b4;
+  background: rgba(180, 40, 40, 0.25);
+}
+
+.actions button.danger-action:hover {
+  background: rgba(180, 40, 40, 0.45);
+}
+
 .error {
   color: var(--accent-bright);
 }

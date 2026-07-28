@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.email_service import EmailService
@@ -23,6 +23,7 @@ from app.infrastructure.database.models import (
     BandMember,
     BandStatus,
     BillingAccount,
+    BillingSubscriptionItem,
     Invoice,
     InvoiceKind,
     InvoiceLineItem,
@@ -476,6 +477,77 @@ class BillingService:
                 invoice.status = InvoiceStatus.CANCELLED.value
                 invoice.asaas_payment_id = None
                 invoice.invoice_url = None
+        await self.session.commit()
+
+    async def purge_band_charges(self, band_id: str) -> None:
+        """Cancela boletos abertos da banda e remove todos os line items dela."""
+        band = await self._get_band(band_id)
+        if band is None:
+            raise ValueError("Banda não encontrada")
+
+        result = await self.session.execute(
+            select(InvoiceLineItem).where(InvoiceLineItem.band_id == band_id)
+        )
+        lines = list(result.scalars().all())
+        invoice_ids = {line.invoice_id for line in lines}
+        asaas = await self._asaas_client()
+
+        invoices_by_id: dict[str, Invoice] = {}
+        if invoice_ids:
+            inv_result = await self.session.execute(select(Invoice).where(Invoice.id.in_(invoice_ids)))
+            invoices_by_id = {inv.id: inv for inv in inv_result.scalars().all()}
+
+        for invoice in invoices_by_id.values():
+            if invoice.status not in OPEN_STATUSES:
+                continue
+            band_lines = [line for line in lines if line.invoice_id == invoice.id]
+            if not band_lines:
+                continue
+            removed = sum(line.amount_cents for line in band_lines)
+            invoice.total_amount_cents = max(0, invoice.total_amount_cents - removed)
+            remaining_other = await self.session.execute(
+                select(func.count())
+                .select_from(InvoiceLineItem)
+                .where(
+                    InvoiceLineItem.invoice_id == invoice.id,
+                    InvoiceLineItem.band_id != band_id,
+                )
+            )
+            if int(remaining_other.scalar_one()) == 0 or invoice.total_amount_cents == 0:
+                if invoice.asaas_payment_id:
+                    try:
+                        await asaas.delete_payment(invoice.asaas_payment_id)
+                    except Exception as exc:
+                        logger.warning("asaas_cancel_failed", error=str(exc))
+                invoice.status = InvoiceStatus.CANCELLED.value
+                invoice.asaas_payment_id = None
+                invoice.invoice_url = None
+                invoice.pix_qr_payload = None
+
+        await self.session.execute(delete(InvoiceLineItem).where(InvoiceLineItem.band_id == band_id))
+        await self.session.execute(
+            delete(BillingSubscriptionItem).where(BillingSubscriptionItem.band_id == band_id)
+        )
+
+        # Remove faturas que ficaram sem itens após limpar a banda.
+        for invoice_id in invoice_ids:
+            invoice = invoices_by_id.get(invoice_id)
+            if invoice is None:
+                continue
+            remaining = await self.session.execute(
+                select(func.count())
+                .select_from(InvoiceLineItem)
+                .where(InvoiceLineItem.invoice_id == invoice_id)
+            )
+            if int(remaining.scalar_one()) > 0:
+                continue
+            if invoice.asaas_payment_id and invoice.status in OPEN_STATUSES:
+                try:
+                    await asaas.delete_payment(invoice.asaas_payment_id)
+                except Exception as exc:
+                    logger.warning("asaas_cancel_failed", error=str(exc))
+            await self.session.delete(invoice)
+
         await self.session.commit()
 
     async def handle_payment_confirmed(self, payment: dict[str, Any]) -> None:
