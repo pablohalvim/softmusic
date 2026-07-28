@@ -227,7 +227,6 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
 
   const effectiveKey = keyOverride?.key ?? chordData.key;
   const effectiveMode = keyOverride?.mode ?? chordData.mode;
-  const importedKeyLabel = chordData.key.replace(/m$/i, "");
   const showImportedCifra = Boolean(importedSheet || forcedImportedSheet || importedSheetLive);
 
   useEffect(() => {
@@ -634,21 +633,6 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
     }
   };
 
-  const handleClearKeyOverride = () => {
-    setKeyOverride(null);
-    clearCifraKeyOverride(chordData.song_id);
-    setShowKeyPicker(false);
-    if (activeVariationId) {
-      void persistActiveVariation({ keyOverride: null }).catch((error) => {
-        toast.warn(
-          error instanceof Error
-            ? error.message
-            : "Não foi possível atualizar a variação selecionada.",
-        );
-      });
-    }
-  };
-
   const handleGlobalChordReplace = (fromDisplay: string, toDisplay: string) => {
     const trimmedTo = toDisplay.trim();
     if (!trimmedTo || fromDisplay === trimmedTo) return;
@@ -1008,29 +992,13 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                   {effectiveMode === "minor" ? "menor" : "maior"}
                 </span>
                 {showImportedCifra ? (
-                  <>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-green-800/60 bg-green-950/30 px-2.5 py-1 text-xs text-green-200 transition hover:border-green-500/50 hover:bg-green-950/50"
-                      onClick={() => (showKeyPicker ? setShowKeyPicker(false) : handleOpenKeyPicker())}
-                    >
-                      {showKeyPicker ? "Fechar" : "Corrigir TOM"}
-                    </button>
-                    {keyOverride ? (
-                      <>
-                        <span className="text-xs text-slate-500">
-                          importado: {importedKeyLabel} {chordData.mode === "minor" ? "menor" : "maior"}
-                        </span>
-                        <button
-                          type="button"
-                          className="text-xs text-slate-500 underline decoration-slate-700 underline-offset-2 hover:text-slate-300"
-                          onClick={handleClearKeyOverride}
-                        >
-                          usar importado
-                        </button>
-                      </>
-                    ) : null}
-                  </>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-green-800/60 bg-green-950/30 px-2.5 py-1 text-xs text-green-200 transition hover:border-green-500/50 hover:bg-green-950/50"
+                    onClick={() => (showKeyPicker ? setShowKeyPicker(false) : handleOpenKeyPicker())}
+                  >
+                    {showKeyPicker ? "Fechar" : "Corrigir TOM"}
+                  </button>
                 ) : null}
               </p>
 
