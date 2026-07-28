@@ -22,7 +22,8 @@ export const cifraSelectClass =
 export const modalPanelClass =
   "w-full rounded-2xl border border-white/10 bg-[#0a1610]/95 p-5 shadow-2xl backdrop-blur-xl";
 
-export const modalOverlayClass = "fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm";
+export const modalOverlayClass =
+  "fixed inset-0 z-[80] flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center";
 
 export const alertInfoClass = "glass-panel border-green-500/20 text-green-200";
 export const alertWarnClass = "glass-panel border-amber-500/30 text-amber-100";

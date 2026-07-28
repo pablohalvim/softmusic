@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { updateSongMetadata, type SongSummary } from "../../lib/api";
 import { useToast } from "../../lib/toast";
@@ -8,7 +9,6 @@ import {
   btnPrimary,
   inputClass,
   labelClass,
-  modalOverlayClass,
   modalPanelClass,
 } from "../../lib/ui-classes";
 
@@ -38,7 +38,12 @@ export function EditSongModal({ open, song, onClose }: EditSongModalProps) {
       if (event.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [open, onClose]);
 
   const mutation = useMutation({
@@ -65,7 +70,7 @@ export function EditSongModal({ open, song, onClose }: EditSongModalProps) {
     },
   });
 
-  if (!open || !song) return null;
+  if (!open || !song || typeof document === "undefined") return null;
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -73,60 +78,74 @@ export function EditSongModal({ open, song, onClose }: EditSongModalProps) {
     mutation.mutate();
   };
 
-  return (
-    <div className={modalOverlayClass}>
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !mutation.isPending) onClose();
+      }}
+    >
       <div
-        className={`${modalPanelClass} max-w-lg`}
+        className={`${modalPanelClass} flex max-h-[min(90vh,36rem)] w-full max-w-lg flex-col overflow-hidden p-0`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-song-title"
       >
-        <h2 id="edit-song-title" className="text-lg font-semibold text-slate-100">
-          Editar música
-        </h2>
-        <p className="mt-1 text-sm text-slate-400">Altere o nome e o artista desta música.</p>
+        <div className="shrink-0 border-b border-white/[0.06] px-5 py-4">
+          <h2 id="edit-song-title" className="text-lg font-semibold text-slate-100">
+            Editar música
+          </h2>
+          <p className="mt-1 text-sm text-slate-400">Altere o nome e o artista desta música.</p>
+        </div>
 
-        <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-          <label htmlFor="edit-song-name" className={labelClass}>
-            <span>Nome</span>
-            <input
-              id="edit-song-name"
-              name="title"
-              required
-              maxLength={200}
-              className={inputClass}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Ex.: Grande É o Senhor"
-              autoFocus
-            />
-          </label>
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <label htmlFor="edit-song-name" className={labelClass}>
+              <span>Nome</span>
+              <input
+                id="edit-song-name"
+                name="title"
+                required
+                maxLength={200}
+                className={inputClass}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Ex.: Grande É o Senhor"
+                autoFocus
+              />
+            </label>
 
-          <label htmlFor="edit-song-artist" className={labelClass}>
-            <span>Artista</span>
-            <input
-              id="edit-song-artist"
-              name="artist"
-              maxLength={200}
-              className={inputClass}
-              value={artist}
-              onChange={(event) => setArtist(event.target.value)}
-              placeholder="Ex.: Fernandinho"
-            />
-          </label>
+            <label htmlFor="edit-song-artist" className={labelClass}>
+              <span>Artista</span>
+              <input
+                id="edit-song-artist"
+                name="artist"
+                maxLength={200}
+                className={inputClass}
+                value={artist}
+                onChange={(event) => setArtist(event.target.value)}
+                placeholder="Ex.: Fernandinho"
+              />
+            </label>
 
-          {error ? <p className="text-sm text-red-400">{error}</p> : null}
+            {error ? <p className="text-sm text-red-400">{error}</p> : null}
+          </div>
 
-          <div className="flex flex-wrap justify-end gap-2 pt-2">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-white/[0.06] px-5 py-4">
             <button type="button" className={btnGhost} onClick={onClose} disabled={mutation.isPending}>
               Cancelar
             </button>
-            <button type="submit" className={btnPrimary} disabled={mutation.isPending}>
+            <button
+              type="submit"
+              className={`${btnPrimary} disabled:opacity-50`}
+              disabled={mutation.isPending || !title.trim()}
+            >
               {mutation.isPending ? "Salvando..." : "Salvar"}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
