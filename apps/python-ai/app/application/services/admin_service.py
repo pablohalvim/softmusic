@@ -236,10 +236,10 @@ class AdminService:
         return items
 
     async def _band_is_delinquent(self, band: Band) -> bool:
+        # pending_payment = aguardando 1ª fatura (ainda no prazo) — NÃO é inadimplência.
         if band.status in {
             BandStatus.PAST_DUE.value,
             BandStatus.SUSPENDED.value,
-            BandStatus.PENDING_PAYMENT.value,
         }:
             return True
         overdue = await self.session.execute(
