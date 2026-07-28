@@ -26,7 +26,7 @@ docker_build_retry() {
       return 0
     fi
     if echo "$output" | grep -qiE \
-      'lease does not exist|failed to prepare snapshot|failed to write compressed diff|failed to create diff tar stream|mount callback failed|failed to apply diff|failed to Lchown|Lchown .* no such file'; then
+      'lease does not exist|failed to prepare snapshot|failed to write compressed diff|failed to create diff tar stream|mount callback failed|failed to apply diff|failed to Lchown|Lchown .* no such file|content digest sha256:|NotFound: content digest'; then
       echo ">> Docker layer/export error (tentativa ${attempt}/${max}) — limpando cache..."
       docker builder prune -af 2>/dev/null || true
       docker image prune -af 2>/dev/null || true

@@ -1,5 +1,5 @@
 /** Versão do produto SoftMusic (semver). Patch sobe +1 a cada commit. */
-export const APP_VERSION = "1.0.11";
+export const APP_VERSION = "1.0.12";
 
 export const APP_COPYRIGHT_YEAR = 2026;
 

@@ -23,15 +23,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ffmpeg -version >/dev/null \
     && ffprobe -version >/dev/null
 
-# entrypoint antes do pip: evita COPY depois da layer enorme do site-packages
-# (legacy builder/containerd costuma falhar no export dessa layer).
+# Metadata + entrypoint ANTES do pip: no legacy builder + containerd, criar
+# EXPOSE/ENTRYPOINT depois da layer enorme do site-packages falha com
+# "NotFound: content digest sha256:...: not found".
 COPY apps/python-ai /app/apps/python-ai
 COPY infra/docker/python-ai/entrypoint.sh /entrypoint.sh
 WORKDIR /app/apps/python-ai
-RUN pip install --no-cache-dir . \
-    && chmod +x /entrypoint.sh \
-    && mkdir -p uploads models
-
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# Última layer de filesystem — não adicionar instruções depois deste RUN.
+RUN pip install --no-cache-dir . \
+    && chmod +x /entrypoint.sh \
+    && mkdir -p uploads models
