@@ -179,7 +179,7 @@ def schedule_occurrence_email_html(
       <p style="margin:0 0 18px;">
         <a href="{escape(maps_url)}" target="_blank" rel="noopener noreferrer"
            style="font-size:14px;font-weight:600;color:{BRAND_BRIGHT};text-decoration:underline;">
-          Abrir rota no Google Maps
+          Abrir rota no mapa
         </a>
       </p>
 
@@ -340,7 +340,7 @@ def schedule_occurrence_email_text(
         [
             "",
             "Abra o anexo .ics para sincronizar com o Google Agenda.",
-            f"Rota no Google Maps: {maps_url}",
+            f"Abrir rota no mapa: {maps_url}",
         ]
     )
     return "\n".join(lines)

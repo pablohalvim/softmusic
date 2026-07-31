@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { authFetch } from "../../lib/api";
+import { resolveAuthenticatedMediaUrl } from "../../lib/api";
 import { panelClass } from "../../lib/ui-classes";
 import { stemLabel, type StemsManifest } from "../audio/stem-labels";
 
@@ -85,18 +85,14 @@ function StemDownloadButton({ path, downloadName }: { path: string; downloadName
     setBusy(true);
     setError(false);
     try {
-      const response = await authFetch(path);
-      if (!response.ok) {
-        setError(true);
-        return;
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+      const resolved = await resolveAuthenticatedMediaUrl(path);
       const anchor = document.createElement("a");
-      anchor.href = url;
+      anchor.href = resolved.url;
       anchor.download = downloadName;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
       anchor.click();
-      URL.revokeObjectURL(url);
+      if (resolved.isObjectUrl) URL.revokeObjectURL(resolved.url);
     } catch {
       setError(true);
     } finally {

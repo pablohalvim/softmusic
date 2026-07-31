@@ -33,6 +33,10 @@ export function corsHeaders(request?: Request): Headers {
     "Authorization, Content-Type, Accept, X-Band-Id, asaas-access-token",
   );
   headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  headers.set(
+    "Access-Control-Expose-Headers",
+    "Location, Content-Type, Content-Length, Content-Disposition, Accept-Ranges, Content-Range, ETag, Last-Modified",
+  );
   headers.set("Access-Control-Max-Age", "86400");
   return headers;
 }

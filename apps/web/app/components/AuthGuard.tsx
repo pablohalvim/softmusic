@@ -4,9 +4,13 @@ import { useAuth } from "../lib/auth-context";
 import { useBand } from "../lib/band-context";
 
 /** Rotas acessíveis sem login */
-const PUBLIC_PATHS = new Set(["/login", "/cadastro", "/convite"]);
+const PUBLIC_PATHS = new Set(["/login", "/cadastro", "/convite", "/go/maps", "/esqueci-senha"]);
 /** Rotas só para visitante — logado é redirecionado para a Home */
 const GUEST_ONLY_PATHS = new Set(["/login", "/cadastro"]);
+
+function isPublicPath(path: string): boolean {
+  return PUBLIC_PATHS.has(path) || path.startsWith("/go/");
+}
 
 function isAllowedWithoutBand(path: string): boolean {
   return (
@@ -15,7 +19,9 @@ function isAllowedWithoutBand(path: string): boolean {
     path === "/bandas" ||
     path === "/convite" ||
     path === "/faturas" ||
+    path === "/esqueci-senha" ||
     path.startsWith("/bandas/") ||
+    path.startsWith("/go/") ||
     path.startsWith("/login") ||
     path.startsWith("/cadastro")
   );
@@ -26,12 +32,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { bands, loading: bandLoading } = useBand();
   const location = useLocation();
   const path = location.pathname;
+  const publicPath = isPublicPath(path);
 
-  if (authLoading || (user && bandLoading)) {
+  // Rotas públicas (ex.: /go/maps do e-mail) não devem esperar auth/bandas.
+  if (!publicPath && (authLoading || (user && bandLoading))) {
     return <p className="text-slate-400">Carregando...</p>;
   }
 
-  if (!user && !PUBLIC_PATHS.has(path)) {
+  if (!user && !publicPath) {
     return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   }
 

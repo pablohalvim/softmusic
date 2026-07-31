@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { authFetch, fetchAuthenticatedBlob } from "../lib/api";
+import { resolveAuthenticatedMediaUrl } from "../lib/api";
 
 interface AuthenticatedAudioProps {
   path: string;
@@ -20,17 +20,27 @@ export function AuthenticatedAudio({
 
   useEffect(() => {
     let objectUrl: string | null = null;
-    void fetchAuthenticatedBlob(path)
-      .then((url) => {
-        objectUrl = url;
-        setAudioUrl(url);
+    let cancelled = false;
+    setAudioUrl(null);
+    setError(false);
+    void resolveAuthenticatedMediaUrl(path)
+      .then((resolved) => {
+        if (cancelled) {
+          if (resolved.isObjectUrl) URL.revokeObjectURL(resolved.url);
+          return;
+        }
+        if (resolved.isObjectUrl) objectUrl = resolved.url;
+        setAudioUrl(resolved.url);
         setError(false);
       })
       .catch(() => {
-        setError(true);
-        setAudioUrl(null);
+        if (!cancelled) {
+          setError(true);
+          setAudioUrl(null);
+        }
       });
     return () => {
+      cancelled = true;
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }
@@ -38,17 +48,14 @@ export function AuthenticatedAudio({
   }, [path]);
 
   async function handleDownload() {
-    const response = await authFetch(path);
-    if (!response.ok) {
-      return;
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
+    const resolved = await resolveAuthenticatedMediaUrl(path);
     const anchor = document.createElement("a");
-    anchor.href = url;
+    anchor.href = resolved.url;
     anchor.download = downloadName ?? "audio.wav";
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
     anchor.click();
-    URL.revokeObjectURL(url);
+    if (resolved.isObjectUrl) URL.revokeObjectURL(resolved.url);
   }
 
   if (error) {

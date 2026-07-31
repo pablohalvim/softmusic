@@ -6,6 +6,7 @@ export default [
   route("esqueci-senha", "routes/esqueci-senha.tsx"),
   route("cadastro", "routes/cadastro.tsx"),
   route("convite", "routes/convite.tsx"),
+  route("go/maps", "routes/go.maps.tsx"),
   route("bandas", "routes/bandas.tsx"),
   route("bandas/:bandId", "routes/bandas.$bandId.tsx"),
   route("bandas/:bandId/agenda/nova", "routes/bandas.$bandId.agenda.nova.tsx"),

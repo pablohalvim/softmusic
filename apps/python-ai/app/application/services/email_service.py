@@ -282,7 +282,9 @@ class EmailService:
             details_parts.extend(f"- {line}" for line in repertoire)
         details_parts.append("SoftMusic")
         description = "\n".join(details_parts)
-        maps_url = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
+        # Link no domínio SoftMusic (evita mismatch com domínio de envio / spam filters).
+        origin = (self.settings.web_origin or "").strip().rstrip("/")
+        maps_url = f"{origin}/go/maps?lat={lat}&lng={lng}"
 
         ics_content = build_ics(
             uid=calendar_uid,

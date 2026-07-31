@@ -1,6 +1,6 @@
 ---
 description: Rebuild e restart dos containers Docker locais após correções
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Rebuild Docker após correções

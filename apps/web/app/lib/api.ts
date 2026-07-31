@@ -176,13 +176,47 @@ export async function authFetch(path: string, init: RequestInit = {}): Promise<R
   return response;
 }
 
-export async function fetchAuthenticatedBlob(path: string): Promise<string> {
-  const response = await authFetch(path);
+export interface ResolvedMediaUrl {
+  url: string;
+  /** true quando a URL é blob: — precisa de revokeObjectURL no cleanup */
+  isObjectUrl: boolean;
+}
+
+/**
+ * Resolve URL de áudio autenticado.
+ * Com R2 o BFF devolve 302 para URL pré-assinada — usamos essa Location no <audio>
+ * (sem baixar o WAV inteiro via fetch/blob, o que travava o player).
+ * Em modo local (200) cria object URL a partir do body.
+ */
+export async function resolveAuthenticatedMediaUrl(path: string): Promise<ResolvedMediaUrl> {
+  const response = await authFetch(path, { redirect: "manual" });
+
+  if (response.type === "opaqueredirect") {
+    throw new Error("Não foi possível obter a URL do áudio (redirect opaco)");
+  }
+
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get("Location");
+    if (!location) {
+      throw new Error("Redirect de áudio sem Location");
+    }
+    // Absolute (R2) ou relative ao BFF.
+    const url = new URL(location, `${apiUrl}/`).href;
+    return { url, isObjectUrl: false };
+  }
+
   if (!response.ok) {
     throw new Error("Não foi possível carregar o áudio");
   }
+
   const blob = await response.blob();
-  return URL.createObjectURL(blob);
+  return { url: URL.createObjectURL(blob), isObjectUrl: true };
+}
+
+/** @deprecated Prefira resolveAuthenticatedMediaUrl — mantido para compatibilidade. */
+export async function fetchAuthenticatedBlob(path: string): Promise<string> {
+  const resolved = await resolveAuthenticatedMediaUrl(path);
+  return resolved.url;
 }
 
 export function getSongAudioUrl(songId: string): string {

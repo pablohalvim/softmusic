@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { authFetch, fetchAuthenticatedBlob } from "../../lib/api";
+import { authFetch, resolveAuthenticatedMediaUrl } from "../../lib/api";
 import {
   btnGhost,
   panelClass,
@@ -93,13 +93,22 @@ export function SongAudioPlayer({
 
   useEffect(() => {
     let objectUrl: string | null = null;
-    void fetchAuthenticatedBlob(`/songs/${songId}/audio`)
-      .then((url) => {
-        objectUrl = url;
-        setAudioUrl(url);
+    let cancelled = false;
+    setAudioUrl(null);
+    void resolveAuthenticatedMediaUrl(`/songs/${songId}/audio`)
+      .then((resolved) => {
+        if (cancelled) {
+          if (resolved.isObjectUrl) URL.revokeObjectURL(resolved.url);
+          return;
+        }
+        if (resolved.isObjectUrl) objectUrl = resolved.url;
+        setAudioUrl(resolved.url);
       })
-      .catch(() => setAudioUrl(null));
+      .catch(() => {
+        if (!cancelled) setAudioUrl(null);
+      });
     return () => {
+      cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [songId]);
@@ -135,23 +144,23 @@ export function SongAudioPlayer({
     setEnabledStems(new Set(names));
 
     let cancelled = false;
-    const created: string[] = [];
+    const objectUrls: string[] = [];
     setStemsLoading(true);
     setStemsError(null);
     setStemUrls({});
 
     void Promise.all(
       names.map(async (name) => {
-        const url = await fetchAuthenticatedBlob(
+        const resolved = await resolveAuthenticatedMediaUrl(
           `/songs/${songId}/stems/${encodeURIComponent(name)}/audio`,
         );
-        created.push(url);
-        return [name, url] as const;
+        if (resolved.isObjectUrl) objectUrls.push(resolved.url);
+        return [name, resolved.url] as const;
       }),
     )
       .then((entries) => {
         if (cancelled) {
-          for (const url of created) URL.revokeObjectURL(url);
+          for (const url of objectUrls) URL.revokeObjectURL(url);
           return;
         }
         setStemUrls(Object.fromEntries(entries));
@@ -159,7 +168,7 @@ export function SongAudioPlayer({
       })
       .catch(() => {
         if (cancelled) return;
-        for (const url of created) URL.revokeObjectURL(url);
+        for (const url of objectUrls) URL.revokeObjectURL(url);
         setStemUrls({});
         setStemsLoading(false);
         setStemsError("Não foi possível carregar os stems.");
@@ -167,7 +176,7 @@ export function SongAudioPlayer({
 
     return () => {
       cancelled = true;
-      for (const url of created) URL.revokeObjectURL(url);
+      for (const url of objectUrls) URL.revokeObjectURL(url);
     };
   }, [songId, canUseStems, availableStemKey]);
 
