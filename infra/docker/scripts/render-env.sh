@@ -234,6 +234,15 @@ else
   echo ">> MySQL: LOCAL (container) → ${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}"
 fi
 
+# Escape para gravar valores com aspas no .env (dotenv / source bash).
+_env_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '%s' "$s"
+}
+EMAIL_FROM_ESCAPED="$(_env_escape "${EMAIL_FROM}")"
+
 # --- Escreve o arquivo (permissão restrita) ---------------------------------
 mkdir -p "$(dirname "${ENV_FILE}")"
 umask 077
@@ -293,7 +302,8 @@ SMTP_PORT=${SMTP_PORT}
 SMTP_USER=${SMTP_USER}
 SMTP_PASSWORD=${SMTP_PASSWORD}
 RESEND_API_KEY=${RESEND_API_KEY}
-EMAIL_FROM=${EMAIL_FROM}
+# Aspas obrigatórias: valor tem espaços e <email> (source bash / dotenv).
+EMAIL_FROM="${EMAIL_FROM_ESCAPED}"
 
 GRAFANA_ADMIN_USER=${GRAFANA_ADMIN_USER}
 GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}

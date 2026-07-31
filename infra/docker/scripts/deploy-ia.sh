@@ -25,17 +25,47 @@ ALLOW_CPU_FALLBACK="${ALLOW_CPU_FALLBACK:-0}"
 
 # Jenkins roda em container: nvidia-smi local costuma falhar mesmo com GPU no host.
 # O teste correto é via daemon Docker do host (mesmo socket que o compose usa).
+# Usa só imagens JÁ locais — pull do Hub falha com IPv6/rede instável no VPS.
 nvidia_docker_ok() {
-  local probe_img="${NVIDIA_PROBE_IMAGE:-nvidia/cuda:12.4.0-base-ubuntu22.04}"
-  local err
-  err="$(
-    docker run --rm --runtime=nvidia \
-      -e NVIDIA_VISIBLE_DEVICES=all \
-      "${probe_img}" \
-      nvidia-smi -L 2>&1
-  )" && return 0
-  echo ">> nvidia probe falhou:"
-  echo "${err}" | sed 's/^/   /'
+  local probe_img err last_err=""
+  local -a candidates=(
+    "${NVIDIA_PROBE_IMAGE:-}"
+    "${SOFTMUSIC_PYTHON_AI_IMAGE:-}"
+    "softmusic/python-ai:latest"
+    "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime"
+  )
+  local -A seen=()
+
+  for probe_img in "${candidates[@]}"; do
+    [[ -z "${probe_img}" ]] && continue
+    [[ -n "${seen[${probe_img}]+x}" ]] && continue
+    seen["${probe_img}"]=1
+
+    if ! docker image inspect "${probe_img}" >/dev/null 2>&1; then
+      echo ">> nvidia probe: ${probe_img} não está local — pulando (sem pull)"
+      continue
+    fi
+
+    if err="$(
+      docker run --rm --runtime=nvidia \
+        -e NVIDIA_VISIBLE_DEVICES="${NVIDIA_VISIBLE_DEVICES:-all}" \
+        "${probe_img}" \
+        nvidia-smi -L 2>&1
+    )"; then
+      echo ">> nvidia probe OK (${probe_img})"
+      echo "${err}" | sed 's/^/   /'
+      return 0
+    fi
+    last_err="${err}"
+    echo ">> nvidia probe falhou com ${probe_img}:"
+    echo "${err}" | sed 's/^/   /'
+  done
+
+  echo ">> nvidia probe falhou: nenhuma imagem CUDA local respondeu com runtime nvidia"
+  if [[ -n "${last_err}" ]]; then
+    echo "${last_err}" | sed 's/^/   /'
+  fi
+  echo "   Dica: o job softmusic-ia já builda softmusic/python-ai:latest — use essa imagem no probe."
   return 1
 }
 
