@@ -7,6 +7,7 @@ import { AuthGuard } from "./components/AuthGuard";
 import { BandSelector } from "./components/BandSelector";
 import { BlockedBandsGate } from "./components/BlockedBandsGate";
 import { InstallButton } from "./components/InstallButton";
+import { PageTutorialButton } from "./components/PageTutorialButton";
 import { PwaUpdateToast } from "./components/PwaUpdateToast";
 import { AuthProvider, useAuth } from "./lib/auth-context";
 import { BandProvider, useBand } from "./lib/band-context";
@@ -14,6 +15,17 @@ import { ConfirmProvider } from "./lib/confirm";
 import { PwaInstallProvider } from "./lib/pwa-install-context";
 import { ToastProvider } from "./lib/toast";
 import "./app.css";
+
+export function links() {
+  return [
+    { rel: "preconnect", href: "https://fonts.googleapis.com" },
+    { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+    {
+      rel: "stylesheet",
+      href: "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap",
+    },
+  ];
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -126,6 +138,8 @@ function AppHeader() {
             )}
             <InstallButton className="sm-btn-ghost px-3 py-1.5 text-xs" />
           </nav>
+
+          <PageTutorialButton />
 
           {/* Mobile menu toggle */}
           <button

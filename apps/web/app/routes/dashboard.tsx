@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { StatusBadge } from "../components/analysis/StatusBadge";
 import { PendingInvitesCard } from "../components/PendingInvitesCard";
 import { UpcomingScheduleCards } from "../components/UpcomingScheduleCards";
+import { ShineStatCard } from "../components/ui/ShineStatCard";
 import { fetchDashboardStats } from "../lib/api";
 import { useBand } from "../lib/band-context";
 import { btnPrimary, linkClass, listItemHoverClass, panelClass } from "../lib/ui-classes";
@@ -46,10 +47,10 @@ export default function Dashboard() {
     <section className="space-y-6">
       <PendingInvitesCard />
       <UpcomingScheduleCards />
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4 sm-animate-in">
         <div>
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-slate-400">
+          <h1 className="sm-page-title">Dashboard</h1>
+          <p className="sm-page-subtitle">
             Resumo da banda <span className="text-slate-200">{activeBand.name}</span>
           </p>
         </div>
@@ -68,33 +69,24 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="glass-panel relative overflow-hidden p-6">
-            <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-green-500/15 blur-2xl" aria-hidden />
-            <p className="text-sm text-green-300/80">Músicas analisadas</p>
-            <p className="mt-2 text-5xl font-bold text-green-400 drop-shadow-[0_0_24px_rgba(74,222,128,0.35)]">
-              {stats.analyzed_count}
-            </p>
-            <p className="mt-2 text-sm text-slate-400">
-              de {stats.songs.total} na biblioteca desta banda
-            </p>
+          <div className="grid gap-3 md:grid-cols-4">
+            <ShineStatCard
+              className="md:col-span-2"
+              tone="hero"
+              label="Músicas analisadas"
+              value={stats.analyzed_count}
+              hint={`de ${stats.songs.total} na biblioteca desta banda`}
+            />
+            <ShineStatCard
+              tone="brand"
+              label="Em análise"
+              value={stats.songs.pending + stats.songs.processing}
+            />
+            <ShineStatCard tone="muted" label="Concluídas" value={stats.songs.completed} />
           </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <article className={panelClass}>
-              <p className="text-sm text-slate-400">Em análise</p>
-              <p className="mt-2 text-2xl font-semibold text-green-300">
-                {stats.songs.pending + stats.songs.processing}
-              </p>
-            </article>
-            <article className={panelClass}>
-              <p className="text-sm text-slate-400">Concluídas</p>
-              <p className="mt-2 text-2xl font-semibold text-emerald-300">{stats.songs.completed}</p>
-            </article>
-            <article className={panelClass}>
-              <p className="text-sm text-slate-400">Com falha</p>
-              <p className="mt-2 text-2xl font-semibold text-red-300">{stats.songs.failed}</p>
-            </article>
-          </div>
+          {stats.songs.failed > 0 ? (
+            <ShineStatCard tone="danger" label="Com falha" value={stats.songs.failed} />
+          ) : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <article className={panelClass}>

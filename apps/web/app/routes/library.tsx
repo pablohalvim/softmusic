@@ -71,8 +71,10 @@ export default function Library() {
   };
 
   return (
-    <section className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <section className="space-y-6 sm-animate-in">
+      <div className="sm-shine-card relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5">
+        <div className="sm-shine-sweep pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+        <div className="relative z-10 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="sm-page-title">Biblioteca</h1>
           <p className="sm-page-subtitle">
@@ -111,6 +113,7 @@ export default function Library() {
               Nova análise
             </Link>
           )}
+        </div>
         </div>
       </div>
 

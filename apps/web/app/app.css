@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-display: "Syne", "Outfit", ui-sans-serif, system-ui, sans-serif;
 
   --color-void: #020806;
   --color-canvas: #050f0a;
@@ -112,10 +113,72 @@ body {
 
   .sm-page-title {
     @apply text-2xl font-semibold tracking-tight text-slate-50;
+    font-family: var(--font-display);
   }
 
   .sm-page-subtitle {
     @apply text-slate-400;
+  }
+
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .tutorial-help-btn {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/[0.04] text-sm font-bold text-green-300 shadow-sm backdrop-blur-sm transition duration-200;
+  }
+
+  .tutorial-help-btn:hover,
+  .tutorial-help-btn:focus-visible {
+    @apply border-green-400/45 bg-green-500/15 text-green-100 outline-none;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15), 0 0 20px rgba(34, 197, 94, 0.12);
+  }
+
+  .sm-animate-in {
+    animation: sm-fade-up 0.28s ease-out both;
+  }
+
+  .sm-stagger > * {
+    animation: sm-fade-up 0.4s ease-out both;
+  }
+
+  .sm-stagger > *:nth-child(2) {
+    animation-delay: 0.06s;
+  }
+
+  .sm-stagger > *:nth-child(3) {
+    animation-delay: 0.12s;
+  }
+
+  .sm-stagger > *:nth-child(4) {
+    animation-delay: 0.18s;
+  }
+
+  .sm-quick-card {
+    @apply relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 transition duration-300;
+  }
+
+  .sm-quick-card:hover {
+    @apply border-green-500/30 bg-white/[0.055];
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(74, 222, 128, 0.08) inset;
+  }
+
+  .sm-shine-card {
+    box-shadow:
+      0 0 0 1px rgba(74, 222, 128, 0.04) inset,
+      0 10px 36px rgba(0, 0, 0, 0.35);
+  }
+
+  .sm-shine-sweep {
+    background: linear-gradient(
+      115deg,
+      transparent 35%,
+      rgba(255, 255, 255, 0.08) 48%,
+      transparent 62%
+    );
+    background-size: 220% 100%;
+    animation: sm-shine 5.5s ease-in-out infinite;
   }
 
   /* Notas/acordes na cifra — verde vibrante com brilho */
@@ -154,6 +217,38 @@ body {
 
   .nav-link-active {
     @apply text-green-400 md:bg-transparent;
+  }
+}
+
+@keyframes sm-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sm-shine {
+  0%,
+  55% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -40% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sm-animate-in,
+  .sm-stagger > *,
+  .sm-quick-card,
+  .sm-shine-sweep {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
   }
 }
 
