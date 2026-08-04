@@ -363,10 +363,10 @@ export function SongListItem({ song }: { song: SongSummary }) {
 
   return (
     <article className={panelClass}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate font-medium">{title}</h2>
+            <h2 className="font-medium sm:truncate">{title}</h2>
             <StatusBadge status={displayStatus} kind="song" />
             {song.status === "completed" && song.is_global ? (
               <span className="rounded-full border border-green-500/30 bg-green-500/10 px-2 py-0.5 text-[11px] text-green-200">
@@ -379,18 +379,18 @@ export function SongListItem({ song }: { song: SongSummary }) {
         </div>
 
         {!blocked ? (
-          <div className="relative flex flex-wrap items-center justify-end gap-2">
+          <div className="relative flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             {song.status === "completed" ? (
               <>
                 <Link
                   to={`/songs/${song.id}/cifra`}
-                  className={`${btnPrimary} px-3 py-1.5 text-sm`}
+                  className={`${btnPrimary} flex-1 px-3 py-1.5 text-center text-sm sm:flex-none`}
                 >
                   Cifra
                 </Link>
                 <Link
                   to={`/songs/${song.id}`}
-                  className="inline-flex items-center justify-center rounded-xl border border-blue-500/40 bg-blue-600/20 px-3 py-1.5 text-sm font-medium text-blue-100 transition hover:border-blue-400/50 hover:bg-blue-500/30"
+                  className="inline-flex flex-1 items-center justify-center rounded-xl border border-blue-500/40 bg-blue-600/20 px-3 py-1.5 text-sm font-medium text-blue-100 transition hover:border-blue-400/50 hover:bg-blue-500/30 sm:flex-none"
                 >
                   Análise
                 </Link>
@@ -404,7 +404,9 @@ export function SongListItem({ song }: { song: SongSummary }) {
               aria-expanded={menuOpen}
               aria-controls={menuOpen ? menuId : undefined}
               onClick={() => setMenuOpen((value) => !value)}
-              className={`${btnGhost} inline-flex items-center gap-1.5 px-3 py-1.5 text-sm disabled:opacity-50`}
+              className={`${btnGhost} inline-flex items-center gap-1.5 px-3 py-1.5 text-sm disabled:opacity-50 ${
+                song.status === "completed" ? "" : "w-full sm:w-auto"
+              }`}
             >
               Ações
               <span aria-hidden className="text-[10px] text-slate-400">
