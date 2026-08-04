@@ -827,6 +827,31 @@ class AnalysisService:
         await self.session.commit()
         await self._raise_if_cancelled(job_id)
 
+        # Importa a cifra antes da análise para usar o tom escrito como dica
+        # (evita confundir dominante com tônica, ex.: A vs D).
+        imported_cifra: dict[str, Any] | None = None
+        cifra_club_url = options.get("cifra_club_url")
+        if isinstance(cifra_club_url, str) and cifra_club_url.strip():
+            job.stage = "import_cifra"
+            job.progress = 35
+            await self.session.commit()
+            await self._raise_if_cancelled(job_id)
+            imported_cifra = self.import_cifra_club(song.id, cifra_club_url.strip())
+            if imported_cifra:
+                song.cifra_club_url = cifra_club_url.strip()
+                if imported_cifra.get("title") and not song.title:
+                    song.title = imported_cifra["title"]
+                if imported_cifra.get("artist") and not song.artist:
+                    song.artist = imported_cifra["artist"]
+                cifra_key = imported_cifra.get("key")
+                if isinstance(cifra_key, str) and cifra_key.strip():
+                    options = {
+                        **options,
+                        "key_hint": cifra_key.strip(),
+                        "cifra_key": cifra_key.strip(),
+                    }
+                await self.session.commit()
+
         settings = get_settings()
         context = PipelineContext(
             song_id=song.id,
@@ -850,21 +875,8 @@ class AnalysisService:
             payload["metadata"]["title"] = source_metadata["title"]
         if source_metadata.get("artist") and not payload["metadata"].get("artist"):
             payload["metadata"]["artist"] = source_metadata["artist"]
-
-        cifra_club_url = options.get("cifra_club_url")
-        if isinstance(cifra_club_url, str) and cifra_club_url.strip():
-            job.stage = "import_cifra"
-            job.progress = 80
-            await self.session.commit()
-            await self._raise_if_cancelled(job_id)
-            imported = self.import_cifra_club(song.id, cifra_club_url.strip())
-            if imported:
-                payload["cifra_club"] = imported
-                song.cifra_club_url = cifra_club_url.strip()
-                if imported.get("title") and not song.title:
-                    song.title = imported["title"]
-                if imported.get("artist") and not song.artist:
-                    song.artist = imported["artist"]
+        if imported_cifra:
+            payload["cifra_club"] = imported_cifra
 
         job.stage = "persist"
         job.progress = 90

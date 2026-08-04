@@ -13,12 +13,11 @@ from pydub.silence import detect_nonsilent
 from app.infrastructure.ml.demucs_separator import DemucsSeparator, SeparationResult
 from app.infrastructure.ml.device import log_compute_device
 from app.infrastructure.ml.features import compute_chroma
+from app.infrastructure.ml.key_detector import estimate_key, key_estimate_as_dict
 from app.infrastructure.ml.stem_harmony import estimate_bass_progression, estimate_chord_progression
 from app.logging import logger
 
 KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
-MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
 
 
 @dataclass
@@ -60,11 +59,45 @@ class AudioPipeline:
             beat_times = np.arange(0, duration, 60 / bpm).tolist()
 
         mix_chroma, chroma_backend = compute_chroma(y, sr)
-        key, mode = self._estimate_key(mix_chroma)
-        relative_key, parallel_key = self._related_keys(key, mode)
 
         y_harmony = self._load_harmony_signal(stem_paths, trimmed_path)
         harmony_chroma, _ = compute_chroma(y_harmony, self.sample_rate)
+
+        bass_chroma: np.ndarray | None = None
+        if "bass" in stem_paths:
+            y_bass, sr_bass = librosa.load(stem_paths["bass"], sr=self.sample_rate, mono=True)
+            bass_chroma, _ = compute_chroma(y_bass, sr_bass)
+
+        key_chroma = self._blend_key_chroma(harmony_chroma, mix_chroma, bass_chroma)
+        hint_key = context.options.get("key_hint") or context.options.get("cifra_key")
+        hint_mode = context.options.get("key_hint_mode")
+        if isinstance(hint_key, str):
+            hint_key = hint_key.strip() or None
+        else:
+            hint_key = None
+        if isinstance(hint_mode, str):
+            hint_mode = hint_mode.strip() or None
+        else:
+            hint_mode = None
+
+        key_estimate = estimate_key(
+            key_chroma,
+            beat_times=beat_times,
+            hint_key=hint_key,
+            hint_mode=hint_mode,
+        )
+        key, mode = key_estimate.key, key_estimate.mode
+        relative_key, parallel_key = self._related_keys(key, mode)
+        logger.info(
+            "key_estimated",
+            song_id=context.song_id,
+            key=key,
+            mode=mode,
+            confidence=key_estimate.confidence,
+            method=key_estimate.method,
+            hint=hint_key,
+        )
+
         max_segments = min(128, max(16, int(duration / 4)))
         chord_progression = estimate_chord_progression(
             harmony_chroma,
@@ -75,9 +108,7 @@ class AudioPipeline:
         )
 
         bass_progression: list[dict[str, Any]] = []
-        if "bass" in stem_paths:
-            y_bass, sr_bass = librosa.load(stem_paths["bass"], sr=self.sample_rate, mono=True)
-            bass_chroma, _ = compute_chroma(y_bass, sr_bass)
+        if bass_chroma is not None:
             bass_progression = estimate_bass_progression(
                 bass_chroma,
                 beat_times,
@@ -109,6 +140,7 @@ class AudioPipeline:
                 "_source_metadata": context.source_metadata or {},
                 "_compute_backend": device_info.backend,
                 "_chroma_backend": chroma_backend,
+                "_key_estimate": key_estimate_as_dict(key_estimate),
             },
         )
 
@@ -215,15 +247,21 @@ class AudioPipeline:
         trimmed.export(target, format="wav")
         return target
 
-    def _estimate_key(self, chroma: np.ndarray) -> tuple[str, str]:
-        profile = chroma.mean(axis=1)
-        major_scores = [np.corrcoef(np.roll(MAJOR_PROFILE, i), profile)[0, 1] for i in range(12)]
-        minor_scores = [np.corrcoef(np.roll(MINOR_PROFILE, i), profile)[0, 1] for i in range(12)]
-        major_idx = int(np.argmax(major_scores))
-        minor_idx = int(np.argmax(minor_scores))
-        if major_scores[major_idx] >= minor_scores[minor_idx]:
-            return KEY_NAMES[major_idx], "major"
-        return KEY_NAMES[minor_idx], "minor"
+    def _blend_key_chroma(
+        self,
+        harmony: np.ndarray,
+        mix: np.ndarray,
+        bass: np.ndarray | None,
+    ) -> np.ndarray:
+        """Prioriza stems harmônicos; mistura um pouco do baixo (contorno da tônica)."""
+        frames = min(harmony.shape[1], mix.shape[1])
+        if frames <= 0:
+            return harmony
+        blended = 0.70 * harmony[:, :frames] + 0.20 * mix[:, :frames]
+        if bass is not None and bass.shape[1] > 0:
+            bass_frames = min(frames, bass.shape[1])
+            blended[:, :bass_frames] = blended[:, :bass_frames] + 0.10 * bass[:, :bass_frames]
+        return blended
 
     def _related_keys(self, key: str, mode: str) -> tuple[str, str]:
         idx = KEY_NAMES.index(key.replace("m", ""))
@@ -387,6 +425,7 @@ class AudioPipeline:
                 "cadences": self._detect_cadences(chord_progression),
                 "modulations": [],
                 "harmonic_rhythm": round(len(chord_progression) / max(duration, 1), 3),
+                "key_detection": options.get("_key_estimate"),
             },
             "rhythm": {
                 "bpm": round(bpm, 2),
