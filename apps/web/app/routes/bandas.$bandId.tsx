@@ -1,4 +1,5 @@
 import { PLANS, formatBrl } from "@softmusic/shared";
+import { formatDateTime } from "@softmusic/shared/datetime";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -336,69 +337,107 @@ function MembersTab({ bandId, canManage }: { bandId: string; canManage: boolean 
     onError: (err) => setError(err instanceof Error ? err.message : "Erro"),
   });
 
+  const members = membersQuery.data ?? [];
+
+  const roleLabel = (member: BandMemberDetail) =>
+    member.roles.length > 0 ? member.roles.map((r) => r.name).join(", ") : "—";
+
+  const joinedLabel = (member: BandMemberDetail) =>
+    member.joined_at ? new Date(member.joined_at).toLocaleDateString("pt-BR") : "—";
+
+  const memberActions = (member: BandMemberDetail, stacked = false) =>
+    canManage ? (
+      <div className={stacked ? "flex flex-col gap-2" : "flex flex-wrap gap-2"}>
+        <button
+          type="button"
+          className={`${btnGhost} ${stacked ? "w-full justify-center" : ""}`}
+          onClick={() => setEditing(member)}
+        >
+          Gerenciar
+        </button>
+        {!member.is_owner ? (
+          <button
+            type="button"
+            className={`${btnGhost} ${stacked ? "w-full justify-center" : ""}`}
+            onClick={() => {
+              if (confirm(`Remover ${member.full_name} da banda?`)) {
+                removeMutation.mutate(member.id);
+              }
+            }}
+          >
+            Remover
+          </button>
+        ) : null}
+      </div>
+    ) : (
+      <span className="text-slate-500">—</span>
+    );
+
   return (
     <div className="space-y-4">
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
-      <div className="overflow-x-auto rounded-xl border border-white/10">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-white/[0.04] text-slate-400">
-            <tr>
-              <th className="px-3 py-2 font-medium">Integrante</th>
-              <th className="px-3 py-2 font-medium">Funções</th>
-              <th className="px-3 py-2 font-medium">Ingresso</th>
-              <th className="px-3 py-2 font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(membersQuery.data ?? []).map((member) => (
-              <tr key={member.id} className="border-t border-white/5">
-                <td className="px-3 py-3">
-                  <p className="font-medium text-slate-100">{member.full_name}</p>
-                  <p className="text-xs text-slate-500">
+      {membersQuery.isLoading ? (
+        <p className="text-sm text-slate-400">Carregando integrantes...</p>
+      ) : members.length === 0 ? (
+        <p className="text-sm text-slate-400">Nenhum integrante encontrado.</p>
+      ) : (
+        <>
+          <div className="space-y-3 md:hidden">
+            {members.map((member) => (
+              <article key={member.id} className={`${panelClass} space-y-3 p-4`}>
+                <div className="min-w-0">
+                  <p className="break-words font-medium text-slate-100">{member.full_name}</p>
+                  <p className="break-all text-xs text-slate-500">
                     {member.email}
                     {member.is_owner ? " · responsável" : ""}
                   </p>
-                </td>
-                <td className="px-3 py-3 text-slate-300">
-                  {member.roles.length > 0
-                    ? member.roles.map((r) => r.name).join(", ")
-                    : "—"}
-                </td>
-                <td className="px-3 py-3 text-slate-400">
-                  {member.joined_at
-                    ? new Date(member.joined_at).toLocaleDateString("pt-BR")
-                    : "—"}
-                </td>
-                <td className="px-3 py-3">
-                  {canManage ? (
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" className={btnGhost} onClick={() => setEditing(member)}>
-                        Atribuir / Gestão
-                      </button>
-                      {!member.is_owner ? (
-                        <button
-                          type="button"
-                          className={btnGhost}
-                          onClick={() => {
-                            if (confirm(`Remover ${member.full_name} da banda?`)) {
-                              removeMutation.mutate(member.id);
-                            }
-                          }}
-                        >
-                          Remover
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <span className="text-slate-500">—</span>
-                  )}
-                </td>
-              </tr>
+                </div>
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="min-w-0">
+                    <dt className="text-xs text-slate-500">Funções</dt>
+                    <dd className="break-words text-slate-300">{roleLabel(member)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-slate-500">Ingresso</dt>
+                    <dd className="text-slate-300">{joinedLabel(member)}</dd>
+                  </div>
+                </dl>
+                {memberActions(member, true)}
+              </article>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-xl border border-white/10 md:block">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-white/[0.04] text-slate-400">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Integrante</th>
+                  <th className="px-3 py-2 font-medium">Funções</th>
+                  <th className="px-3 py-2 font-medium">Ingresso</th>
+                  <th className="px-3 py-2 font-medium">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((member) => (
+                  <tr key={member.id} className="border-t border-white/5">
+                    <td className="px-3 py-3">
+                      <p className="font-medium text-slate-100">{member.full_name}</p>
+                      <p className="text-xs text-slate-500">
+                        {member.email}
+                        {member.is_owner ? " · responsável" : ""}
+                      </p>
+                    </td>
+                    <td className="px-3 py-3 text-slate-300">{roleLabel(member)}</td>
+                    <td className="px-3 py-3 text-slate-400">{joinedLabel(member)}</td>
+                    <td className="px-3 py-3">{memberActions(member)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {editing ? (
         <MemberEditModal
@@ -608,11 +647,8 @@ function AgendaTab({ bandId, canManage }: { bandId: string; canManage: boolean }
               {rows.map((row) => (
                 <tr key={row.occurrence_id} className="border-b border-white/5 last:border-0">
                   <td className="px-3 py-3 text-slate-200">{row.title || "—"}</td>
-                  <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
-                    {new Date(row.starts_at).toLocaleString("pt-BR", {
-                      dateStyle: "short",
-                      timeStyle: "short",
-                    })}
+                  <td className="px-3 py-3 whitespace-nowrap text-slate-300">
+                    {formatDateTime(row.starts_at)}
                   </td>
                   <td className="px-3 py-3">
                     <span

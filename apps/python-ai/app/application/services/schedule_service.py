@@ -45,6 +45,16 @@ def _parse_dt(value: str) -> datetime:
     return dt.astimezone(UTC)
 
 
+def _iso_utc(value: datetime | None) -> str | None:
+    """Serialize datetimes as UTC ISO with Z so clients don't treat naive values as local."""
+    if value is None:
+        return None
+    dt = value
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
 def format_member_with_roles(full_name: str, role_names: list[str]) -> str:
     if role_names:
         return f"{full_name} ({', '.join(role_names)})"
@@ -463,8 +473,8 @@ class ScheduleService:
                 "title": occurrence.title or schedule.title,
                 "band_id": band.id,
                 "band_name": band.name,
-                "starts_at": occurrence.starts_at.isoformat(),
-                "ends_at": occurrence.ends_at.isoformat(),
+                "starts_at": _iso_utc(occurrence.starts_at),
+                "ends_at": _iso_utc(occurrence.ends_at),
                 "formatted_address": occurrence.formatted_address,
                 "lat": occurrence.lat,
                 "lng": occurrence.lng,
@@ -529,8 +539,8 @@ class ScheduleService:
                     "title": occurrence.title or schedule.title,
                     "band_id": band.id,
                     "band_name": band.name,
-                    "starts_at": occurrence.starts_at.isoformat(),
-                    "ends_at": occurrence.ends_at.isoformat(),
+                    "starts_at": _iso_utc(occurrence.starts_at),
+                    "ends_at": _iso_utc(occurrence.ends_at),
                     "formatted_address": occurrence.formatted_address,
                     "lat": occurrence.lat,
                     "lng": occurrence.lng,
@@ -720,8 +730,8 @@ class ScheduleService:
             "schedule_id": schedule.id,
             "title": occ.title or schedule.title,
             "kind": occ.kind,
-            "starts_at": occ.starts_at.isoformat(),
-            "ends_at": occ.ends_at.isoformat(),
+            "starts_at": _iso_utc(occ.starts_at),
+            "ends_at": _iso_utc(occ.ends_at),
             "formatted_address": occ.formatted_address,
             "lat": occ.lat,
             "lng": occ.lng,
@@ -745,8 +755,8 @@ class ScheduleService:
                 "id": occ.id,
                 "kind": occ.kind,
                 "title": occ.title,
-                "starts_at": occ.starts_at.isoformat(),
-                "ends_at": occ.ends_at.isoformat(),
+                "starts_at": _iso_utc(occ.starts_at),
+                "ends_at": _iso_utc(occ.ends_at),
                 "formatted_address": occ.formatted_address,
                 "lat": occ.lat,
                 "lng": occ.lng,
@@ -762,7 +772,7 @@ class ScheduleService:
             "id": schedule.id,
             "band_id": schedule.band_id,
             "title": schedule.title,
-            "created_at": schedule.created_at.isoformat(),
+            "created_at": _iso_utc(schedule.created_at),
             "occurrences": occurrences,
             "members": members,
             "songs": songs,

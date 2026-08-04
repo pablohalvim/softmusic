@@ -1,4 +1,4 @@
-import { formatRelativeTime } from "@softmusic/shared/datetime";
+import { formatDateTime, formatRelativeTime } from "@softmusic/shared/datetime";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 
@@ -61,11 +61,7 @@ function OccurrenceCard({
       </h2>
       <p className="mt-1 text-sm text-slate-400">{occurrence.band_name}</p>
       <p className="mt-2 text-sm text-slate-300">
-        {new Date(occurrence.starts_at).toLocaleString("pt-BR", {
-          dateStyle: "short",
-          timeStyle: "short",
-        })}{" "}
-        · {formatRelativeTime(occurrence.starts_at)}
+        {formatDateTime(occurrence.starts_at)} · {formatRelativeTime(occurrence.starts_at)}
       </p>
       <p className="mt-1 line-clamp-2 text-sm text-slate-400">{occurrence.formatted_address}</p>
       {members.length > 0 ? (

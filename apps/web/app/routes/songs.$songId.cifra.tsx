@@ -112,10 +112,10 @@ export default function SongCifraPage() {
         <section
           className={`min-w-0 max-w-full space-y-4 transition-[padding] duration-200 ${
             audioFooterMinimized
-              ? "pb-28"
+              ? "pb-36"
               : hasMetronomePadding(chordsQuery.data.tempo_bpm)
-                ? "pb-[26rem]"
-                : "pb-64"
+                ? "pb-[32rem]"
+                : "pb-72"
           }`}
         >
           <CifraViewer

@@ -1,3 +1,4 @@
+import { formatDateTime } from "@softmusic/shared/datetime";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
 
@@ -86,15 +87,9 @@ function AgendaCard({ item }: { item: MyScheduleItem }) {
           </div>
           <p className="mt-1 text-sm text-slate-400">{item.band_name}</p>
           <p className="mt-2 text-sm text-slate-300">
-            {new Date(item.starts_at).toLocaleString("pt-BR", {
-              dateStyle: "short",
-              timeStyle: "short",
-            })}
+            {formatDateTime(item.starts_at)}
             {" · até "}
-            {new Date(item.ends_at).toLocaleString("pt-BR", {
-              dateStyle: "short",
-              timeStyle: "short",
-            })}
+            {formatDateTime(item.ends_at)}
           </p>
           <p className="mt-1 line-clamp-2 text-sm text-slate-500">{item.formatted_address}</p>
         </div>

@@ -146,6 +146,7 @@ class Multitrack(Base):
     source_key: Mapped[str] = mapped_column(String(16))
     source_mode: Mapped[str] = mapped_column(String(16), default="major")
     bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    time_signature: Mapped[str] = mapped_column(String(8), default="4/4")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

@@ -4,15 +4,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   authFetch,
   fetchJob,
+  fetchMultitrack,
+  fetchMultitracks,
   fetchSongKeys,
   isJobFinished,
+  multitrackMatchesKey,
+  normalizeMusicKeyLabel,
   requestSongKeyVariant,
   resolveAuthenticatedMediaUrl,
   songKeyAudioPath,
   songKeyStemAudioPath,
   songKeyStemsPath,
+  updateMultitrack,
+  updateMultitrackTrack,
 } from "../../lib/api";
 import { useCifraPlaybackKey } from "../cifra/cifra-playback-key-context";
+import { useOptionalCifraScroll } from "../cifra/cifra-scroll-context";
+import {
+  MultitrackMixer,
+  type MultitrackMixerHandle,
+} from "../multitracks/MultitrackMixer";
 import { useToast } from "../../lib/toast";
 import {
   btnGhost,
@@ -38,7 +49,7 @@ const FOOTER_MINIMIZED_KEY = "softmusic:audio-footer-minimized";
 const PLAYBACK_MODE_KEY = "softmusic:audio-playback-mode";
 
 type SongAudioPlayerLayout = "inline" | "fixed-footer";
-type PlaybackMode = "original" | "stems";
+type PlaybackMode = "original" | "stems" | "multitrack";
 
 interface SongAudioPlayerProps {
   songId: string;
@@ -61,7 +72,9 @@ function readFooterMinimized(): boolean {
 
 function readPlaybackMode(): PlaybackMode {
   try {
-    return localStorage.getItem(PLAYBACK_MODE_KEY) === "stems" ? "stems" : "original";
+    const raw = localStorage.getItem(PLAYBACK_MODE_KEY);
+    if (raw === "stems" || raw === "multitrack") return raw;
+    return "original";
   } catch {
     return "original";
   }
@@ -90,6 +103,7 @@ export function SongAudioPlayer({
   const toast = useToast();
   const queryClient = useQueryClient();
   const playbackKey = useCifraPlaybackKey();
+  const cifraScroll = useOptionalCifraScroll();
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [stemsManifest, setStemsManifest] = useState<KeyStemsManifest | null>(null);
   const [stemUrls, setStemUrls] = useState<Record<string, string>>({});
@@ -108,15 +122,27 @@ export function SongAudioPlayer({
   const audioRef = useRef<HTMLAudioElement>(null);
   const stemAudioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const metronomeRef = useRef<MetronomeClickHandle>(null);
+  const multitrackMixerRef = useRef<MultitrackMixerHandle>(null);
   const [syncMetronome, setSyncMetronome] = useState(false);
   const [audioVolume, setAudioVolume] = useState(loadAudioVolume);
   const [minimized, setMinimized] = useState(() => (isFixedFooter ? readFooterMinimized() : false));
+  const [multitrackPlaying, setMultitrackPlaying] = useState(false);
+  const [multitrackReady, setMultitrackReady] = useState(false);
+  const [multitrackCurrentTime, setMultitrackCurrentTime] = useState(0);
+  const [multitrackDuration, setMultitrackDuration] = useState(0);
+  const [multitrackMasterGain, setMultitrackMasterGain] = useState(1);
   /** Tom escolhido no dropdown (detalhes). null = original. Na cifra, o contexto tem prioridade. */
   const [manualAudioKey, setManualAudioKey] = useState<string | null>(null);
 
   const keysQuery = useQuery({
     queryKey: ["song-keys", songId],
     queryFn: () => fetchSongKeys(songId),
+  });
+
+  const multitracksQuery = useQuery({
+    queryKey: ["multitracks", "song", songId],
+    queryFn: () => fetchMultitracks({ songId, limit: 50 }),
+    enabled: Boolean(songId),
   });
 
   const apiSourceKey = keysQuery.data?.source_key ?? null;
@@ -155,7 +181,54 @@ export function SongAudioPlayer({
   );
   const stemsReady = availableStems.length > 0 && Object.keys(stemUrls).length > 0;
   const canUseStems = Boolean(stemsManifest?.separated && availableStems.length > 0);
-  const effectiveMode: PlaybackMode = mode === "stems" && canUseStems ? "stems" : "original";
+
+  /** Tom desejado para Multitrack: na cifra acompanha o tom soante; senão o dropdown/original. */
+  const desiredMultitrackKey = useMemo(() => {
+    if (playbackKey) {
+      if (useOriginalAudio) return sourceKey;
+      return soundingKey ?? sourceKey;
+    }
+    return manualAudioKey ?? apiSourceKey;
+  }, [playbackKey, useOriginalAudio, sourceKey, soundingKey, manualAudioKey, apiSourceKey]);
+
+  const matchedMultitrackSummary = useMemo(() => {
+    const items = multitracksQuery.data?.items ?? [];
+    return (
+      items.find(
+        (item) =>
+          (item.track_count ?? 0) > 0 && multitrackMatchesKey(item, desiredMultitrackKey),
+      ) ?? null
+    );
+  }, [multitracksQuery.data?.items, desiredMultitrackKey]);
+
+  const canUseMultitrack = Boolean(matchedMultitrackSummary);
+
+  const multitrackDetailQuery = useQuery({
+    queryKey: ["multitrack", matchedMultitrackSummary?.id],
+    queryFn: () => fetchMultitrack(matchedMultitrackSummary!.id),
+    enabled: Boolean(matchedMultitrackSummary?.id) && mode === "multitrack",
+  });
+
+  const matchedMultitrack = multitrackDetailQuery.data ?? null;
+  const multitrackPlaybackKey = useMemo(() => {
+    if (!matchedMultitrack || !desiredMultitrackKey) return null;
+    const source = normalizeMusicKeyLabel(matchedMultitrack.source_key).toLowerCase();
+    const desired = normalizeMusicKeyLabel(desiredMultitrackKey).toLowerCase();
+    return source === desired ? null : desiredMultitrackKey;
+  }, [matchedMultitrack, desiredMultitrackKey]);
+
+  const effectiveMode: PlaybackMode =
+    mode === "multitrack" && canUseMultitrack
+      ? "multitrack"
+      : mode === "stems" && canUseStems
+        ? "stems"
+        : "original";
+
+  useEffect(() => {
+    if (mode === "multitrack" && !canUseMultitrack) {
+      setMode("original");
+    }
+  }, [mode, canUseMultitrack]);
 
   const keyJobId = stemsManifest?.job_id ?? null;
   const keyJobQuery = useQuery({
@@ -364,6 +437,15 @@ export function SongAudioPlayer({
     onMinimizedChange?.(minimized);
   }, [isFixedFooter, minimized, onMinimizedChange]);
 
+  useEffect(() => {
+    if (!isFixedFooter || minimized) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [isFixedFooter, minimized]);
+
   const pauseEverything = useCallback(() => {
     audioRef.current?.pause();
     for (const el of stemAudioRefs.current.values()) {
@@ -440,6 +522,7 @@ export function SongAudioPlayer({
   }, [audioVolume, currentTime, enabledStems, getMasterStem, stemUrls]);
 
   const togglePlay = useCallback(async () => {
+    if (effectiveMode === "multitrack") return;
     if (playing) {
       pauseEverything();
       if (syncMetronome) metronomeRef.current?.stop();
@@ -457,17 +540,47 @@ export function SongAudioPlayer({
     }
   }, [effectiveMode, pauseEverything, playOriginal, playStems, playing, syncMetronome]);
 
+  const lastSyncedAudioPlayingRef = useRef<boolean | null>(null);
+  const syncScrollWithAudioPlayback = cifraScroll?.syncScrollWithAudioPlayback;
+  const syncScrollEnabled = Boolean(cifraScroll?.syncWithAudio);
+
+  useEffect(() => {
+    if (!syncScrollWithAudioPlayback || !syncScrollEnabled) {
+      lastSyncedAudioPlayingRef.current = null;
+      return;
+    }
+    const audioPlaying = effectiveMode === "multitrack" ? multitrackPlaying : playing;
+    // Só reage a mudanças do áudio — não força a rolagem de volta se o usuário pausou só a Rolagem.
+    if (lastSyncedAudioPlayingRef.current === audioPlaying) return;
+    lastSyncedAudioPlayingRef.current = audioPlaying;
+    syncScrollWithAudioPlayback(audioPlaying);
+  }, [syncScrollWithAudioPlayback, syncScrollEnabled, effectiveMode, playing, multitrackPlaying]);
+
   const handleModeChange = (next: PlaybackMode) => {
     if (next === mode) return;
     pauseEverything();
     if (syncMetronome) metronomeRef.current?.stop();
+    multitrackMixerRef.current?.pause();
+    setMultitrackPlaying(false);
+    setMultitrackReady(false);
     setMode(next);
+    if (next === "multitrack" && isFixedFooter) {
+      setMinimized(false);
+      onMinimizedChange?.(false);
+      try {
+        localStorage.setItem(FOOTER_MINIMIZED_KEY, "false");
+      } catch {
+        // ignore
+      }
+    }
     try {
       localStorage.setItem(PLAYBACK_MODE_KEY, next);
     } catch {
       // ignore
     }
   };
+
+  const showMultitrackPanel = effectiveMode === "multitrack";
 
   const handleManualKeyChange = (nextKey: string) => {
     const normalized = nextKey.trim() || null;
@@ -680,37 +793,64 @@ export function SongAudioPlayer({
   );
 
   const stemsBusy = stemsLoading && !stemsReady;
-  const showStemsPanel = mode === "stems" && canUseStems;
+  const showStemsPanel = mode === "stems" && canUseStems && !showMultitrackPanel;
   // Dropdown de tons: nos detalhes (sem contexto da cifra) quando há variantes prontas.
   const showKeyDropdown = !playbackKey && readyKeyOptions.length > 0;
+  const showModeToggle = canUseStems || canUseMultitrack;
 
-  const modeToggle = canUseStems ? (
+  const modeToggle = showModeToggle ? (
     <div className={`${segmentedWrapClass} !p-1`} role="group" aria-label="Fonte de áudio">
       <button
         type="button"
-        className={mode === "original" ? segmentedActiveClass : segmentedIdleClass}
+        className={effectiveMode === "original" ? segmentedActiveClass : segmentedIdleClass}
         onClick={() => handleModeChange("original")}
       >
         Música original
       </button>
-      <button
-        type="button"
-        className={mode === "stems" ? segmentedActiveClass : segmentedIdleClass}
-        onClick={() => handleModeChange("stems")}
-        aria-busy={stemsBusy || undefined}
-      >
-        {stemsBusy ? (
-          <span className="inline-flex items-center gap-1.5">
-            <span
-              className="inline-block h-3 w-3 animate-spin rounded-full border border-current border-r-transparent"
-              aria-hidden
-            />
-            Carregando…
-          </span>
-        ) : (
-          "Stems"
-        )}
-      </button>
+      {canUseStems ? (
+        <button
+          type="button"
+          className={effectiveMode === "stems" ? segmentedActiveClass : segmentedIdleClass}
+          onClick={() => handleModeChange("stems")}
+          aria-busy={stemsBusy || undefined}
+        >
+          {stemsBusy ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="inline-block h-3 w-3 animate-spin rounded-full border border-current border-r-transparent"
+                aria-hidden
+              />
+              Carregando…
+            </span>
+          ) : (
+            "Stems"
+          )}
+        </button>
+      ) : null}
+      {canUseMultitrack ? (
+        <button
+          type="button"
+          className={
+            effectiveMode === "multitrack"
+              ? "rounded-lg bg-amber-500/25 px-3 py-1.5 text-sm font-medium text-amber-100"
+              : segmentedIdleClass
+          }
+          onClick={() => handleModeChange("multitrack")}
+          aria-busy={multitrackDetailQuery.isLoading || undefined}
+        >
+          {multitrackDetailQuery.isLoading && mode === "multitrack" ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="inline-block h-3 w-3 animate-spin rounded-full border border-current border-r-transparent"
+                aria-hidden
+              />
+              Carregando…
+            </span>
+          ) : (
+            "Multitrack"
+          )}
+        </button>
+      ) : null}
     </div>
   ) : null;
 
@@ -744,6 +884,65 @@ export function SongAudioPlayer({
         {keyDropdown}
       </div>
     ) : null;
+
+  const multitrackPanel = showMultitrackPanel ? (
+    <div className="space-y-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs uppercase tracking-wide text-amber-200/80">Multitrack</p>
+        {desiredMultitrackKey ? (
+          <p className="text-xs text-slate-500">
+            Tom <span className="text-amber-100">{desiredMultitrackKey}</span>
+            {matchedMultitrack?.title ? ` · ${matchedMultitrack.title}` : ""}
+          </p>
+        ) : null}
+      </div>
+      {multitrackDetailQuery.isLoading ? (
+        <p className="text-sm text-slate-400">Carregando faixas do Multitrack...</p>
+      ) : multitrackDetailQuery.isError || !matchedMultitrack ? (
+        <p className="text-sm text-red-300">Não foi possível carregar o Multitrack neste tom.</p>
+      ) : (
+        <MultitrackMixer
+          ref={multitrackMixerRef}
+          multitrackId={matchedMultitrack.id}
+          tracks={matchedMultitrack.tracks ?? []}
+          playbackKey={multitrackPlaybackKey}
+          bpm={matchedMultitrack.bpm ?? bpm}
+          timeSignature={matchedMultitrack.time_signature ?? "4/4"}
+          onPlayingChange={setMultitrackPlaying}
+          onReadyChange={setMultitrackReady}
+          onProgressChange={(time, total) => {
+            setMultitrackCurrentTime(time);
+            setMultitrackDuration(total);
+          }}
+          onMasterGainChange={setMultitrackMasterGain}
+          onBpmChange={(nextBpm) => {
+            void updateMultitrack(matchedMultitrack.id, { bpm: nextBpm }).then(() => {
+              void queryClient.invalidateQueries({
+                queryKey: ["multitrack", matchedMultitrack.id],
+              });
+              void queryClient.invalidateQueries({ queryKey: ["multitracks", "song", songId] });
+            });
+          }}
+          onTimeSignatureChange={(nextSignature) => {
+            void updateMultitrack(matchedMultitrack.id, { time_signature: nextSignature }).then(
+              () => {
+                void queryClient.invalidateQueries({
+                  queryKey: ["multitrack", matchedMultitrack.id],
+                });
+                void queryClient.invalidateQueries({ queryKey: ["multitracks", "song", songId] });
+              },
+            );
+          }}
+          onTrackMuteChange={(trackId, muted) => {
+            void updateMultitrackTrack(matchedMultitrack.id, trackId, { muted });
+          }}
+          onTrackGainChange={(trackId, gain) => {
+            void updateMultitrackTrack(matchedMultitrack.id, trackId, { gain });
+          }}
+        />
+      )}
+    </div>
+  ) : null;
 
   const stemsPicker = showStemsPanel ? (
       <div className="space-y-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
@@ -1015,74 +1214,230 @@ export function SongAudioPlayer({
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start">
         {scrollControl}
         <div className="min-w-0 flex-1 space-y-3">
-          {transport}
+          {showMultitrackPanel ? null : transport}
+          {multitrackPanel}
           {stemsPicker}
         </div>
       </div>
-      {volumeControl}
-      {metronomeExtras}
+      {showMultitrackPanel ? null : volumeControl}
+      {showMultitrackPanel ? null : metronomeExtras}
     </>
   );
 
   if (isFixedFooter) {
+    const footerIsMultitrack = showMultitrackPanel;
+    const footerCurrentTime = footerIsMultitrack ? multitrackCurrentTime : currentTime;
+    const footerDuration = footerIsMultitrack ? multitrackDuration : duration;
+    const footerProgressPercent =
+      footerDuration > 0 ? Math.min(100, (footerCurrentTime / footerDuration) * 100) : 0;
+    const footerVolume = footerIsMultitrack ? multitrackMasterGain : audioVolume;
+    const footerPlaying = footerIsMultitrack ? multitrackPlaying : playing;
+    const footerCanPlay = footerIsMultitrack
+      ? Boolean(matchedMultitrack) && !multitrackDetailQuery.isLoading
+      : effectiveMode === "original"
+        ? Boolean(audioUrl)
+        : stemsReady && enabledStems.size > 0 && !stemsLoading;
+
+    const handleFooterPlayPause = () => {
+      if (footerIsMultitrack) {
+        void multitrackMixerRef.current?.toggle();
+        return;
+      }
+      void togglePlay();
+    };
+
+    const handleFooterStop = () => {
+      if (footerIsMultitrack) {
+        multitrackMixerRef.current?.stop();
+        return;
+      }
+      pauseEverything();
+      seekAll(0);
+      if (syncMetronome) metronomeRef.current?.stop();
+    };
+
+    const handleFooterSeek = (next: number) => {
+      if (footerIsMultitrack) {
+        multitrackMixerRef.current?.seek(next);
+        return;
+      }
+      seekAll(next);
+    };
+
+    const handleFooterVolume = (next: number) => {
+      if (footerIsMultitrack) {
+        multitrackMixerRef.current?.setMasterGain(next);
+        setMultitrackMasterGain(next);
+        return;
+      }
+      handleAudioVolumeChange(next);
+    };
+
+    const minimizedBar = (
+      <div className="mx-auto max-w-6xl space-y-2 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 min-w-[5.5rem] tabular-nums text-[11px] text-slate-400">
+            {formatPlaybackTime(footerCurrentTime)} / {formatPlaybackTime(footerDuration)}
+          </span>
+          <input
+            id="footer-playback-progress"
+            name="footer-playback-progress"
+            type="range"
+            min={0}
+            max={Math.max(footerDuration, 0.1)}
+            step={0.1}
+            value={Math.min(footerCurrentTime, footerDuration || 0)}
+            disabled={footerDuration <= 0}
+            onChange={(event) => handleFooterSeek(Number(event.target.value))}
+            className="accent-chord h-3 min-w-0 flex-1 cursor-pointer disabled:opacity-40"
+            aria-label="Progresso da música"
+            style={{
+              background: `linear-gradient(to right, #4ade80 ${footerProgressPercent}%, rgba(255,255,255,0.12) ${footerProgressPercent}%)`,
+            }}
+          />
+          <label
+            htmlFor="footer-master-volume"
+            className="flex shrink-0 items-center gap-1.5 text-[11px] text-slate-400"
+          >
+            <span>Vol</span>
+            <input
+              id="footer-master-volume"
+              name="footer-master-volume"
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={footerVolume}
+              onChange={(event) => handleFooterVolume(Number(event.target.value))}
+              className="accent-chord h-3 w-16 cursor-pointer sm:w-24"
+              aria-label="Volume geral"
+            />
+          </label>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {scrollControl}
+          <button
+            type="button"
+            onClick={handleFooterPlayPause}
+            disabled={!footerCanPlay}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-green-500/40 bg-green-500/15 text-base text-green-300 transition hover:bg-green-500/25 disabled:opacity-40"
+            aria-label={footerPlaying ? "Pausar" : "Reproduzir"}
+            title={footerPlaying ? "Pausar" : "Play"}
+          >
+            <span aria-hidden>{footerPlaying ? "⏸" : "▶"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleFooterStop}
+            disabled={!footerCanPlay && footerCurrentTime <= 0}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-red-500/40 bg-red-500/15 text-sm text-red-300 transition hover:bg-red-500/25 disabled:opacity-40"
+            aria-label="Parar"
+            title="Stop"
+          >
+            <span aria-hidden>■</span>
+          </button>
+          <span
+            className={`min-w-0 flex-1 truncate text-xs ${
+              footerIsMultitrack ? "text-amber-100/90" : "text-slate-400"
+            }`}
+          >
+            {footerIsMultitrack
+              ? `Multitrack${desiredMultitrackKey ? ` · ${desiredMultitrackKey}` : ""}`
+              : effectiveMode === "stems"
+                ? "Stems"
+                : "Original"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setFooterMinimized(false)}
+            className={`${btnGhost} shrink-0 px-3 py-1.5 text-xs`}
+            aria-label="Expandir painel de áudio"
+          >
+            Expandir
+          </button>
+        </div>
+      </div>
+    );
+
     return (
       <div
-        className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#020806]/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl ${className ?? ""}`}
+        className={
+          minimized
+            ? `fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.08] bg-[#020806]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl ${className ?? ""}`
+            : `fixed inset-0 z-50 flex flex-col bg-[#020806] ${className ?? ""}`
+        }
+        data-song-audio-footer
+        role={minimized ? undefined : "dialog"}
+        aria-modal={minimized ? undefined : true}
+        aria-label={minimized ? undefined : "Painel de áudio"}
       >
         {persistentAudio}
+
         {minimized ? (
-          <div className="mx-auto max-w-6xl px-4 py-2.5">
-            <div className="flex items-center gap-3">
-              {scrollControl}
-              <div className="min-w-0 flex-1">{transport}</div>
-              <button
-                type="button"
-                onClick={() => setFooterMinimized(false)}
-                className={`${btnGhost} shrink-0 px-3 py-1.5 text-xs`}
-                aria-label="Expandir painel de áudio"
-              >
-                Expandir
-              </button>
-            </div>
-          </div>
+          minimizedBar
         ) : (
-          <div className="mx-auto max-w-6xl space-y-3 px-4 py-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="space-y-2">
-                <h2 className="font-medium text-slate-100">Áudio</h2>
-                {sourceControls}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-500">Áudio protegido</span>
-                <button
-                  type="button"
-                  onClick={() => setFooterMinimized(true)}
-                  className={`${btnGhost} px-2.5 py-1 text-xs`}
-                  aria-label="Minimizar painel de áudio"
-                >
-                  Minimizar
-                </button>
-              </div>
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.08] bg-[#020806]/98 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl">
+            <div className="min-w-0">
+              <h2 className="font-medium text-slate-100">Áudio</h2>
+              <p className="truncate text-xs text-slate-500">
+                {showMultitrackPanel
+                  ? desiredMultitrackKey
+                    ? `Multitrack · tom ${desiredMultitrackKey}`
+                    : "Multitrack"
+                  : "Áudio protegido"}
+              </p>
             </div>
-            {useOriginalCheckbox ? <div className="mt-2">{useOriginalCheckbox}</div> : null}
-            {keyVariantBanner ? <div className="mt-2">{keyVariantBanner}</div> : null}
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start">
+            <button
+              type="button"
+              onClick={() => setFooterMinimized(true)}
+              className={`${btnGhost} shrink-0 px-3 py-1.5 text-xs`}
+              aria-label="Minimizar painel de áudio"
+            >
+              Minimizar
+            </button>
+          </header>
+        )}
+
+        {/* Conteúdo (e MultitrackMixer) permanece montado ao minimizar — não usar display:none (quebra mídia). */}
+        <div
+          className={
+            minimized
+              ? "pointer-events-none absolute h-px w-px overflow-hidden opacity-0"
+              : `min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 ${
+                  showMultitrackPanel || !hasMetronome
+                    ? "pb-[max(1rem,env(safe-area-inset-bottom))]"
+                    : ""
+                }`
+          }
+          aria-hidden={minimized || undefined}
+        >
+          <div className="mx-auto max-w-6xl space-y-3">
+            {sourceControls}
+            {useOriginalCheckbox}
+            {keyVariantBanner}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
               {scrollControl}
               <div className="min-w-0 flex-1 space-y-3">
-                {transport}
+                {showMultitrackPanel ? null : transport}
+                {multitrackPanel}
                 {stemsPicker}
               </div>
             </div>
-            {volumeControl}
+            {showMultitrackPanel ? null : volumeControl}
           </div>
-        )}
-        {/* Metrônomo sempre montado: só a UI some ao minimizar. */}
-        {hasMetronome ? (
+        </div>
+
+        {hasMetronome && !showMultitrackPanel ? (
           <div
-            className={minimized ? "hidden" : "mx-auto max-w-6xl px-4 pb-4"}
+            className={
+              minimized
+                ? "hidden"
+                : "shrink-0 border-t border-white/[0.06] px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            }
             aria-hidden={minimized || undefined}
           >
-            {metronomeExtras}
+            <div className="mx-auto max-w-6xl">{metronomeExtras}</div>
           </div>
         ) : null}
       </div>

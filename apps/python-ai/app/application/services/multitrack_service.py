@@ -32,6 +32,19 @@ from app.logging import logger
 
 MAX_TRACK_BYTES = 200 * 1024 * 1024
 NO_PITCH_ROLES = {"click", "guide", "cue", "metronome", "count"}
+ALLOWED_TIME_SIGNATURES = {
+    "2/4",
+    "3/4",
+    "4/4",
+    "5/4",
+    "6/4",
+    "3/8",
+    "5/8",
+    "6/8",
+    "7/8",
+    "9/8",
+    "12/8",
+}
 AUDIO_EXTENSIONS = {
     ".mp3",
     ".wav",
@@ -61,6 +74,15 @@ def _safe_stem(name: str) -> str:
 
 def _default_pitch_shift(role: str) -> bool:
     return role.strip().lower() not in NO_PITCH_ROLES
+
+
+def _normalize_time_signature(value: str | None) -> str:
+    raw = (value or "4/4").strip().replace(" ", "")
+    if raw not in ALLOWED_TIME_SIGNATURES:
+        raise ValueError(
+            "Compasso inválido. Use um destes: " + ", ".join(sorted(ALLOWED_TIME_SIGNATURES))
+        )
+    return raw
 
 
 class MultitrackService:
@@ -141,6 +163,7 @@ class MultitrackService:
         source_mode: str | None = None,
         song_id: str | None = None,
         bpm: float | None = None,
+        time_signature: str | None = None,
         notes: str | None = None,
         created_by_user_id: str | None = None,
     ) -> Multitrack:
@@ -153,6 +176,7 @@ class MultitrackService:
         elif source_mode and source_mode.strip().lower() in {"major"}:
             is_minor = False
         mode = "minor" if is_minor else "major"
+        compass = _normalize_time_signature(time_signature)
 
         mt = Multitrack(
             id=_new_id("mt"),
@@ -162,6 +186,7 @@ class MultitrackService:
             source_key=root,
             source_mode=mode,
             bpm=bpm,
+            time_signature=compass,
             notes=notes.strip() if notes else None,
             created_by_user_id=created_by_user_id,
         )
@@ -180,9 +205,12 @@ class MultitrackService:
         *,
         title: str | None = None,
         bpm: float | None = None,
+        time_signature: str | None = None,
         notes: str | None = None,
         song_id: str | None = None,
         clear_song: bool = False,
+        source_key: str | None = None,
+        source_mode: str | None = None,
     ) -> Multitrack:
         mt = await self.get(multitrack_id, band_id)
         if mt is None:
@@ -194,16 +222,47 @@ class MultitrackService:
             mt.title = clean[:255]
         if bpm is not None:
             mt.bpm = bpm
+        if time_signature is not None:
+            mt.time_signature = _normalize_time_signature(time_signature)
         if notes is not None:
             mt.notes = notes.strip() or None
         if clear_song:
             mt.song_id = None
         elif song_id is not None:
             mt.song_id = song_id.strip() or None
+
+        key_changed = False
+        if source_key is not None or source_mode is not None:
+            next_key = source_key if source_key is not None else mt.source_key
+            next_mode = source_mode if source_mode is not None else mt.source_mode
+            root, is_minor = parse_key(next_key, next_mode)
+            if source_mode and source_mode.strip().lower() in {"minor", "m"}:
+                is_minor = True
+            elif source_mode and source_mode.strip().lower() in {"major"}:
+                is_minor = False
+            mode = "minor" if is_minor else "major"
+            old_label = format_key(*parse_key(mt.source_key, mt.source_mode))
+            new_label = format_key(root, is_minor)
+            if old_label != new_label or mt.source_mode != mode:
+                key_changed = True
+                mt.source_key = root
+                mt.source_mode = mode
+
         mt.updated_at = datetime.now(UTC)
+        if key_changed:
+            # Variantes antigas deixam de ser válidas com o novo tom base.
+            await self._clear_key_variants(mt.id)
         await self.session.commit()
         await self.session.refresh(mt)
         return mt
+
+    async def _clear_key_variants(self, multitrack_id: str) -> None:
+        variants = await self._variants(multitrack_id)
+        for variant in variants:
+            await self.session.delete(variant)
+        keys_dir = self.root_dir(multitrack_id) / "keys"
+        if keys_dir.exists():
+            shutil.rmtree(keys_dir, ignore_errors=True)
 
     async def delete(self, multitrack_id: str, band_id: str) -> None:
         mt = await self.get(multitrack_id, band_id)
@@ -631,6 +690,7 @@ class MultitrackService:
             "source_key": source_label,
             "source_mode": mt.source_mode,
             "bpm": mt.bpm,
+            "time_signature": getattr(mt, "time_signature", None) or "4/4",
             "notes": mt.notes,
             "created_by_user_id": mt.created_by_user_id,
             "created_at": mt.created_at.isoformat(),
@@ -648,7 +708,13 @@ class MultitrackService:
                 .where(MultitrackTrack.multitrack_id == mt.id)
             )
             payload["track_count"] = int(count.scalar_one())
+        variants = await self._variants(mt.id)
+        ready_keys = [source_label] + [
+            v.target_key
+            for v in variants
+            if v.status == KeyVariantStatus.READY.value and v.target_key != source_label
+        ]
+        payload["ready_keys"] = ready_keys
         if include_keys:
-            variants = await self._variants(mt.id)
             payload["key_variants"] = [self.serialize_variant(v) for v in variants]
         return payload

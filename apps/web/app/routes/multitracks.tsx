@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useState } from "react";
 
-import { createMultitrack, fetchMultitracks } from "../lib/api";
+import {
+  createMultitrack,
+  fetchMultitracks,
+  MULTITRACK_TIME_SIGNATURES,
+  type MultitrackTimeSignature,
+} from "../lib/api";
 import { useBand } from "../lib/band-context";
 import { useToast } from "../lib/toast";
 import {
@@ -26,6 +31,7 @@ export default function MultitracksPage() {
   const [sourceKey, setSourceKey] = useState("C");
   const [sourceMode, setSourceMode] = useState<"major" | "minor">("major");
   const [bpm, setBpm] = useState("");
+  const [timeSignature, setTimeSignature] = useState<MultitrackTimeSignature>("4/4");
   const [createOpen, setCreateOpen] = useState(false);
 
   const listQuery = useQuery({
@@ -41,12 +47,14 @@ export default function MultitracksPage() {
         source_key: sourceMode === "minor" ? `${sourceKey}m` : sourceKey,
         source_mode: sourceMode,
         bpm: bpm ? Number(bpm) : null,
+        time_signature: timeSignature,
       }),
     onSuccess: (created) => {
       toast.success("Multitrack criado");
       setCreateOpen(false);
       setTitle("");
       setBpm("");
+      setTimeSignature("4/4");
       void queryClient.invalidateQueries({ queryKey: ["multitracks"] });
       window.location.href = `/multitracks/${created.id}`;
     },
@@ -83,7 +91,7 @@ export default function MultitracksPage() {
               placeholder="Ex.: Sublime — ensaio"
             />
           </label>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block text-sm text-slate-300">
               Tom
               <select
@@ -119,9 +127,25 @@ export default function MultitracksPage() {
                 placeholder="72"
               />
             </label>
+            <label className="block text-sm text-slate-300">
+              Compasso
+              <select
+                className={`${cifraSelectClass} mt-1`}
+                value={timeSignature}
+                onChange={(event) =>
+                  setTimeSignature(event.target.value as MultitrackTimeSignature)
+                }
+              >
+                {MULTITRACK_TIME_SIGNATURES.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <p className="text-xs text-slate-500">
-            O tom de origem fica bloqueado após a criação. Para outro tom base, crie um novo Multitrack.
+            Use o tom real das faixas. Depois você ainda pode alterar o tom de origem no Multitrack.
           </p>
           <div className="flex flex-wrap gap-2">
             <button

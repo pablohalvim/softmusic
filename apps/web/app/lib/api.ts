@@ -1014,6 +1014,41 @@ export interface MultitrackKeyVariant {
   updated_at: string;
 }
 
+export const MULTITRACK_TIME_SIGNATURES = [
+  "2/4",
+  "3/4",
+  "4/4",
+  "5/4",
+  "6/4",
+  "3/8",
+  "5/8",
+  "6/8",
+  "7/8",
+  "9/8",
+  "12/8",
+] as const;
+
+export type MultitrackTimeSignature = (typeof MULTITRACK_TIME_SIGNATURES)[number];
+
+export function parseTimeSignature(value: string | null | undefined): {
+  beats: number;
+  unit: number;
+  label: MultitrackTimeSignature;
+} {
+  const raw = (value || "4/4").trim().replace(/\s+/g, "");
+  const match = /^(\d{1,2})\/(\d{1,2})$/.exec(raw);
+  const beats = match ? Number(match[1]) : 4;
+  const unit = match ? Number(match[2]) : 4;
+  const label = (
+    MULTITRACK_TIME_SIGNATURES.includes(raw as MultitrackTimeSignature) ? raw : "4/4"
+  ) as MultitrackTimeSignature;
+  return {
+    beats: Number.isFinite(beats) && beats > 0 ? beats : 4,
+    unit: Number.isFinite(unit) && unit > 0 ? unit : 4,
+    label,
+  };
+}
+
 export interface MultitrackSummary {
   id: string;
   band_id: string;
@@ -1022,12 +1057,30 @@ export interface MultitrackSummary {
   source_key: string;
   source_mode: string;
   bpm: number | null;
+  time_signature?: string | null;
   notes: string | null;
   track_count: number;
+  /** Tom original + variantes ready (para habilitar botão na cifra). */
+  ready_keys?: string[];
   tracks?: MultitrackTrack[];
   key_variants?: MultitrackKeyVariant[];
   created_at: string;
   updated_at: string;
+}
+
+/** Normaliza rótulo de tom para comparação (G# / g# / G#m). */
+export function normalizeMusicKeyLabel(key: string | null | undefined): string {
+  return (key ?? "").trim().replace(/\s+/g, "");
+}
+
+export function multitrackMatchesKey(
+  mt: Pick<MultitrackSummary, "source_key" | "ready_keys">,
+  key: string | null | undefined,
+): boolean {
+  const target = normalizeMusicKeyLabel(key);
+  if (!target) return false;
+  const keys = (mt.ready_keys?.length ? mt.ready_keys : [mt.source_key]).map(normalizeMusicKeyLabel);
+  return keys.some((item) => item.toLowerCase() === target.toLowerCase());
 }
 
 export async function fetchMultitracks(params?: {
@@ -1055,6 +1108,7 @@ export async function createMultitrack(input: {
   source_mode?: string;
   song_id?: string | null;
   bpm?: number | null;
+  time_signature?: string | null;
   notes?: string | null;
 }): Promise<MultitrackSummary> {
   const response = await authFetch("/multitracks", {
@@ -1070,9 +1124,12 @@ export async function updateMultitrack(
   input: {
     title?: string;
     bpm?: number | null;
+    time_signature?: string | null;
     notes?: string | null;
     song_id?: string | null;
     clear_song?: boolean;
+    source_key?: string;
+    source_mode?: "major" | "minor" | string;
   },
 ): Promise<MultitrackSummary> {
   const response = await authFetch(`/multitracks/${id}`, {

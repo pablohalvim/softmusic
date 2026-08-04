@@ -924,7 +924,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
                 className="rounded border-slate-600 bg-slate-950 text-green-500 focus:ring-green-500/40"
               />
               <span className="text-xs text-slate-400">
-                Ao iniciar rolagem, tocar o áudio e pausar junto
+                Ao dar play/pause no áudio, ligar e pausar a rolagem juntos
               </span>
             </label>
 

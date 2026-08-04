@@ -5,7 +5,7 @@ import json
 import mimetypes
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
@@ -1258,15 +1258,19 @@ class MultitrackCreateBody(BaseModel):
     source_mode: str | None = Field(default=None, max_length=16)
     song_id: str | None = None
     bpm: float | None = Field(default=None, ge=20, le=400)
+    time_signature: str | None = Field(default="4/4", max_length=8)
     notes: str | None = None
 
 
 class MultitrackUpdateBody(BaseModel):
     title: str | None = Field(default=None, max_length=255)
     bpm: float | None = Field(default=None, ge=20, le=400)
+    time_signature: str | None = Field(default=None, max_length=8)
     notes: str | None = None
     song_id: str | None = None
     clear_song: bool = False
+    source_key: str | None = Field(default=None, min_length=1, max_length=16)
+    source_mode: str | None = Field(default=None, max_length=16)
 
 
 class MultitrackTrackUpdateBody(BaseModel):
@@ -1349,6 +1353,7 @@ async def create_multitrack(
             source_mode=body.source_mode,
             song_id=body.song_id,
             bpm=body.bpm,
+            time_signature=body.time_signature,
             notes=body.notes,
             created_by_user_id=user.id,
         )
@@ -1394,9 +1399,12 @@ async def update_multitrack(
             resolved,
             title=body.title,
             bpm=body.bpm,
+            time_signature=body.time_signature,
             notes=body.notes,
             song_id=body.song_id,
             clear_song=body.clear_song,
+            source_key=body.source_key,
+            source_mode=body.source_mode,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404 if "não encontrado" in str(exc).lower() else 400, detail=str(exc)) from exc
@@ -1425,8 +1433,8 @@ async def delete_multitrack(
 async def upload_multitrack_track(
     multitrack_id: str,
     file: UploadFile = File(...),
-    name: str | None = None,
-    role: str | None = None,
+    name: str | None = Form(default=None),
+    role: str | None = Form(default=None),
     session: AsyncSession = Depends(get_session),
     user: User = Depends(get_current_user),
     band_id: str | None = Depends(get_band_id),

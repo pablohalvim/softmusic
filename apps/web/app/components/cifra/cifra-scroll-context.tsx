@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -25,6 +26,8 @@ interface CifraScrollContextValue {
   setSyncWithAudio: (value: boolean) => void;
   pixelsPerSecond: number;
   bpm: number;
+  /** Play/Pause do áudio liga/desliga a rolagem quando a sync estiver ativa. */
+  syncScrollWithAudioPlayback: (audioPlaying: boolean) => void;
 }
 
 const CifraScrollContext = createContext<CifraScrollContextValue | null>(null);
@@ -45,6 +48,8 @@ export function CifraScrollProvider({
   const [syncWithAudio, setSyncWithAudio] = useState(
     () => loadCifraAutoScrollPrefs().syncWithAudio,
   );
+  const syncWithAudioRef = useRef(syncWithAudio);
+  syncWithAudioRef.current = syncWithAudio;
 
   const pixelsPerSecond = useMemo(
     () => cifraScrollPixelsPerSecond({ bpm, speedMultiplier }),
@@ -63,23 +68,15 @@ export function CifraScrollProvider({
     saveCifraAutoScrollPrefs({ speedMultiplier, syncWithAudio });
   }, [speedMultiplier, syncWithAudio]);
 
+  const syncScrollWithAudioPlayback = useCallback((audioPlaying: boolean) => {
+    if (!syncWithAudioRef.current) return;
+    setPlaying((prev) => (prev === audioPlaying ? prev : audioPlaying));
+  }, []);
+
+  /** Só liga/desliga a rolagem da cifra — nunca toca ou pausa o áudio. */
   const togglePlaying = useCallback(() => {
-    if (playing) {
-      setPlaying(false);
-      return;
-    }
-    setPlaying(true);
-    if (syncWithAudio) {
-      const audio = document.querySelector<HTMLAudioElement>(
-        `[data-softmusic-song-audio="${songId}"]`,
-      );
-      if (audio?.paused) {
-        void audio.play().catch(() => {
-          // Autoplay pode ser bloqueado até outro gesto do usuário.
-        });
-      }
-    }
-  }, [playing, songId, syncWithAudio]);
+    setPlaying((prev) => !prev);
+  }, []);
 
   const stopPlaying = useCallback(() => setPlaying(false), []);
 
@@ -94,6 +91,7 @@ export function CifraScrollProvider({
       setSyncWithAudio,
       pixelsPerSecond,
       bpm,
+      syncScrollWithAudioPlayback,
     }),
     [
       playing,
@@ -103,6 +101,7 @@ export function CifraScrollProvider({
       syncWithAudio,
       pixelsPerSecond,
       bpm,
+      syncScrollWithAudioPlayback,
     ],
   );
 

@@ -5,6 +5,7 @@ interface UseCifraAutoScrollOptions {
   playing: boolean;
   bpm: number;
   speedMultiplier: number;
+  /** Mantido por compatibilidade; a sync play/pause agora vive no SongAudioPlayer. */
   syncWithAudio: boolean;
   songId: string;
 }
@@ -18,10 +19,7 @@ export function useCifraAutoScroll({
   playing,
   bpm,
   speedMultiplier,
-  syncWithAudio,
-  songId,
 }: UseCifraAutoScrollOptions): void {
-  const pausedByAudioRef = useRef(false);
   const pausedByUserRef = useRef(false);
   const resumeTimeoutRef = useRef<number | null>(null);
   const scrollRemainderRef = useRef(0);
@@ -50,7 +48,7 @@ export function useCifraAutoScroll({
       const deltaSeconds = (timestamp - lastTimestamp) / 1000;
       lastTimestamp = timestamp;
 
-      if (!pausedByAudioRef.current && !pausedByUserRef.current) {
+      if (!pausedByUserRef.current) {
         const scrollElement = getScrollElement();
         const maxScroll = Math.max(0, scrollElement.scrollHeight - window.innerHeight);
 
@@ -82,6 +80,14 @@ export function useCifraAutoScroll({
 
     const pauseForUserInteraction = (event: Event) => {
       if (!event.isTrusted) return;
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest("[data-cifra-scroll-control], [data-song-audio-footer]")
+      ) {
+        // Toques nos controles da barra não devem pausar a rolagem.
+        return;
+      }
       pausedByUserRef.current = true;
       if (resumeTimeoutRef.current !== null) {
         window.clearTimeout(resumeTimeoutRef.current);
@@ -102,31 +108,4 @@ export function useCifraAutoScroll({
       }
     };
   }, [playing]);
-
-  useEffect(() => {
-    if (!playing || !syncWithAudio) {
-      pausedByAudioRef.current = false;
-      return;
-    }
-
-    const audio = document.querySelector<HTMLAudioElement>(
-      `[data-softmusic-song-audio="${songId}"]`,
-    );
-    if (!audio) return;
-
-    const syncPausedState = () => {
-      pausedByAudioRef.current = audio.paused;
-    };
-
-    syncPausedState();
-    audio.addEventListener("play", syncPausedState);
-    audio.addEventListener("pause", syncPausedState);
-    audio.addEventListener("ended", syncPausedState);
-
-    return () => {
-      audio.removeEventListener("play", syncPausedState);
-      audio.removeEventListener("pause", syncPausedState);
-      audio.removeEventListener("ended", syncPausedState);
-    };
-  }, [playing, syncWithAudio, songId]);
 }

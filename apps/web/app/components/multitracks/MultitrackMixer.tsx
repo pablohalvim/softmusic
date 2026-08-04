@@ -1,28 +1,61 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 
+import { MetronomeClick, type MetronomeClickHandle } from "../audio/MetronomeClick";
 import {
   multitrackTrackAudioPath,
   resolveAuthenticatedMediaUrl,
+  type MultitrackTimeSignature,
   type MultitrackTrack,
 } from "../../lib/api";
 import { btnGhost, btnPrimary } from "../../lib/ui-classes";
+
+export type MultitrackMixerHandle = {
+  play: () => Promise<void>;
+  pause: () => void;
+  stop: () => void;
+  toggle: () => Promise<void>;
+  seek: (time: number) => void;
+  setMasterGain: (gain: number) => void;
+};
 
 interface MultitrackMixerProps {
   multitrackId: string;
   tracks: MultitrackTrack[];
   playbackKey?: string | null;
+  bpm?: number | null;
+  timeSignature?: string | null;
+  onBpmChange?: (bpm: number) => void;
+  onTimeSignatureChange?: (timeSignature: MultitrackTimeSignature) => void;
   onTrackMuteChange?: (trackId: string, muted: boolean) => void;
   onTrackGainChange?: (trackId: string, gain: number) => void;
+  onPlayingChange?: (playing: boolean) => void;
+  onReadyChange?: (ready: boolean) => void;
+  onProgressChange?: (currentTime: number, duration: number) => void;
+  onMasterGainChange?: (gain: number) => void;
 }
 
-export function MultitrackMixer({
-  multitrackId,
-  tracks,
-  playbackKey,
-  onTrackMuteChange,
-  onTrackGainChange,
-}: MultitrackMixerProps) {
+export const MultitrackMixer = forwardRef<MultitrackMixerHandle, MultitrackMixerProps>(
+  function MultitrackMixer(
+    {
+      multitrackId,
+      tracks,
+      playbackKey,
+      bpm,
+      timeSignature,
+      onBpmChange,
+      onTimeSignatureChange,
+      onTrackMuteChange,
+      onTrackGainChange,
+      onPlayingChange,
+      onReadyChange,
+      onProgressChange,
+      onMasterGainChange,
+    },
+    ref,
+  ) {
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
+  const metronomeRef = useRef<MetronomeClickHandle>(null);
+  const gainPersistTimers = useRef<Record<string, number>>({});
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -33,18 +66,39 @@ export function MultitrackMixer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const effectiveBpm = Number.isFinite(bpm) && (bpm ?? 0) > 0 ? Number(bpm) : 120;
+  const tracksKey = useMemo(
+    () => tracks.map((track) => track.id).join("|"),
+    [tracks],
+  );
+  const mediaKey = `${multitrackId}:${playbackKey ?? "source"}:${tracksKey}`;
+
+  const applyTrackMix = (
+    trackId: string,
+    muted: boolean,
+    gain: number,
+    master: number,
+  ) => {
+    const audio = audioRefs.current[trackId];
+    if (!audio) return;
+    audio.muted = muted;
+    audio.volume = Math.max(0, Math.min(1, gain * master));
+  };
+
   useEffect(() => {
     let cancelled = false;
     const objectUrls: string[] = [];
+    const trackList = tracks;
 
     async function load() {
       setLoading(true);
       setError(null);
       setPlaying(false);
       setCurrentTime(0);
+      metronomeRef.current?.stop();
       const next: Record<string, string> = {};
       try {
-        for (const track of tracks) {
+        for (const track of trackList) {
           const path = multitrackTrackAudioPath(multitrackId, track.id, playbackKey);
           const resolved = await resolveAuthenticatedMediaUrl(path);
           if (resolved.revoke) objectUrls.push(resolved.url);
@@ -60,39 +114,54 @@ export function MultitrackMixer({
       }
     }
 
-    if (tracks.length > 0) {
+    if (trackList.length > 0) {
       void load();
     } else {
       setUrls({});
+      setPlaying(false);
+      setCurrentTime(0);
+      metronomeRef.current?.stop();
     }
 
     return () => {
       cancelled = true;
       for (const url of objectUrls) URL.revokeObjectURL(url);
     };
-  }, [multitrackId, tracks, playbackKey]);
+    // Só recarrega quando muda o conjunto de faixas / tom — não a cada PATCH de gain/mute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mediaKey captura ids+tom
+  }, [mediaKey]);
 
   useEffect(() => {
-    const muteMap: Record<string, boolean> = {};
-    const gainMap: Record<string, number> = {};
-    for (const track of tracks) {
-      muteMap[track.id] = track.muted;
-      gainMap[track.id] = track.gain;
-    }
-    setLocalMute(muteMap);
-    setLocalGain(gainMap);
-  }, [tracks]);
+    setLocalMute((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const track of tracks) {
+        next[track.id] = prev[track.id] ?? track.muted;
+      }
+      return next;
+    });
+    setLocalGain((prev) => {
+      const next: Record<string, number> = {};
+      for (const track of tracks) {
+        next[track.id] = prev[track.id] ?? track.gain;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando entram/saem faixas
+  }, [tracksKey]);
 
   useEffect(() => {
     for (const track of tracks) {
-      const audio = audioRefs.current[track.id];
-      if (!audio) continue;
-      const muted = localMute[track.id] ?? track.muted;
-      const gain = localGain[track.id] ?? track.gain;
-      audio.muted = muted;
-      audio.volume = Math.max(0, Math.min(1, gain * masterGain));
+      applyTrackMix(track.id, localMute[track.id] ?? track.muted, localGain[track.id] ?? track.gain, masterGain);
     }
   }, [tracks, localMute, localGain, masterGain, urls]);
+
+  useEffect(() => {
+    return () => {
+      for (const timer of Object.values(gainPersistTimers.current)) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, []);
 
   const syncSeek = (time: number) => {
     for (const track of tracks) {
@@ -112,6 +181,7 @@ export function MultitrackMixer({
     try {
       await Promise.all(list.map((audio) => audio.play()));
       setPlaying(true);
+      void metronomeRef.current?.start();
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Não foi possível reproduzir");
     }
@@ -122,19 +192,98 @@ export function MultitrackMixer({
       audioRefs.current[track.id]?.pause();
     }
     setPlaying(false);
+    metronomeRef.current?.stop();
   };
+
+  const handleStop = () => {
+    handlePause();
+    syncSeek(0);
+  };
+
+  const handleSetMasterGain = (gain: number) => {
+    const next = Math.max(0, Math.min(1, gain));
+    setMasterGain(next);
+    onMasterGainChange?.(next);
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      play: handlePlay,
+      pause: handlePause,
+      stop: handleStop,
+      toggle: async () => {
+        if (playing) handlePause();
+        else await handlePlay();
+      },
+      seek: syncSeek,
+      setMasterGain: handleSetMasterGain,
+    }),
+    // handlers fecham sobre tracks/refs atuais
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [playing, tracks, urls],
+  );
+
+  useEffect(() => {
+    onPlayingChange?.(playing);
+  }, [playing, onPlayingChange]);
+
+  useEffect(() => {
+    const ready =
+      !loading &&
+      !error &&
+      tracks.length > 0 &&
+      tracks.every((track) => Boolean(urls[track.id]));
+    onReadyChange?.(ready);
+  }, [loading, error, tracks, urls, onReadyChange]);
 
   const maxDuration =
     duration ||
     Math.max(0, ...tracks.map((track) => track.duration_seconds ?? 0));
 
+  useEffect(() => {
+    onProgressChange?.(currentTime, maxDuration);
+  }, [currentTime, maxDuration, onProgressChange]);
+
+  useEffect(() => {
+    onMasterGainChange?.(masterGain);
+  }, [masterGain, onMasterGainChange]);
+
+  const scheduleGainPersist = (trackId: string, gain: number) => {
+    if (!onTrackGainChange) return;
+    const existing = gainPersistTimers.current[trackId];
+    if (existing) window.clearTimeout(existing);
+    gainPersistTimers.current[trackId] = window.setTimeout(() => {
+      onTrackGainChange(trackId, gain);
+      delete gainPersistTimers.current[trackId];
+    }, 250);
+  };
+
   return (
     <div className="space-y-4">
+      <MetronomeClick
+        ref={metronomeRef}
+        bpm={effectiveBpm}
+        timeSignature={timeSignature ?? "4/4"}
+        onBpmChange={onBpmChange}
+        onTimeSignatureChange={onTimeSignatureChange}
+        visualOnly
+        className="rounded-xl border border-white/10 bg-black/20 p-4"
+      />
+
       {tracks.map((track) => (
         <audio
           key={`${track.id}-${playbackKey ?? "source"}`}
           ref={(node) => {
             audioRefs.current[track.id] = node;
+            if (node) {
+              applyTrackMix(
+                track.id,
+                localMute[track.id] ?? track.muted,
+                localGain[track.id] ?? track.gain,
+                masterGain,
+              );
+            }
           }}
           src={urls[track.id]}
           preload="metadata"
@@ -150,7 +299,10 @@ export function MultitrackMixer({
             }
           }}
           onEnded={() => {
-            if (track.id === tracks[0]?.id) setPlaying(false);
+            if (track.id === tracks[0]?.id) {
+              setPlaying(false);
+              metronomeRef.current?.stop();
+            }
           }}
         />
       ))}
@@ -180,7 +332,7 @@ export function MultitrackMixer({
             max={1}
             step={0.01}
             value={masterGain}
-            onChange={(event) => setMasterGain(Number(event.target.value))}
+            onChange={(event) => handleSetMasterGain(Number(event.target.value))}
           />
         </label>
         <span className="text-xs text-slate-500">
@@ -226,6 +378,7 @@ export function MultitrackMixer({
                     onChange={(event) => {
                       const next = event.target.checked;
                       setLocalMute((prev) => ({ ...prev, [track.id]: next }));
+                      applyTrackMix(track.id, next, localGain[track.id] ?? track.gain, masterGain);
                       onTrackMuteChange?.(track.id, next);
                     }}
                   />
@@ -242,7 +395,8 @@ export function MultitrackMixer({
                     onChange={(event) => {
                       const next = Number(event.target.value);
                       setLocalGain((prev) => ({ ...prev, [track.id]: next }));
-                      onTrackGainChange?.(track.id, next);
+                      applyTrackMix(track.id, localMute[track.id] ?? track.muted, next, masterGain);
+                      scheduleGainPersist(track.id, next);
                     }}
                   />
                 </label>
@@ -253,7 +407,8 @@ export function MultitrackMixer({
       </ul>
     </div>
   );
-}
+  },
+);
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";

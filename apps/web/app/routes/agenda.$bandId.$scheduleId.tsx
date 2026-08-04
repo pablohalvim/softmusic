@@ -1,3 +1,4 @@
+import { formatDateTime } from "@softmusic/shared/datetime";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
@@ -127,15 +128,9 @@ function OccurrenceRow({ occurrence }: { occurrence: ScheduleOccurrence }) {
         </span>
       </div>
       <p className="mt-2 text-sm text-slate-300">
-        {new Date(occurrence.starts_at).toLocaleString("pt-BR", {
-          dateStyle: "short",
-          timeStyle: "short",
-        })}
+        {formatDateTime(occurrence.starts_at)}
         {" · até "}
-        {new Date(occurrence.ends_at).toLocaleString("pt-BR", {
-          dateStyle: "short",
-          timeStyle: "short",
-        })}
+        {formatDateTime(occurrence.ends_at)}
       </p>
       <p className="mt-1 text-sm text-slate-500">{occurrence.formatted_address}</p>
       {occurrence.maps_url ? (
