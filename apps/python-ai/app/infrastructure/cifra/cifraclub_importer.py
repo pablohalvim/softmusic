@@ -14,9 +14,37 @@ from app.logging import logger
 
 CIFRA_CLUB_HOSTS = {"www.cifraclub.com.br", "cifraclub.com.br"}
 SECTION_PATTERN = re.compile(r"^\[(.+?)\]\s*(.*)$")
+# Formato clássico: <b>G</b>. Formato atual: <b data-chord-name="G" ...>G</b>.
 CHORD_TAG_PATTERN = re.compile(r"<b>(.*?)</b>", re.IGNORECASE)
+RAW_B_TAG_PATTERN = re.compile(r"<b(\s[^>]*)?>(.*?)</b>", re.IGNORECASE | re.DOTALL)
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 TAB_BLOCK_PATTERN = re.compile(r"<span class=\"tablatura\">.*?</span>", re.IGNORECASE | re.DOTALL)
+# Wrappers do layout novo do Cifra Club (não fazem parte da cifra).
+CIFRA_WRAPPER_PATTERN = re.compile(
+    r"</?div\b[^>]*>|</?span\b(?![^>]*tablatura)[^>]*>",
+    re.IGNORECASE,
+)
+
+
+def _normalize_chord_tags(html: str) -> str:
+    """Normaliza ``<b data-chord-name="D" ...>D</b>`` → ``<b>D</b>`` (parser legado)."""
+
+    def repl(match: re.Match[str]) -> str:
+        attrs = match.group(1) or ""
+        inner = match.group(2) or ""
+        name_match = re.search(r'data-chord-name=["\']([^"\']+)["\']', attrs, re.IGNORECASE)
+        chord = unescape(name_match.group(1) if name_match else inner).strip()
+        if not chord:
+            return ""
+        return f"<b>{chord}</b>"
+
+    return RAW_B_TAG_PATTERN.sub(repl, html)
+
+
+def _preprocess_cifra_html(html: str) -> str:
+    """Remove wrappers e normaliza tags de acorde do markup atual do Cifra Club."""
+    without_wrappers = CIFRA_WRAPPER_PATTERN.sub("", html)
+    return _normalize_chord_tags(without_wrappers)
 
 
 @dataclass(frozen=True)
@@ -100,6 +128,7 @@ def _inline_line_to_placements(raw_line: str) -> tuple[str, list[dict[str, Any]]
 
 
 def parse_cifra_pre_content(pre_html: str) -> list[dict[str, Any]]:
+    pre_html = _preprocess_cifra_html(pre_html)
     sections: list[dict[str, Any]] = []
     current_section: dict[str, Any] | None = None
     pending_chord_line: str | None = None
@@ -168,10 +197,12 @@ def parse_cifra_pre_content(pre_html: str) -> list[dict[str, Any]]:
             continue
 
         inline_chords = _extract_chords(stripped)
-        if inline_chords and plain and any(f"<b>{chord}" in stripped for chord in inline_chords):
+        if inline_chords and plain and CHORD_TAG_PATTERN.search(stripped):
             lyrics, placements = _inline_line_to_placements(stripped)
-            append_line(lyrics, placements)
-            continue
+            # Só trata como inline se sobrou letra além dos acordes.
+            if lyrics.strip():
+                append_line(lyrics, placements)
+                continue
 
         lyrics = plain
         if pending_chord_line:
@@ -197,7 +228,14 @@ def _extract_pre_html(html: str) -> str:
         stripped = content.strip()
         if not stripped:
             continue
-        if "<b>" in stripped.lower() or SECTION_PATTERN.match(_strip_html(stripped.splitlines()[0].strip())):
+        lower = stripped.lower()
+        has_chords = (
+            "<b>" in lower
+            or "data-chord-name=" in lower
+            or RAW_B_TAG_PATTERN.search(stripped) is not None
+        )
+        first_plain = _strip_html(_preprocess_cifra_html(stripped.splitlines()[0].strip()))
+        if has_chords or SECTION_PATTERN.match(first_plain):
             return stripped
 
     return matches[0].strip()
@@ -225,12 +263,29 @@ def _extract_artist(html: str, page_args: dict[str, Any]) -> str | None:
 
 
 def _extract_key(html: str) -> str | None:
-    match = re.search(r'id=\"cifra_tom\"[^>]*>\s*([A-G](?:#|b)?m?)\s*<', html, re.IGNORECASE)
+    # Layout atual: botão de tom com data-anchor="--chord-tone".
+    match = re.search(
+        r'data-anchor=["\']--chord-tone["\'][^>]*>\s*([A-G](?:#|b)?m?)\s*<',
+        html,
+        re.IGNORECASE,
+    )
     if match:
         return match.group(1).strip()
-    match = re.search(r"Tom:\s*([A-G](?:#|b)?m?)", html, re.IGNORECASE)
+
+    match = re.search(r'id=["\']cifra_tom["\'][^>]*>\s*([A-G](?:#|b)?m?)\s*<', html, re.IGNORECASE)
     if match:
-        return match.group(1)
+        return match.group(1).strip()
+
+    # "Tom: <button>D</button>"
+    match = re.search(r"Tom:\s*<[^>]*>\s*([A-G](?:#|b)?m?)\s*<", html)
+    if match:
+        return match.group(1).strip()
+
+    # Texto "Tom: D" — case-sensitive para NÃO casar CSS tipo ``tom:calc(...)``.
+    match = re.search(r"(?:^|>|\s)Tom:\s*([A-G](?:#|b)?m?)\b", html)
+    if match:
+        return match.group(1).strip()
+
     return None
 
 
