@@ -103,4 +103,16 @@ export default [
     "routes/songs.$songId.keys.$key.stems.$stemName.audio.tsx",
   ),
   route("jobs/:jobId", "routes/jobs.$jobId.tsx"),
+  route("multitracks", "routes/multitracks._index.tsx"),
+  route("multitracks/:multitrackId", "routes/multitracks.$multitrackId.tsx"),
+  route("multitracks/:multitrackId/tracks", "routes/multitracks.$multitrackId.tracks.tsx"),
+  route(
+    "multitracks/:multitrackId/tracks/:trackId",
+    "routes/multitracks.$multitrackId.tracks.$trackId.tsx",
+  ),
+  route(
+    "multitracks/:multitrackId/tracks/:trackId/audio",
+    "routes/multitracks.$multitrackId.tracks.$trackId.audio.tsx",
+  ),
+  route("multitracks/:multitrackId/keys", "routes/multitracks.$multitrackId.keys.tsx"),
 ] satisfies RouteConfig;

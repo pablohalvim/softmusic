@@ -28,6 +28,7 @@ celery_app.conf.update(
     task_routes={
         "app.worker.run_analysis": {"queue": "analysis"},
         "app.worker.run_pitch_shift": {"queue": "analysis"},
+        "app.worker.run_multitrack_pitch_shift": {"queue": "analysis"},
         "app.worker.suspend_overdue_accounts": {"queue": "billing"},
         "app.worker.run_daily_billing": {"queue": "billing"},
     },
@@ -115,6 +116,33 @@ def run_pitch_shift(self, job_id: str) -> dict:
                 if variant:
                     variant.status = KeyVariantStatus.FAILED.value
                     variant.error = str(exc)
+                await session.commit()
+            raise
+
+    return run_async_in_worker(process)
+
+
+@celery_app.task(name="app.worker.run_multitrack_pitch_shift", bind=True, max_retries=2)
+def run_multitrack_pitch_shift(self, variant_id: str) -> dict:
+    from sqlalchemy import select
+
+    from app.application.services.multitrack_service import MultitrackService
+    from app.infrastructure.database.models import KeyVariantStatus, MultitrackKeyVariant
+
+    async def process(session) -> dict:
+        service = MultitrackService(session)
+        try:
+            return await service.process_key_variant(variant_id)
+        except Exception as exc:
+            await session.rollback()
+            result = await session.execute(
+                select(MultitrackKeyVariant).where(MultitrackKeyVariant.id == variant_id)
+            )
+            variant = result.scalar_one_or_none()
+            if variant:
+                variant.status = KeyVariantStatus.FAILED.value
+                variant.error = str(exc)
+                variant.progress = 0
                 await session.commit()
             raise
 

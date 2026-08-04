@@ -134,6 +134,72 @@ class SongKeyVariant(Base):
     )
 
 
+class Multitrack(Base):
+    """Sessão Multitracks (faixas enviadas pelo usuário — independente do Demucs)."""
+
+    __tablename__ = "multitracks"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    band_id: Mapped[str] = mapped_column(String(32), index=True)
+    song_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    source_key: Mapped[str] = mapped_column(String(16))
+    source_mode: Mapped[str] = mapped_column(String(16), default="major")
+    bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class MultitrackTrack(Base):
+    __tablename__ = "multitrack_tracks"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    multitrack_id: Mapped[str] = mapped_column(String(32), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    role: Mapped[str] = mapped_column(String(64), default="other")
+    file_name: Mapped[str] = mapped_column(String(255))
+    original_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    gain: Mapped[float] = mapped_column(Float, default=1.0)
+    muted: Mapped[bool] = mapped_column(Boolean, default=False)
+    pitch_shift: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class MultitrackKeyVariant(Base):
+    __tablename__ = "multitrack_key_variants"
+    __table_args__ = (
+        UniqueConstraint("multitrack_id", "target_key", name="uq_multitrack_key_variants_mt_target"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    multitrack_id: Mapped[str] = mapped_column(String(32), index=True)
+    target_key: Mapped[str] = mapped_column(String(16))
+    semitones: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32), default=KeyVariantStatus.QUEUED.value)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_prefix: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 class UserStatus(StrEnum):
     ACTIVE = "active"
     SUSPENDED = "suspended"

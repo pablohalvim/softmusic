@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { formatDateTime } from "@softmusic/shared/datetime";
 
@@ -10,6 +10,7 @@ import { EditSongModal } from "../library/EditSongModal";
 import { ReanalyzeAudioModal } from "../library/ReanalyzeAudioModal";
 import {
   cancelSongAnalysis,
+  createMultitrack,
   deleteSong,
   fetchJob,
   fetchSongJob,
@@ -30,6 +31,7 @@ import { JobProgressDetails, ProgressBar, StatusBadge } from "./StatusBadge";
 
 export function SongListItem({ song }: { song: SongSummary }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const toast = useToast();
   const { user } = useAuth();
   const { activeBand } = useBand();
@@ -44,12 +46,22 @@ export function SongListItem({ song }: { song: SongSummary }) {
   const isActive = isActiveSong(song.status);
   const blocked = Boolean(activeBand?.is_blocked);
   const canDelete = Boolean(activeBand?.is_owner || activeBand?.can_delete_songs);
+  const canCreateMultitrack = Boolean(
+    !blocked && (activeBand?.is_owner || activeBand?.can_analyze_songs),
+  );
   const canManageShare =
     song.status === "completed" &&
     (!song.created_by_user_id || song.created_by_user_id === user?.id);
   const canReanalyze = Boolean(song.can_reanalyze) && !blocked && !isActive;
   const canConvertKey = song.status === "completed" && !blocked;
   const reanalyzeLabel = song.has_audio ? "Nova análise" : "Analisar áudio";
+  const multitrackCount = song.multitrack_count ?? 0;
+  const multitrackHref =
+    multitrackCount === 1 && song.primary_multitrack_id
+      ? `/multitracks/${song.primary_multitrack_id}`
+      : multitrackCount > 1
+        ? `/songs/${song.id}`
+        : null;
 
   const jobQuery = useQuery({
     queryKey: ["song-job", song.id],
@@ -130,6 +142,36 @@ export function SongListItem({ song }: { song: SongSummary }) {
     onSuccess: invalidateLibrary,
   });
 
+  const createMultitrackMutation = useMutation({
+    mutationFn: async () => {
+      let sourceKey = "C";
+      let sourceMode: "major" | "minor" = "major";
+      if (song.status === "completed") {
+        try {
+          const keys = await fetchSongKeys(song.id);
+          sourceKey = keys.source_key || "C";
+          sourceMode = keys.mode === "minor" ? "minor" : "major";
+        } catch {
+          // fallback C major
+        }
+      }
+      const keyLabel = sourceMode === "minor" ? `${sourceKey}m` : sourceKey;
+      return createMultitrack({
+        title: `${song.title ?? "Música"} — Multitrack`,
+        source_key: keyLabel,
+        source_mode: sourceMode,
+        song_id: song.id,
+      });
+    },
+    onSuccess: (created) => {
+      toast.success("Multitrack criado");
+      invalidateLibrary();
+      void queryClient.invalidateQueries({ queryKey: ["multitracks"] });
+      navigate(`/multitracks/${created.id}`);
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const title = song.title ?? "Sem título";
   const subtitle = [
     song.artist,
@@ -156,7 +198,10 @@ export function SongListItem({ song }: { song: SongSummary }) {
     Boolean(keyJob) &&
     !isJobFinished(keyJob!.status);
   const isBusy =
-    deleteMutation.isPending || cancelMutation.isPending || shareMutation.isPending;
+    deleteMutation.isPending ||
+    cancelMutation.isPending ||
+    shareMutation.isPending ||
+    createMultitrackMutation.isPending;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -271,6 +316,17 @@ export function SongListItem({ song }: { song: SongSummary }) {
         label: "Acompanhar",
         to: `/songs/${song.id}`,
         tone: "primary",
+      });
+    }
+    if (canCreateMultitrack) {
+      menuItems.push({
+        kind: "button",
+        label: createMultitrackMutation.isPending ? "Criando..." : "Criar Multitrack",
+        onClick: () => {
+          closeMenu();
+          createMultitrackMutation.mutate();
+        },
+        disabled: isBusy,
       });
     }
     if (canDelete) {
@@ -388,6 +444,14 @@ export function SongListItem({ song }: { song: SongSummary }) {
                 >
                   Cifra
                 </Link>
+                {multitrackHref ? (
+                  <Link
+                    to={multitrackHref}
+                    className="inline-flex flex-1 items-center justify-center rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-sm font-medium text-amber-100 transition hover:border-amber-400/55 hover:bg-amber-500/25 sm:flex-none"
+                  >
+                    Multitracks
+                  </Link>
+                ) : null}
                 <Link
                   to={`/songs/${song.id}`}
                   className="inline-flex flex-1 items-center justify-center rounded-xl border border-blue-500/40 bg-blue-600/20 px-3 py-1.5 text-sm font-medium text-blue-100 transition hover:border-blue-400/50 hover:bg-blue-500/30 sm:flex-none"

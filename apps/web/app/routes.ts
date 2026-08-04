@@ -19,6 +19,8 @@ export default [
   route("agenda", "routes/agenda.tsx"),
   route("agenda/:bandId/:scheduleId", "routes/agenda.$bandId.$scheduleId.tsx"),
   route("library", "routes/library.tsx"),
+  route("multitracks", "routes/multitracks.tsx"),
+  route("multitracks/:multitrackId", "routes/multitracks.$multitrackId.tsx"),
   route("analyze", "routes/analyze.tsx"),
   route("jobs/:jobId", "routes/jobs.$jobId.tsx"),
   route("songs/:songId", "routes/songs.$songId.tsx"),

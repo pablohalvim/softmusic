@@ -122,6 +122,7 @@ function AppHeader() {
                 <NavLink to="/dashboard">Dashboard</NavLink>
                 <NavLink to="/agenda">Agenda</NavLink>
                 <NavLink to="/library">Biblioteca</NavLink>
+                <NavLink to="/multitracks">Multitracks</NavLink>
                 <NavLink to="/bandas">Bandas</NavLink>
                 {showBilling ? <NavLink to="/faturas">Faturas</NavLink> : null}
                 <button type="button" onClick={() => void logout()} className="nav-link">
@@ -182,6 +183,9 @@ function AppHeader() {
               </NavLink>
               <NavLink to="/library" onNavigate={closeMenu}>
                 Biblioteca
+              </NavLink>
+              <NavLink to="/multitracks" onNavigate={closeMenu}>
+                Multitracks
               </NavLink>
               <NavLink to="/bandas" onNavigate={closeMenu}>
                 Bandas

@@ -165,3 +165,102 @@ class PitchShifter:
             stems_dir=stems_out,
             manifest=manifest,
         )
+
+    def shift_multitrack_files(
+        self,
+        *,
+        tracks: list[dict[str, Any]],
+        source_dir: Path,
+        output_dir: Path,
+        source_key: str,
+        target_key: str,
+        semitones: int,
+    ) -> dict[str, Any]:
+        """Pitch-shift Multitrack tracks; ``pitch_shift=False`` are copied as-is."""
+        import librosa
+        import soundfile as sf
+        import shutil
+
+        if semitones == 0:
+            raise ValueError("semitones must be non-zero for a key variant")
+
+        tracks_out = output_dir / "tracks"
+        tracks_out.mkdir(parents=True, exist_ok=True)
+        out_items: list[dict[str, Any]] = []
+        sample_rate: int | None = None
+
+        for item in tracks:
+            track_id = str(item.get("id") or "")
+            file_name = str(item.get("file_name") or "")
+            do_shift = bool(item.get("pitch_shift", True))
+            if not track_id or not file_name:
+                continue
+            src = source_dir / "tracks" / file_name
+            if not src.exists():
+                raise FileNotFoundError(f"Faixa ausente: {file_name}")
+            out_name = f"{track_id}.wav"
+            dest = tracks_out / out_name
+
+            if not do_shift:
+                # Mantém formato original se já for wav; senão converte via librosa.
+                if src.suffix.lower() == ".wav":
+                    shutil.copy2(src, dest)
+                    y, sr = librosa.load(str(dest), sr=None, mono=False)
+                else:
+                    y, sr = librosa.load(str(src), sr=None, mono=False)
+                    if y.ndim == 1:
+                        y = y[np.newaxis, :]
+                    sf.write(str(dest), y.T, int(sr), subtype="PCM_16")
+                duration = round(float(y.shape[-1] / sr), 3) if y.ndim > 1 else round(float(len(y) / sr), 3)
+            else:
+                y, sr = librosa.load(str(src), sr=None, mono=False)
+                if y.ndim == 1:
+                    y = y[np.newaxis, :]
+                if sample_rate is None:
+                    sample_rate = int(sr)
+                elif int(sr) != sample_rate:
+                    channels = [
+                        librosa.resample(y[ch], orig_sr=sr, target_sr=sample_rate)
+                        for ch in range(y.shape[0])
+                    ]
+                    y = np.stack(channels, axis=0)
+                    sr = sample_rate
+                shifted = [
+                    librosa.effects.pitch_shift(y[ch], sr=int(sr), n_steps=semitones)
+                    for ch in range(y.shape[0])
+                ]
+                y_shift = np.stack(shifted, axis=0)
+                sf.write(str(dest), y_shift.T, int(sr), subtype="PCM_16")
+                duration = round(float(y_shift.shape[-1] / sr), 3)
+
+            out_items.append(
+                {
+                    "id": track_id,
+                    "name": item.get("name"),
+                    "role": item.get("role"),
+                    "file_name": out_name,
+                    "duration_seconds": duration,
+                    "pitch_shift": do_shift,
+                }
+            )
+
+        manifest = {
+            "source_key": source_key,
+            "target_key": target_key,
+            "semitones": semitones,
+            "method": self.method,
+            "generated_at": datetime.now(UTC).isoformat(),
+            "tracks": out_items,
+        }
+        (output_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        logger.info(
+            "multitrack_pitch_shift_completed",
+            source_key=source_key,
+            target_key=target_key,
+            semitones=semitones,
+            tracks=len(out_items),
+        )
+        return manifest

@@ -262,6 +262,42 @@ class StorageService:
             self._remote.exists, f"{song_id}/{storage_prefix}/stems/{stem_file}"
         )
 
+    # -- multitracks (prefixo mt_{id}, reusa árvore song_id) -------------------
+
+    def multitrack_storage_id(self, multitrack_id: str) -> str:
+        return multitrack_id if multitrack_id.startswith("mt_") else f"mt_{multitrack_id}"
+
+    def multitrack_dir(self, multitrack_id: str) -> Path:
+        return self.song_dir(self.multitrack_storage_id(multitrack_id))
+
+    async def persist_multitrack_artifacts(self, multitrack_id: str) -> None:
+        await self.persist_song_artifacts(self.multitrack_storage_id(multitrack_id))
+
+    async def persist_multitrack_key_variant(self, multitrack_id: str, storage_prefix: str) -> None:
+        await self.persist_key_variant(self.multitrack_storage_id(multitrack_id), storage_prefix)
+
+    async def multitrack_file_target(
+        self, multitrack_id: str, rel: str
+    ) -> PlaybackTarget | None:
+        storage_id = self.multitrack_storage_id(multitrack_id)
+        if self._remote is not None and await asyncio.to_thread(
+            self._remote.exists, f"{storage_id}/{rel}"
+        ):
+            url = self._remote.presigned_get(
+                f"{storage_id}/{rel}", self._presign_expires, filename=Path(rel).name
+            )
+            return PlaybackTarget(kind="remote", url=url)
+        local = self.song_dir(storage_id) / rel
+        if local.exists() and local.is_file():
+            return PlaybackTarget(kind="local", path=local)
+        restored = await self.ensure_local_file(storage_id, rel)
+        if restored is not None and restored.exists():
+            return PlaybackTarget(kind="local", path=restored)
+        return None
+
+    async def delete_multitrack(self, multitrack_id: str) -> None:
+        await self.delete_song(self.multitrack_storage_id(multitrack_id))
+
     # -- exclusão --------------------------------------------------------------
 
     async def delete_song(self, song_id: str) -> None:

@@ -316,6 +316,10 @@ export interface SongSummary {
   created_by_user_id?: string | null;
   link_source?: "created" | "imported_global";
   can_reanalyze?: boolean;
+  /** Quantidade de Multitracks da banda vinculados a esta música. */
+  multitrack_count?: number;
+  /** Multitrack mais recente (para abrir direto na biblioteca). */
+  primary_multitrack_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -978,4 +982,186 @@ export function isJobFinished(status: Job["status"]): boolean {
 
 export function isSongFinished(status: SongSummary["status"]): boolean {
   return status === "completed" || status === "failed";
+}
+
+// --- Multitracks ------------------------------------------------------------
+
+export interface MultitrackTrack {
+  id: string;
+  name: string;
+  role: string;
+  file_name: string;
+  original_file_name: string | null;
+  duration_seconds: number | null;
+  sort_order: number;
+  gain: number;
+  muted: boolean;
+  pitch_shift: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MultitrackKeyVariant {
+  id: string;
+  multitrack_id: string;
+  target_key: string;
+  semitones: number;
+  status: KeyVariantStatus;
+  progress: number;
+  error: string | null;
+  storage_prefix: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MultitrackSummary {
+  id: string;
+  band_id: string;
+  song_id: string | null;
+  title: string;
+  source_key: string;
+  source_mode: string;
+  bpm: number | null;
+  notes: string | null;
+  track_count: number;
+  tracks?: MultitrackTrack[];
+  key_variants?: MultitrackKeyVariant[];
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchMultitracks(params?: {
+  songId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: MultitrackSummary[]; total: number; limit: number; offset: number }> {
+  const search = new URLSearchParams();
+  if (params?.songId) search.set("song_id", params.songId);
+  if (params?.limit != null) search.set("limit", String(params.limit));
+  if (params?.offset != null) search.set("offset", String(params.offset));
+  const qs = search.toString();
+  const response = await authFetch(`/multitracks${qs ? `?${qs}` : ""}`);
+  return readJsonOrThrow(response, "Não foi possível carregar os Multitracks");
+}
+
+export async function fetchMultitrack(id: string): Promise<MultitrackSummary> {
+  const response = await authFetch(`/multitracks/${id}`);
+  return readJsonOrThrow(response, "Não foi possível carregar o Multitrack");
+}
+
+export async function createMultitrack(input: {
+  title: string;
+  source_key: string;
+  source_mode?: string;
+  song_id?: string | null;
+  bpm?: number | null;
+  notes?: string | null;
+}): Promise<MultitrackSummary> {
+  const response = await authFetch("/multitracks", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJsonOrThrow(response, "Não foi possível criar o Multitrack");
+}
+
+export async function updateMultitrack(
+  id: string,
+  input: {
+    title?: string;
+    bpm?: number | null;
+    notes?: string | null;
+    song_id?: string | null;
+    clear_song?: boolean;
+  },
+): Promise<MultitrackSummary> {
+  const response = await authFetch(`/multitracks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJsonOrThrow(response, "Não foi possível atualizar o Multitrack");
+}
+
+export async function deleteMultitrack(id: string): Promise<void> {
+  const response = await authFetch(`/multitracks/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível excluir o Multitrack"));
+  }
+}
+
+export async function uploadMultitrackTrack(
+  multitrackId: string,
+  file: File,
+  options?: { name?: string; role?: string },
+): Promise<MultitrackTrack> {
+  const form = new FormData();
+  form.set("file", file, file.name);
+  if (options?.name) form.set("name", options.name);
+  if (options?.role) form.set("role", options.role);
+  const response = await authFetch(`/multitracks/${multitrackId}/tracks`, {
+    method: "POST",
+    body: form,
+  });
+  return readJsonOrThrow(response, "Não foi possível enviar a faixa");
+}
+
+export async function updateMultitrackTrack(
+  multitrackId: string,
+  trackId: string,
+  input: Partial<{
+    name: string;
+    role: string;
+    gain: number;
+    muted: boolean;
+    pitch_shift: boolean;
+    sort_order: number;
+  }>,
+): Promise<MultitrackTrack> {
+  const response = await authFetch(`/multitracks/${multitrackId}/tracks/${trackId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJsonOrThrow(response, "Não foi possível atualizar a faixa");
+}
+
+export async function deleteMultitrackTrack(multitrackId: string, trackId: string): Promise<void> {
+  const response = await authFetch(`/multitracks/${multitrackId}/tracks/${trackId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(await parseError(response, "Não foi possível excluir a faixa"));
+  }
+}
+
+export function multitrackTrackAudioPath(
+  multitrackId: string,
+  trackId: string,
+  key?: string | null,
+): string {
+  const base = `/multitracks/${multitrackId}/tracks/${trackId}/audio`;
+  return key ? `${base}?key=${encodeURIComponent(key)}` : base;
+}
+
+export async function fetchMultitrackKeys(multitrackId: string): Promise<{
+  source_key: string;
+  source_mode: string;
+  available_targets: string[];
+  variants: MultitrackKeyVariant[];
+}> {
+  const response = await authFetch(`/multitracks/${multitrackId}/keys`);
+  return readJsonOrThrow(response, "Não foi possível carregar os tons do Multitrack");
+}
+
+export async function requestMultitrackKeyVariant(
+  multitrackId: string,
+  targetKey: string,
+): Promise<MultitrackKeyVariant & { message?: string }> {
+  const response = await authFetch(`/multitracks/${multitrackId}/keys`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_key: targetKey }),
+  });
+  return readJsonOrThrow(response, "Não foi possível iniciar a conversão de tom");
 }

@@ -401,7 +401,13 @@ async def _serialize_job_with_queue(session: AsyncSession, job: Any) -> dict[str
     )
 
 
-def _serialize_song(song: Any, *, link_source: str | None = None) -> dict[str, Any]:
+def _serialize_song(
+    song: Any,
+    *,
+    link_source: str | None = None,
+    multitrack_count: int = 0,
+    primary_multitrack_id: str | None = None,
+) -> dict[str, Any]:
     has_audio = bool(song.file_path) or song.source_type in {"youtube", "upload", "http", "s3", "azure_blob", "gcs"}
     # Cifra-only drafts ainda não têm áudio até anexar fonte.
     if song.source_type in {"manual", "cifra_club"} and not song.file_path and not song.youtube_url:
@@ -425,6 +431,8 @@ def _serialize_song(song: Any, *, link_source: str | None = None) -> dict[str, A
         "created_by_user_id": getattr(song, "created_by_user_id", None),
         "link_source": origin,
         "can_reanalyze": can_reanalyze,
+        "multitrack_count": max(0, int(multitrack_count)),
+        "primary_multitrack_id": primary_multitrack_id,
         "created_at": song.created_at.isoformat(),
         "updated_at": song.updated_at.isoformat(),
     }
@@ -508,12 +516,19 @@ async def list_songs(
     songs, total = await band_service.list_band_songs(
         band_id, limit=limit, offset=offset, q=q
     )
-    link_sources = await band_service.get_band_song_link_sources(
-        band_id, [song.id for song in songs]
-    )
+    song_ids = [song.id for song in songs]
+    link_sources = await band_service.get_band_song_link_sources(band_id, song_ids)
+    from app.application.services.multitrack_service import MultitrackService
+
+    mt_meta = await MultitrackService(session).counts_for_songs(band_id, song_ids)
     return {
         "items": [
-            _serialize_song(song, link_source=link_sources.get(song.id, "created"))
+            _serialize_song(
+                song,
+                link_source=link_sources.get(song.id, "created"),
+                multitrack_count=int(mt_meta.get(song.id, {}).get("count", 0)),
+                primary_multitrack_id=mt_meta.get(song.id, {}).get("primary_multitrack_id"),
+            )
             for song in songs
         ],
         "total": total,
@@ -1232,3 +1247,327 @@ async def get_lyrics(
 ) -> dict[str, Any]:
     await _ensure_song_access(session, band_id, user.id, song_id)
     return {"song_id": song_id, "lyrics": [], "message": "Lyrics alignment requires Whisper pipeline"}
+
+
+# --- Multitracks -------------------------------------------------------------
+
+
+class MultitrackCreateBody(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    source_key: str = Field(min_length=1, max_length=16)
+    source_mode: str | None = Field(default=None, max_length=16)
+    song_id: str | None = None
+    bpm: float | None = Field(default=None, ge=20, le=400)
+    notes: str | None = None
+
+
+class MultitrackUpdateBody(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    bpm: float | None = Field(default=None, ge=20, le=400)
+    notes: str | None = None
+    song_id: str | None = None
+    clear_song: bool = False
+
+
+class MultitrackTrackUpdateBody(BaseModel):
+    name: str | None = Field(default=None, max_length=128)
+    role: str | None = Field(default=None, max_length=64)
+    gain: float | None = Field(default=None, ge=0, le=2)
+    muted: bool | None = None
+    pitch_shift: bool | None = None
+    sort_order: int | None = None
+
+
+class MultitrackKeyBody(BaseModel):
+    target_key: str = Field(min_length=1, max_length=16)
+
+
+async def _ensure_multitrack_view(
+    session: AsyncSession, band_id: str | None, user_id: str
+) -> str:
+    if not band_id:
+        raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
+    try:
+        await BandService(session).require_view_access(band_id, user_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return band_id
+
+
+async def _ensure_multitrack_write(
+    session: AsyncSession, band_id: str | None, user_id: str
+) -> str:
+    if not band_id:
+        raise HTTPException(status_code=400, detail="Header X-Band-Id é obrigatório")
+    try:
+        await BandService(session).require_analyze_access(band_id, user_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return band_id
+
+
+@router.get("/multitracks")
+async def list_multitracks(
+    song_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_view(session, band_id, user.id)
+    service = MultitrackService(session)
+    items, total = await service.list_for_band(
+        resolved, song_id=song_id, limit=limit, offset=offset
+    )
+    serialized = [
+        await service.serialize(item, include_tracks=False, include_keys=False) for item in items
+    ]
+    return {"items": serialized, "total": total, "limit": limit, "offset": offset}
+
+
+@router.post("/multitracks")
+async def create_multitrack(
+    body: MultitrackCreateBody,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_write(session, band_id, user.id)
+    if body.song_id:
+        await _ensure_song_access(session, resolved, user.id, body.song_id)
+    service = MultitrackService(session)
+    try:
+        mt = await service.create(
+            band_id=resolved,
+            title=body.title,
+            source_key=body.source_key,
+            source_mode=body.source_mode,
+            song_id=body.song_id,
+            bpm=body.bpm,
+            notes=body.notes,
+            created_by_user_id=user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await service.serialize(mt)
+
+
+@router.get("/multitracks/{multitrack_id}")
+async def get_multitrack(
+    multitrack_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_view(session, band_id, user.id)
+    service = MultitrackService(session)
+    mt = await service.get(multitrack_id, resolved)
+    if mt is None:
+        raise HTTPException(status_code=404, detail="Multitrack não encontrado")
+    return await service.serialize(mt)
+
+
+@router.patch("/multitracks/{multitrack_id}")
+async def update_multitrack(
+    multitrack_id: str,
+    body: MultitrackUpdateBody,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_write(session, band_id, user.id)
+    if body.song_id:
+        await _ensure_song_access(session, resolved, user.id, body.song_id)
+    service = MultitrackService(session)
+    try:
+        mt = await service.update_meta(
+            multitrack_id,
+            resolved,
+            title=body.title,
+            bpm=body.bpm,
+            notes=body.notes,
+            song_id=body.song_id,
+            clear_song=body.clear_song,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404 if "não encontrado" in str(exc).lower() else 400, detail=str(exc)) from exc
+    return await service.serialize(mt)
+
+
+@router.delete("/multitracks/{multitrack_id}")
+async def delete_multitrack(
+    multitrack_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_write(session, band_id, user.id)
+    service = MultitrackService(session)
+    try:
+        await service.delete(multitrack_id, resolved)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"status": "deleted", "id": multitrack_id}
+
+
+@router.post("/multitracks/{multitrack_id}/tracks")
+async def upload_multitrack_track(
+    multitrack_id: str,
+    file: UploadFile = File(...),
+    name: str | None = None,
+    role: str | None = None,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_write(session, band_id, user.id)
+    content = await file.read()
+    service = MultitrackService(session)
+    try:
+        track = await service.add_track(
+            multitrack_id,
+            resolved,
+            filename=file.filename or "track.mp3",
+            content=content,
+            name=name,
+            role=role,
+        )
+    except ValueError as exc:
+        status = 404 if "não encontrado" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    return service.serialize_track(track)
+
+
+@router.patch("/multitracks/{multitrack_id}/tracks/{track_id}")
+async def update_multitrack_track(
+    multitrack_id: str,
+    track_id: str,
+    body: MultitrackTrackUpdateBody,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_write(session, band_id, user.id)
+    service = MultitrackService(session)
+    try:
+        track = await service.update_track(
+            multitrack_id,
+            resolved,
+            track_id,
+            name=body.name,
+            role=body.role,
+            gain=body.gain,
+            muted=body.muted,
+            pitch_shift=body.pitch_shift,
+            sort_order=body.sort_order,
+        )
+    except ValueError as exc:
+        status = 404 if "não encontrad" in str(exc).lower() else 400
+        raise HTTPException(status_code=status, detail=str(exc)) from exc
+    return service.serialize_track(track)
+
+
+@router.delete("/multitracks/{multitrack_id}/tracks/{track_id}")
+async def delete_multitrack_track(
+    multitrack_id: str,
+    track_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_write(session, band_id, user.id)
+    service = MultitrackService(session)
+    try:
+        await service.delete_track(multitrack_id, resolved, track_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"status": "deleted", "id": track_id}
+
+
+@router.get("/multitracks/{multitrack_id}/tracks/{track_id}/audio")
+async def get_multitrack_track_audio(
+    multitrack_id: str,
+    track_id: str,
+    key: str | None = None,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+):
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_view(session, band_id, user.id)
+    service = MultitrackService(session)
+    target = await service.track_audio_target(multitrack_id, resolved, track_id, key=key)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Áudio da faixa não encontrado")
+    if target.kind == "remote" and target.url:
+        return RedirectResponse(url=target.url, status_code=302)
+    audio_path = target.path
+    if audio_path is None:
+        raise HTTPException(status_code=404, detail="Áudio da faixa não encontrado")
+    media_type, _ = mimetypes.guess_type(str(audio_path))
+    if media_type is None:
+        media_type = "audio/wav"
+    return FileResponse(
+        path=audio_path,
+        media_type=media_type,
+        filename=audio_path.name,
+        headers={"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=3600"},
+    )
+
+
+@router.get("/multitracks/{multitrack_id}/keys")
+async def list_multitrack_keys(
+    multitrack_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+
+    resolved = await _ensure_multitrack_view(session, band_id, user.id)
+    service = MultitrackService(session)
+    try:
+        return await service.list_keys(multitrack_id, resolved)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/multitracks/{multitrack_id}/keys")
+async def request_multitrack_key(
+    multitrack_id: str,
+    body: MultitrackKeyBody,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    from app.application.services.multitrack_service import MultitrackService
+    from app.worker import run_multitrack_pitch_shift
+
+    resolved = await _ensure_multitrack_write(session, band_id, user.id)
+    service = MultitrackService(session)
+    try:
+        result = await service.request_key_variant(multitrack_id, resolved, body.target_key.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if result.get("status") == "queued" and result.get("message") != "Conversão já em andamento":
+        run_multitrack_pitch_shift.delay(result["id"])
+    return result

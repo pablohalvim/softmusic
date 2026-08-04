@@ -34,8 +34,8 @@ export function HomeBento({ loggedIn }: HomeBentoProps) {
             </span>
           </h1>
           <p className="mt-4 max-w-md text-sm leading-relaxed text-white/80 sm:text-base">
-            Análise com IA, cifra, stems Demucs, metrônomo e agenda — tudo no mesmo lugar para o
-            ensaio render de verdade.
+            Análise com IA, cifra, stems Demucs, Multitracks, metrônomo e agenda — tudo no mesmo
+            lugar para o ensaio render de verdade.
           </p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             {loggedIn ? (
@@ -91,6 +91,12 @@ export function HomeBento({ loggedIn }: HomeBentoProps) {
             title="Bandas"
             description="Membros, funções e convites"
             tone="brand"
+          />
+          <BentoLink
+            to="/multitracks"
+            eyebrow="Ensaio"
+            title="Multitracks"
+            description="Mixer por faixa e conversão de tom"
           />
         </>
       ) : (

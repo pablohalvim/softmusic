@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
@@ -22,6 +22,8 @@ import {
   panelClass,
 } from "../lib/ui-classes";
 import {
+  createMultitrack,
+  fetchMultitracks,
   fetchSong,
   fetchSongJob,
   authFetch,
@@ -29,12 +31,16 @@ import {
   isSongFinished,
 } from "../lib/api";
 import { useBand } from "../lib/band-context";
+import { useToast } from "../lib/toast";
 
 export default function SongDetail() {
   const { songId } = useParams();
   const navigate = useNavigate();
   const { activeBand } = useBand();
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const blocked = Boolean(activeBand?.is_blocked);
+  const canWrite = Boolean(activeBand?.is_owner || activeBand?.can_analyze_songs);
   const [blockModalOpen, setBlockModalOpen] = useState(blocked);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -74,6 +80,32 @@ export default function SongDetail() {
       return response.json();
     },
     enabled: songQuery.data?.status === "completed",
+  });
+
+  const multitracksQuery = useQuery({
+    queryKey: ["multitracks", "song", songId],
+    queryFn: () => fetchMultitracks({ songId: songId!, limit: 20 }),
+    enabled: Boolean(songId),
+  });
+
+  const createMtMutation = useMutation({
+    mutationFn: () =>
+      createMultitrack({
+        title: `${songQuery.data?.title ?? "Música"} — Multitrack`,
+        source_key: analysisQuery.data?.harmony?.key
+          ? `${analysisQuery.data.harmony.key}${analysisQuery.data.harmony.mode === "minor" ? "m" : ""}`
+          : "C",
+        source_mode: analysisQuery.data?.harmony?.mode === "minor" ? "minor" : "major",
+        song_id: songId,
+        bpm: analysisQuery.data?.harmony?.tempo_bpm ?? null,
+      }),
+    onSuccess: (created) => {
+      toast.success("Multitrack criado");
+      void queryClient.invalidateQueries({ queryKey: ["multitracks", "song", songId] });
+      void queryClient.invalidateQueries({ queryKey: ["songs"] });
+      navigate(`/multitracks/${created.id}`);
+    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   const stemsQuery = useQuery({
@@ -204,6 +236,42 @@ export default function SongDetail() {
           bpm={analysis?.harmony?.tempo_bpm}
         />
       ) : null}
+
+      <div className={`${panelClass} space-y-3`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-medium">Multitracks</h2>
+          {canWrite && !blocked ? (
+            <button
+              type="button"
+              className={`${btnPrimary} px-3 py-1.5 text-sm`}
+              disabled={createMtMutation.isPending}
+              onClick={() => createMtMutation.mutate()}
+            >
+              {createMtMutation.isPending ? "Criando..." : "Novo Multitrack"}
+            </button>
+          ) : null}
+        </div>
+        <p className="text-sm text-slate-400">
+          Faixas enviadas por você para ensaio — não usa os stems do Demucs.
+        </p>
+        {(multitracksQuery.data?.items ?? []).length === 0 ? (
+          <p className="text-sm text-slate-500">Nenhum Multitrack vinculado a esta música.</p>
+        ) : (
+          <ul className="space-y-2">
+            {(multitracksQuery.data?.items ?? []).map((item) => (
+              <li key={item.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate text-slate-200">
+                  {item.title} · {item.source_key}
+                  {item.source_mode === "minor" ? "m" : ""} · {item.track_count} faixas
+                </span>
+                <Link to={`/multitracks/${item.id}`} className="text-green-400 hover:text-green-300">
+                  Abrir
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {waveform.length > 0 ? (
         <div className={`${panelClass} h-48`}>
