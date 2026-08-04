@@ -1,7 +1,7 @@
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
-from sqlalchemy import Boolean, Date, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -26,6 +26,13 @@ class JobStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class KeyVariantStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    READY = "ready"
+    FAILED = "failed"
 
 
 class Song(Base):
@@ -103,6 +110,28 @@ class AnalysisResult(Base):
     version: Mapped[str] = mapped_column(String(16))
     payload_json: Mapped[str] = mapped_column(JsonText)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class SongKeyVariant(Base):
+    __tablename__ = "song_key_variants"
+    __table_args__ = (
+        UniqueConstraint("song_id", "target_key", name="uq_song_key_variants_song_target"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    song_id: Mapped[str] = mapped_column(String(32), index=True)
+    target_key: Mapped[str] = mapped_column(String(16))
+    semitones: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(32), default=KeyVariantStatus.QUEUED.value)
+    job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_prefix: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
 
 class UserStatus(StrEnum):

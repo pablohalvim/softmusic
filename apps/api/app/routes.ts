@@ -95,5 +95,12 @@ export default [
   route("songs/:songId/audio", "routes/songs.$songId.audio.tsx"),
   route("songs/:songId/stems", "routes/songs.$songId.stems.tsx"),
   route("songs/:songId/stems/:stemName/audio", "routes/songs.$songId.stems.$stemName.audio.tsx"),
+  route("songs/:songId/keys", "routes/songs.$songId.keys.tsx"),
+  route("songs/:songId/keys/:key/audio", "routes/songs.$songId.keys.$key.audio.tsx"),
+  route("songs/:songId/keys/:key/stems", "routes/songs.$songId.keys.$key.stems.tsx"),
+  route(
+    "songs/:songId/keys/:key/stems/:stemName/audio",
+    "routes/songs.$songId.keys.$key.stems.$stemName.audio.tsx",
+  ),
   route("jobs/:jobId", "routes/jobs.$jobId.tsx"),
 ] satisfies RouteConfig;

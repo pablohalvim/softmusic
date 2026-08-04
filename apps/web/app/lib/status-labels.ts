@@ -28,6 +28,8 @@ const stageLabels: Record<string, string> = {
   knowledge_graph: "Montando grafo musical",
   explain: "Gerando explicações",
   persist: "Salvando análise",
+  pitch_shift: "Convertendo tom",
+  prepare: "Preparando stems",
 };
 
 export function labelJobStatus(status: Job["status"]): string {

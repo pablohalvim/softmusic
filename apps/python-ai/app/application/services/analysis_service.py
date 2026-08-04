@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import secrets
+import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -22,7 +24,9 @@ from app.infrastructure.database.models import (
     AnalysisResult,
     CifraVariation,
     JobStatus,
+    KeyVariantStatus,
     Song,
+    SongKeyVariant,
     SongStatus,
 )
 from app.config import get_settings
@@ -760,6 +764,10 @@ class AnalysisService:
             raise AnalysisCancelledError("Música excluída")
 
         options = json.loads(job.options_json or "{}")
+        if options.get("job_kind") == "pitch_shift":
+            # Evita reprocessar análise completa se o job for enfileirado na task errada.
+            return await self.process_pitch_shift_job(job_id)
+
         await self._raise_if_cancelled(job_id)
 
         job.status = JobStatus.PROCESSING.value
@@ -1011,3 +1019,369 @@ class AnalysisService:
         if path is None:
             path = Path(self.storage.base_path) / song_id / "cifra_club.json"
         return CifraClubImporter.load(path)
+
+    # -- key variants (pitch-shift) --------------------------------------------
+
+    async def _song_source_key_mode(self, song_id: str) -> tuple[str, str]:
+        """Tom de referência do áudio/stems = harmonia da análise (pitch real).
+
+        A cifra importada pode estar em outro tom (erro do Cifra Club, simplificação,
+        etc.) e a correção de tom na UI da cifra é só display — não altera o áudio.
+        Pitch-shift deve partir do tom detectado na gravação.
+        """
+        analysis = await self.get_analysis(song_id)
+        if analysis is None:
+            raise ValueError("Análise não encontrada para esta música")
+        payload = json.loads(analysis.payload_json)
+        harmony = payload.get("harmony") or {}
+        key = str(harmony.get("key") or "C")
+        mode = str(harmony.get("mode") or "major")
+        return key, mode
+
+    async def list_key_variants(self, song_id: str) -> dict[str, Any]:
+        from app.infrastructure.ml.key_theory import (
+            available_chromatic_targets,
+            format_key,
+            parse_key,
+        )
+
+        song = await self.get_song(song_id)
+        if song is None:
+            raise ValueError("Song not found")
+
+        source_key_raw, mode = await self._song_source_key_mode(song_id)
+        root, is_minor = parse_key(source_key_raw, mode)
+        source_key = format_key(root, is_minor)
+
+        result = await self.session.execute(
+            select(SongKeyVariant).where(SongKeyVariant.song_id == song_id)
+        )
+        variants = list(result.scalars().all())
+        occupied = {
+            v.target_key
+            for v in variants
+            if v.status
+            in {
+                KeyVariantStatus.QUEUED.value,
+                KeyVariantStatus.PROCESSING.value,
+                KeyVariantStatus.READY.value,
+            }
+        }
+        available = [
+            key
+            for key in available_chromatic_targets(source_key, mode)
+            if key not in occupied
+        ]
+
+        return {
+            "song_id": song_id,
+            "source_key": source_key,
+            "mode": mode,
+            "available_targets": available,
+            "variants": [
+                {
+                    "id": v.id,
+                    "target_key": v.target_key,
+                    "semitones": v.semitones,
+                    "status": v.status,
+                    "job_id": v.job_id,
+                    "error": v.error,
+                    "storage_prefix": v.storage_prefix,
+                    "created_at": v.created_at.isoformat() if v.created_at else None,
+                    "updated_at": v.updated_at.isoformat() if v.updated_at else None,
+                }
+                for v in variants
+            ],
+        }
+
+    async def get_key_variant(self, song_id: str, target_key: str) -> SongKeyVariant | None:
+        from app.infrastructure.ml.key_theory import format_key, parse_key
+
+        root, is_minor = parse_key(target_key)
+        normalized = format_key(root, is_minor)
+        result = await self.session.execute(
+            select(SongKeyVariant).where(
+                SongKeyVariant.song_id == song_id,
+                SongKeyVariant.target_key == normalized,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def request_key_variant(self, song_id: str, target_key: str) -> dict[str, Any]:
+        from app.infrastructure.ml.key_theory import (
+            format_key,
+            parse_key,
+            semitones_between,
+            storage_key_segment,
+        )
+
+        song = await self.get_song(song_id)
+        if song is None:
+            raise ValueError("Song not found")
+        if song.status != SongStatus.COMPLETED.value:
+            raise ValueError("A música precisa estar com análise concluída")
+
+        stems = await self.get_stems_manifest(song_id)
+        if stems is None or not stems.get("separated"):
+            raise ValueError("Stems ainda não disponíveis para conversão de tom")
+
+        source_key_raw, mode = await self._song_source_key_mode(song_id)
+        source_root, source_minor = parse_key(source_key_raw, mode)
+        source_key = format_key(source_root, source_minor)
+
+        target_root, target_minor = parse_key(target_key, mode)
+        if target_minor != source_minor:
+            raise ValueError("O tom alvo deve estar no mesmo modo do original")
+        normalized_target = format_key(target_root, target_minor)
+        if normalized_target == source_key:
+            raise ValueError("O tom alvo é o mesmo do original")
+
+        existing = await self.get_key_variant(song_id, normalized_target)
+        if existing is not None:
+            if existing.status == KeyVariantStatus.READY.value:
+                return {
+                    "song_id": song_id,
+                    "variant_id": existing.id,
+                    "job_id": existing.job_id,
+                    "target_key": existing.target_key,
+                    "status": existing.status,
+                    "message": "Variante já disponível",
+                }
+            if existing.status in {
+                KeyVariantStatus.QUEUED.value,
+                KeyVariantStatus.PROCESSING.value,
+            }:
+                return {
+                    "song_id": song_id,
+                    "variant_id": existing.id,
+                    "job_id": existing.job_id,
+                    "target_key": existing.target_key,
+                    "status": existing.status,
+                    "message": "Conversão já em andamento",
+                }
+            # failed → requeue below (reuse row)
+
+        semitones = semitones_between(source_key, normalized_target, mode)
+        storage_prefix = f"keys/{storage_key_segment(normalized_target)}"
+
+        job = AnalysisJob(
+            id=_new_id("job"),
+            song_id=song_id,
+            status=JobStatus.QUEUED.value,
+            progress=0,
+            stage="prepare",
+            options_json="{}",
+        )
+        self.session.add(job)
+
+        if existing is not None:
+            existing.semitones = semitones
+            existing.status = KeyVariantStatus.QUEUED.value
+            existing.job_id = job.id
+            existing.error = None
+            existing.storage_prefix = storage_prefix
+            variant = existing
+        else:
+            variant = SongKeyVariant(
+                id=_new_id("kv"),
+                song_id=song_id,
+                target_key=normalized_target,
+                semitones=semitones,
+                status=KeyVariantStatus.QUEUED.value,
+                job_id=job.id,
+                storage_prefix=storage_prefix,
+            )
+            self.session.add(variant)
+
+        await self.session.flush()
+        job.options_json = json.dumps(
+            {
+                "job_kind": "pitch_shift",
+                "target_key": normalized_target,
+                "source_key": source_key,
+                "semitones": semitones,
+                "mode": mode,
+                "variant_id": variant.id,
+            }
+        )
+
+        await self.session.commit()
+        await self.session.refresh(job)
+        await self.session.refresh(variant)
+
+        return {
+            "song_id": song_id,
+            "variant_id": variant.id,
+            "job_id": job.id,
+            "target_key": variant.target_key,
+            "status": variant.status,
+            "semitones": variant.semitones,
+        }
+
+    async def process_pitch_shift_job(self, job_id: str) -> dict[str, Any]:
+        from app.infrastructure.ml.pitch_shifter import PitchShifter
+
+        job = await self.get_job(job_id)
+        if job is None:
+            raise ValueError(f"Job not found: {job_id}")
+
+        options = json.loads(job.options_json or "{}")
+        if options.get("job_kind") != "pitch_shift":
+            raise ValueError("Job não é de pitch_shift")
+
+        variant_id = str(options.get("variant_id") or "")
+        target_key = str(options.get("target_key") or "")
+        source_key = str(options.get("source_key") or "")
+        semitones = int(options.get("semitones") or 0)
+
+        variant_result = await self.session.execute(
+            select(SongKeyVariant).where(SongKeyVariant.id == variant_id)
+        )
+        variant = variant_result.scalar_one_or_none()
+        if variant is None:
+            raise ValueError("Variante de tom não encontrada")
+
+        job.status = JobStatus.PROCESSING.value
+        job.stage = "prepare"
+        job.progress = 5
+        job.error = None
+        variant.status = KeyVariantStatus.PROCESSING.value
+        variant.error = None
+        await self.session.commit()
+
+        await self._raise_if_cancelled(job_id)
+
+        # Restore original stems locally.
+        job.stage = "pitch_shift"
+        job.progress = 20
+        await self.session.commit()
+
+        manifest_path = await self.storage.ensure_local_file(job.song_id, "stems/manifest.json")
+        if manifest_path is None:
+            raise ValueError("Manifest de stems não encontrado")
+        source_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for item in source_manifest.get("stems", []):
+            file_name = str(item.get("file") or "")
+            if file_name:
+                restored = await self.storage.ensure_local_file(
+                    job.song_id, f"stems/{file_name}"
+                )
+                if restored is None:
+                    raise ValueError(f"Stem ausente: {file_name}")
+
+        source_stems_dir = self.song_dir(job.song_id) / "stems"
+        paths = self.storage.key_variant_paths(job.song_id, variant.storage_prefix)
+        output_dir = paths["root"]
+        if output_dir.exists():
+            shutil.rmtree(output_dir, ignore_errors=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        await self._raise_if_cancelled(job_id)
+
+        shifter = PitchShifter()
+        result = await asyncio.to_thread(
+            shifter.shift_stems,
+            source_stems_dir=source_stems_dir,
+            output_dir=output_dir,
+            source_key=source_key or variant.target_key,
+            target_key=target_key or variant.target_key,
+            semitones=semitones if semitones != 0 else variant.semitones,
+            source_manifest=source_manifest,
+        )
+
+        job.stage = "persist"
+        job.progress = 85
+        await self.session.commit()
+
+        try:
+            await self.storage.persist_key_variant(job.song_id, variant.storage_prefix)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "storage_key_variant_persist_failed",
+                song_id=job.song_id,
+                storage_prefix=variant.storage_prefix,
+                error=str(exc),
+            )
+
+        variant.status = KeyVariantStatus.READY.value
+        variant.error = None
+        job.status = JobStatus.COMPLETED.value
+        job.progress = 100
+        job.stage = "persist"
+        job.completed_at = datetime.now(UTC)
+        await self.session.commit()
+        clear_cancel(job.id)
+
+        logger.info(
+            "pitch_shift_job_completed",
+            song_id=job.song_id,
+            job_id=job.id,
+            target_key=variant.target_key,
+        )
+        return {
+            "job_id": job.id,
+            "variant_id": variant.id,
+            "target_key": variant.target_key,
+            "playback": str(result.playback_path),
+        }
+
+    def song_dir(self, song_id: str) -> Path:
+        return Path(self.storage.base_path) / song_id
+
+    async def get_key_variant_stems_manifest(
+        self, song_id: str, target_key: str
+    ) -> dict[str, Any] | None:
+        variant = await self.get_key_variant(song_id, target_key)
+        if variant is None or variant.status != KeyVariantStatus.READY.value:
+            return None
+        rel = f"{variant.storage_prefix}/stems/manifest.json"
+        manifest_path = await self.storage.ensure_local_file(song_id, rel)
+        if manifest_path is None:
+            return None
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        stems = []
+        for item in payload.get("stems", []):
+            file = str(item.get("file", ""))
+            stems.append(
+                {
+                    **item,
+                    "available": await self.storage.key_stem_available(
+                        song_id, variant.storage_prefix, file
+                    ),
+                }
+            )
+        payload["stems"] = stems
+        return {
+            "song_id": song_id,
+            "target_key": variant.target_key,
+            "separated": True,
+            **payload,
+        }
+
+    async def get_key_playback_target(
+        self, song_id: str, target_key: str
+    ) -> PlaybackTarget | None:
+        variant = await self.get_key_variant(song_id, target_key)
+        if variant is None or variant.status != KeyVariantStatus.READY.value:
+            return None
+        return await self.storage.get_key_playback_target(song_id, variant.storage_prefix)
+
+    async def get_key_stem_target(
+        self, song_id: str, target_key: str, stem_name: str
+    ) -> PlaybackTarget | None:
+        variant = await self.get_key_variant(song_id, target_key)
+        if variant is None or variant.status != KeyVariantStatus.READY.value:
+            return None
+        manifest = await self.get_key_variant_stems_manifest(song_id, target_key)
+        if manifest is None:
+            return None
+        for item in manifest.get("stems", []):
+            if item.get("name") != stem_name:
+                continue
+            file = str(item.get("file", ""))
+            if not file:
+                return None
+            return await self.storage.get_key_stem_target(
+                song_id, variant.storage_prefix, file
+            )
+        return None

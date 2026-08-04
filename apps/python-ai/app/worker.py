@@ -27,6 +27,7 @@ celery_app.conf.update(
     task_default_queue="analysis",
     task_routes={
         "app.worker.run_analysis": {"queue": "analysis"},
+        "app.worker.run_pitch_shift": {"queue": "analysis"},
         "app.worker.suspend_overdue_accounts": {"queue": "billing"},
         "app.worker.run_daily_billing": {"queue": "billing"},
     },
@@ -70,6 +71,50 @@ def run_analysis(self, job_id: str) -> dict:
                 song = await service.get_song(job.song_id)
                 if song:
                     song.status = SongStatus.FAILED.value
+                await session.commit()
+            raise
+
+    return run_async_in_worker(process)
+
+
+@celery_app.task(name="app.worker.run_pitch_shift", bind=True, max_retries=2)
+def run_pitch_shift(self, job_id: str) -> dict:
+    """Pitch-shift job: does NOT flip Song.status to processing/failed."""
+    from sqlalchemy import select
+
+    from app.application.services.analysis_service import AnalysisService
+    from app.domain.errors import AnalysisCancelledError
+    from app.infrastructure.database.models import KeyVariantStatus, SongKeyVariant
+
+    async def process(session) -> dict:
+        service = AnalysisService(session)
+        try:
+            return await service.process_pitch_shift_job(job_id)
+        except AnalysisCancelledError:
+            job = await service.get_job(job_id)
+            if job:
+                result = await session.execute(
+                    select(SongKeyVariant).where(SongKeyVariant.job_id == job_id)
+                )
+                variant = result.scalar_one_or_none()
+                if variant:
+                    variant.status = KeyVariantStatus.FAILED.value
+                    variant.error = "Cancelado"
+                await session.commit()
+            return {"cancelled": True, "job_id": job_id}
+        except Exception as exc:
+            await session.rollback()
+            job = await service.get_job(job_id)
+            if job and job.status != JobStatus.CANCELLED.value:
+                job.status = JobStatus.FAILED.value
+                job.error = str(exc)
+                result = await session.execute(
+                    select(SongKeyVariant).where(SongKeyVariant.job_id == job_id)
+                )
+                variant = result.scalar_one_or_none()
+                if variant:
+                    variant.status = KeyVariantStatus.FAILED.value
+                    variant.error = str(exc)
                 await session.commit()
             raise
 

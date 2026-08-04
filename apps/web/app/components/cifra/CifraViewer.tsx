@@ -47,6 +47,7 @@ import { SaveCifraVariationModal } from "./SaveCifraVariationModal";
 import { FoundChordsBar } from "./FoundChordsBar";
 import { useConfirm } from "../../lib/confirm";
 import { useToast } from "../../lib/toast";
+import { useOptionalCifraPlaybackKeySync } from "./cifra-playback-key-context";
 
 interface ImportedCifraSheet {
   original_key: string;
@@ -212,6 +213,7 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
   const [deletingVariation, setDeletingVariation] = useState(false);
   const toast = useToast();
   const { confirm } = useConfirm();
+  const { sync: syncPlaybackKey } = useOptionalCifraPlaybackKeySync();
 
   const toggleToolsMinimizedMobile = () => {
     setToolsMinimizedMobile((current) => {
@@ -277,7 +279,13 @@ export function CifraViewer({ songId, songTitle, artist, chordData, initialVaria
 
   const effectiveTranspose = transposeSemitones - capo;
   const currentKey = transposeKey(effectiveKey, effectiveMode, effectiveTranspose);
+  // Tom sonoro (sem capo): usado para carregar áudio/stems pitch-shifted.
+  const soundingKey = transposeKey(effectiveKey, effectiveMode, transposeSemitones);
   const defaultNewChord = defaultTonicChord(effectiveKey, effectiveMode);
+
+  useEffect(() => {
+    syncPlaybackKey(soundingKey, transposeKey(effectiveKey, effectiveMode, 0));
+  }, [soundingKey, effectiveKey, effectiveMode, syncPlaybackKey]);
 
   const getOriginalChords = (sectionId: string): string[] =>
     sectionChords[sectionId] ?? baseSectionChords[sectionId] ?? [];

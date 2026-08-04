@@ -17,7 +17,7 @@ from app.domain.interfaces.source_downloader import is_youtube_url
 from app.infrastructure.database.models import Song, SongStatus, User
 from app.infrastructure.database.session import get_session
 from app.presentation.api.deps import get_band_id, get_current_user
-from app.worker import run_analysis
+from app.worker import run_analysis, run_pitch_shift
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -75,6 +75,10 @@ class JobResponse(BaseModel):
     duplicate: bool = False
     message: str | None = None
     variation: dict[str, Any] | None = None
+
+
+class KeyVariantRequest(BaseModel):
+    target_key: str = Field(..., min_length=1, max_length=16)
 
 
 @router.get("/health")
@@ -1019,6 +1023,155 @@ async def get_stems(
             "message": "Stems ainda não disponíveis. Reprocesse a análise para gerar separação Demucs.",
         }
     return manifest
+
+
+@router.get("/songs/{song_id}/keys")
+async def list_song_keys(
+    song_id: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    await _ensure_song_access(session, band_id, user.id, song_id)
+    service = AnalysisService(session)
+    try:
+        return await service.list_key_variants(song_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/songs/{song_id}/keys")
+async def request_song_key(
+    song_id: str,
+    body: KeyVariantRequest,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    await _ensure_song_content_access(session, band_id, user.id, song_id)
+    service = AnalysisService(session)
+    try:
+        result = await service.request_key_variant(song_id, body.target_key.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Enfileira apenas jobs novos/requeue (não os já em andamento).
+    if (
+        result.get("status") == "queued"
+        and result.get("job_id")
+        and result.get("message") != "Conversão já em andamento"
+    ):
+        run_pitch_shift.delay(result["job_id"])
+    return result
+
+
+@router.get("/songs/{song_id}/keys/{key}/audio")
+async def get_key_audio(
+    song_id: str,
+    key: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+):
+    await _ensure_song_access(session, band_id, user.id, song_id)
+    service = AnalysisService(session)
+    target = await service.get_key_playback_target(song_id, key)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Áudio neste tom não encontrado")
+    if target.kind == "remote" and target.url:
+        return RedirectResponse(url=target.url, status_code=302)
+
+    audio_path = target.path
+    if audio_path is None:
+        raise HTTPException(status_code=404, detail="Áudio neste tom não encontrado")
+    media_type, _ = mimetypes.guess_type(str(audio_path))
+    if media_type is None:
+        media_type = "audio/wav"
+    return FileResponse(
+        path=audio_path,
+        media_type=media_type,
+        filename=audio_path.name,
+        headers={"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=3600"},
+    )
+
+
+@router.get("/songs/{song_id}/keys/{key}/stems")
+async def get_key_stems(
+    song_id: str,
+    key: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+) -> dict[str, Any]:
+    await _ensure_song_access(session, band_id, user.id, song_id)
+    service = AnalysisService(session)
+    variant = await service.get_key_variant(song_id, key)
+    if variant is None:
+        return {
+            "song_id": song_id,
+            "target_key": key,
+            "separated": False,
+            "status": "missing",
+            "stems": [],
+            "message": "Não há faixas de música disponíveis neste tom",
+        }
+    if variant.status != "ready":
+        return {
+            "song_id": song_id,
+            "target_key": variant.target_key,
+            "separated": False,
+            "status": variant.status,
+            "job_id": variant.job_id,
+            "error": variant.error,
+            "stems": [],
+            "message": (
+                "Conversão de tom em andamento"
+                if variant.status in {"queued", "processing"}
+                else "Não há faixas de música disponíveis neste tom"
+            ),
+        }
+    manifest = await service.get_key_variant_stems_manifest(song_id, key)
+    if manifest is None:
+        return {
+            "song_id": song_id,
+            "target_key": variant.target_key,
+            "separated": False,
+            "status": "missing",
+            "stems": [],
+            "message": "Não há faixas de música disponíveis neste tom",
+        }
+    return {**manifest, "status": "ready"}
+
+
+@router.get("/songs/{song_id}/keys/{key}/stems/{stem_name}/audio")
+async def get_key_stem_audio(
+    song_id: str,
+    key: str,
+    stem_name: str,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+    band_id: str | None = Depends(get_band_id),
+):
+    await _ensure_song_access(session, band_id, user.id, song_id)
+    service = AnalysisService(session)
+    target = await service.get_key_stem_target(song_id, key, stem_name)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Stem neste tom não encontrado")
+    if target.kind == "remote" and target.url:
+        return RedirectResponse(url=target.url, status_code=302)
+
+    stem_path = target.path
+    if stem_path is None:
+        raise HTTPException(status_code=404, detail="Stem neste tom não encontrado")
+    media_type, _ = mimetypes.guess_type(str(stem_path))
+    if media_type is None:
+        media_type = "audio/wav"
+    return FileResponse(
+        path=stem_path,
+        media_type=media_type,
+        filename=stem_path.name,
+        headers={"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.get("/songs/{song_id}/stems/{stem_name}/audio")

@@ -227,6 +227,67 @@ export function getStemAudioUrl(songId: string, stemName: string): string {
   return `${apiUrl}/songs/${songId}/stems/${encodeURIComponent(stemName)}/audio`;
 }
 
+export type KeyVariantStatus = "queued" | "processing" | "ready" | "failed";
+
+export interface SongKeyVariant {
+  id: string;
+  target_key: string;
+  semitones: number;
+  status: KeyVariantStatus;
+  job_id: string | null;
+  error: string | null;
+  storage_prefix: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface SongKeysResponse {
+  song_id: string;
+  source_key: string;
+  mode: string;
+  available_targets: string[];
+  variants: SongKeyVariant[];
+}
+
+export interface RequestKeyVariantResponse {
+  song_id: string;
+  variant_id: string;
+  job_id: string | null;
+  target_key: string;
+  status: KeyVariantStatus;
+  semitones?: number;
+  message?: string;
+}
+
+export async function fetchSongKeys(songId: string): Promise<SongKeysResponse> {
+  const response = await authFetch(`/songs/${songId}/keys`);
+  return readJsonOrThrow(response, "Não foi possível carregar os tons convertidos");
+}
+
+export async function requestSongKeyVariant(
+  songId: string,
+  targetKey: string,
+): Promise<RequestKeyVariantResponse> {
+  const response = await authFetch(`/songs/${songId}/keys`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_key: targetKey }),
+  });
+  return readJsonOrThrow(response, "Não foi possível iniciar a conversão de tom");
+}
+
+export function songKeyAudioPath(songId: string, key: string): string {
+  return `/songs/${songId}/keys/${encodeURIComponent(key)}/audio`;
+}
+
+export function songKeyStemsPath(songId: string, key: string): string {
+  return `/songs/${songId}/keys/${encodeURIComponent(key)}/stems`;
+}
+
+export function songKeyStemAudioPath(songId: string, key: string, stemName: string): string {
+  return `/songs/${songId}/keys/${encodeURIComponent(key)}/stems/${encodeURIComponent(stemName)}/audio`;
+}
+
 export interface Job {
   id: string;
   song_id: string;

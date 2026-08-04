@@ -1,8 +1,23 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { authFetch, resolveAuthenticatedMediaUrl } from "../../lib/api";
+import {
+  authFetch,
+  fetchJob,
+  fetchSongKeys,
+  isJobFinished,
+  requestSongKeyVariant,
+  resolveAuthenticatedMediaUrl,
+  songKeyAudioPath,
+  songKeyStemAudioPath,
+  songKeyStemsPath,
+} from "../../lib/api";
+import { useCifraPlaybackKey } from "../cifra/cifra-playback-key-context";
+import { useToast } from "../../lib/toast";
 import {
   btnGhost,
+  btnPrimary,
+  cifraSelectClass,
   panelClass,
   segmentedActiveClass,
   segmentedIdleClass,
@@ -52,6 +67,16 @@ function readPlaybackMode(): PlaybackMode {
   }
 }
 
+type KeyAudioStatus = "original" | "ready" | "missing" | "queued" | "processing" | "failed";
+
+interface KeyStemsManifest extends StemsManifest {
+  status?: string;
+  message?: string;
+  job_id?: string | null;
+  error?: string | null;
+  target_key?: string;
+}
+
 export function SongAudioPlayer({
   songId,
   title,
@@ -62,11 +87,15 @@ export function SongAudioPlayer({
   showCifraScrollControl = false,
   onMinimizedChange,
 }: SongAudioPlayerProps) {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const playbackKey = useCifraPlaybackKey();
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [stemsManifest, setStemsManifest] = useState<StemsManifest | null>(null);
+  const [stemsManifest, setStemsManifest] = useState<KeyStemsManifest | null>(null);
   const [stemUrls, setStemUrls] = useState<Record<string, string>>({});
   const [stemsLoading, setStemsLoading] = useState(false);
   const [stemsError, setStemsError] = useState<string | null>(null);
+  const [keyAudioStatus, setKeyAudioStatus] = useState<KeyAudioStatus>("original");
   const [mode, setMode] = useState<PlaybackMode>(readPlaybackMode);
   const [enabledStems, setEnabledStems] = useState<Set<string>>(new Set());
   const [playing, setPlaying] = useState(false);
@@ -82,6 +111,43 @@ export function SongAudioPlayer({
   const [syncMetronome, setSyncMetronome] = useState(false);
   const [audioVolume, setAudioVolume] = useState(loadAudioVolume);
   const [minimized, setMinimized] = useState(() => (isFixedFooter ? readFooterMinimized() : false));
+  /** Tom escolhido no dropdown (detalhes). null = original. Na cifra, o contexto tem prioridade. */
+  const [manualAudioKey, setManualAudioKey] = useState<string | null>(null);
+
+  const keysQuery = useQuery({
+    queryKey: ["song-keys", songId],
+    queryFn: () => fetchSongKeys(songId),
+  });
+
+  const apiSourceKey = keysQuery.data?.source_key ?? null;
+  const readyKeyOptions = useMemo(
+    () =>
+      (keysQuery.data?.variants ?? [])
+        .filter((variant) => variant.status === "ready")
+        .map((variant) => variant.target_key)
+        // Não listar o próprio tom original como “convertido”.
+        .filter((key) => !apiSourceKey || key !== apiSourceKey),
+    [keysQuery.data?.variants, apiSourceKey],
+  );
+
+  const soundingKey = playbackKey?.soundingKey ?? null;
+  const sourceKey = playbackKey?.sourceKey ?? apiSourceKey;
+  const useOriginalAudio = playbackKey?.useOriginalAudio ?? false;
+  const cifraAudioKey =
+    playbackKey &&
+    !useOriginalAudio &&
+    soundingKey &&
+    sourceKey &&
+    soundingKey !== sourceKey
+      ? soundingKey
+      : null;
+  // Na cifra o tom da cifra manda; nos detalhes, o dropdown.
+  const activeAudioKey = playbackKey
+    ? useOriginalAudio
+      ? null
+      : cifraAudioKey
+    : manualAudioKey;
+  const wantsKeyVariant = Boolean(activeAudioKey);
 
   const availableStems = useMemo(
     () => (stemsManifest?.stems ?? []).filter((stem) => stem.available !== false),
@@ -91,11 +157,43 @@ export function SongAudioPlayer({
   const canUseStems = Boolean(stemsManifest?.separated && availableStems.length > 0);
   const effectiveMode: PlaybackMode = mode === "stems" && canUseStems ? "stems" : "original";
 
+  const keyJobId = stemsManifest?.job_id ?? null;
+  const keyJobQuery = useQuery({
+    queryKey: ["job", keyJobId],
+    queryFn: () => fetchJob(keyJobId!),
+    enabled:
+      Boolean(keyJobId) &&
+      (keyAudioStatus === "queued" || keyAudioStatus === "processing"),
+    refetchInterval: (query) =>
+      query.state.data && isJobFinished(query.state.data.status) ? false : 2500,
+  });
+
+  useEffect(() => {
+    const job = keyJobQuery.data;
+    if (!job || !isJobFinished(job.status)) return;
+    void queryClient.invalidateQueries({ queryKey: ["song-keys", songId] });
+    // Remonta stems/audio do tom.
+    setStemsManifest((current) =>
+      current ? { ...current, status: job.status === "completed" ? "ready" : "failed" } : current,
+    );
+  }, [keyJobQuery.data, queryClient, songId]);
+
   useEffect(() => {
     let objectUrl: string | null = null;
     let cancelled = false;
     setAudioUrl(null);
-    void resolveAuthenticatedMediaUrl(`/songs/${songId}/audio`)
+
+    if (wantsKeyVariant && keyAudioStatus !== "ready") {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const path = activeAudioKey
+      ? songKeyAudioPath(songId, activeAudioKey)
+      : `/songs/${songId}/audio`;
+
+    void resolveAuthenticatedMediaUrl(path)
       .then((resolved) => {
         if (cancelled) {
           if (resolved.isObjectUrl) URL.revokeObjectURL(resolved.url);
@@ -111,7 +209,7 @@ export function SongAudioPlayer({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [songId]);
+  }, [songId, activeAudioKey, wantsKeyVariant, keyAudioStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,19 +217,57 @@ export function SongAudioPlayer({
     setStemUrls({});
     setStemsLoading(false);
     setStemsError(null);
-    void authFetch(`/songs/${songId}/stems`)
+
+    if (!activeAudioKey) {
+      setKeyAudioStatus("original");
+      void authFetch(`/songs/${songId}/stems`)
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Stems indisponíveis");
+          const data = (await response.json()) as KeyStemsManifest;
+          if (!cancelled) setStemsManifest(data);
+        })
+        .catch(() => {
+          if (!cancelled) setStemsManifest({ song_id: songId, separated: false, stems: [] });
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setKeyAudioStatus("processing");
+    void authFetch(songKeyStemsPath(songId, activeAudioKey))
       .then(async (response) => {
-        if (!response.ok) throw new Error("Stems indisponíveis");
-        const data = (await response.json()) as StemsManifest;
-        if (!cancelled) setStemsManifest(data);
+        if (!response.ok) throw new Error("Stems do tom indisponíveis");
+        const data = (await response.json()) as KeyStemsManifest;
+        if (cancelled) return;
+        setStemsManifest(data);
+        const status = (data.status ?? (data.separated ? "ready" : "missing")) as KeyAudioStatus;
+        if (status === "ready" && data.separated) {
+          setKeyAudioStatus("ready");
+        } else if (status === "queued" || status === "processing") {
+          setKeyAudioStatus(status);
+        } else if (status === "failed") {
+          setKeyAudioStatus("failed");
+        } else {
+          setKeyAudioStatus("missing");
+        }
       })
       .catch(() => {
-        if (!cancelled) setStemsManifest({ song_id: songId, separated: false, stems: [] });
+        if (!cancelled) {
+          setStemsManifest({
+            song_id: songId,
+            separated: false,
+            stems: [],
+            status: "missing",
+            message: "Não há faixas de música disponíveis neste tom",
+          });
+          setKeyAudioStatus("missing");
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [songId]);
+  }, [songId, activeAudioKey, keyJobQuery.data?.status]);
 
   const availableStemKey = availableStems.map((stem) => stem.name).join("|");
 
@@ -151,9 +287,10 @@ export function SongAudioPlayer({
 
     void Promise.all(
       names.map(async (name) => {
-        const resolved = await resolveAuthenticatedMediaUrl(
-          `/songs/${songId}/stems/${encodeURIComponent(name)}/audio`,
-        );
+        const path = activeAudioKey
+          ? songKeyStemAudioPath(songId, activeAudioKey, name)
+          : `/songs/${songId}/stems/${encodeURIComponent(name)}/audio`;
+        const resolved = await resolveAuthenticatedMediaUrl(path);
         if (resolved.isObjectUrl) objectUrls.push(resolved.url);
         return [name, resolved.url] as const;
       }),
@@ -178,7 +315,34 @@ export function SongAudioPlayer({
       cancelled = true;
       for (const url of objectUrls) URL.revokeObjectURL(url);
     };
-  }, [songId, canUseStems, availableStemKey]);
+  }, [songId, canUseStems, availableStemKey, activeAudioKey]);
+
+  const generateKeyMutation = useMutation({
+    mutationFn: async () => {
+      if (!soundingKey) throw new Error("Tom inválido");
+      return requestSongKeyVariant(songId, soundingKey);
+    },
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ["song-keys", songId] });
+      toast.success(`Conversão para ${result.target_key} iniciada.`);
+      setKeyAudioStatus(
+        result.status === "ready" ? "ready" : result.status === "failed" ? "failed" : "queued",
+      );
+      setStemsManifest((current) => ({
+        song_id: songId,
+        separated: result.status === "ready",
+        stems: current?.stems ?? [],
+        status: result.status,
+        job_id: result.job_id,
+        target_key: result.target_key,
+        message:
+          result.status === "ready"
+            ? undefined
+            : "Conversão de tom em andamento",
+      }));
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
 
   useEffect(() => {
     try {
@@ -304,6 +468,21 @@ export function SongAudioPlayer({
       // ignore
     }
   };
+
+  const handleManualKeyChange = (nextKey: string) => {
+    const normalized = nextKey.trim() || null;
+    if (normalized === manualAudioKey) return;
+    pauseEverything();
+    if (syncMetronome) metronomeRef.current?.stop();
+    setManualAudioKey(normalized);
+  };
+
+  useEffect(() => {
+    if (!manualAudioKey) return;
+    if (!readyKeyOptions.includes(manualAudioKey)) {
+      setManualAudioKey(null);
+    }
+  }, [manualAudioKey, readyKeyOptions]);
 
   const handleSyncChange = (checked: boolean) => {
     setSyncMetronome(checked);
@@ -502,6 +681,8 @@ export function SongAudioPlayer({
 
   const stemsBusy = stemsLoading && !stemsReady;
   const showStemsPanel = mode === "stems" && canUseStems;
+  // Dropdown de tons: nos detalhes (sem contexto da cifra) quando há variantes prontas.
+  const showKeyDropdown = !playbackKey && readyKeyOptions.length > 0;
 
   const modeToggle = canUseStems ? (
     <div className={`${segmentedWrapClass} !p-1`} role="group" aria-label="Fonte de áudio">
@@ -532,6 +713,37 @@ export function SongAudioPlayer({
       </button>
     </div>
   ) : null;
+
+  const keyDropdown = showKeyDropdown ? (
+    <label className="flex min-w-[8.5rem] flex-col gap-1">
+      <span className="sr-only">Tom do áudio</span>
+      <select
+        id="song-audio-key"
+        name="song-audio-key"
+        aria-label="Tom do áudio"
+        className={`${cifraSelectClass} !w-auto min-w-[8.5rem] py-1.5 text-sm`}
+        value={manualAudioKey ?? ""}
+        onChange={(event) => handleManualKeyChange(event.target.value)}
+      >
+        <option value="">
+          {apiSourceKey ? `Original (${apiSourceKey})` : "Original"}
+        </option>
+        {readyKeyOptions.map((key) => (
+          <option key={key} value={key}>
+            Tom {key}
+          </option>
+        ))}
+      </select>
+    </label>
+  ) : null;
+
+  const sourceControls =
+    modeToggle || keyDropdown ? (
+      <div className="flex flex-wrap items-center gap-2">
+        {modeToggle}
+        {keyDropdown}
+      </div>
+    ) : null;
 
   const stemsPicker = showStemsPanel ? (
       <div className="space-y-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
@@ -689,39 +901,90 @@ export function SongAudioPlayer({
     <CifraScrollControl compact={minimized && isFixedFooter} />
   ) : null;
 
-  if (isFixedFooter && minimized) {
-    return (
-      <div
-        className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#020806]/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl ${className ?? ""}`}
-      >
-        <div className="mx-auto max-w-6xl px-4 py-2.5">
-          <div className="flex items-center gap-3">
-            {scrollControl}
-            <div className="min-w-0 flex-1">
-              {originalAudio}
-              {hiddenStemAudios}
-              {transport}
-            </div>
+  const keyVariantBanner =
+    playbackKey && wantsKeyVariant ? (
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2 text-sm text-slate-300">
+        {keyAudioStatus === "ready" ? (
+          <p>
+            Tocando no tom <span className="text-green-300">{soundingKey}</span>
+            {sourceKey ? (
+              <span className="text-slate-500"> (original {sourceKey})</span>
+            ) : null}
+          </p>
+        ) : keyAudioStatus === "queued" || keyAudioStatus === "processing" ? (
+          <p className="inline-flex items-center gap-2">
+            <span
+              className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-green-400 border-r-transparent"
+              aria-hidden
+            />
+            Gerando faixas em {soundingKey}
+            {keyJobQuery.data ? ` · ${keyJobQuery.data.progress}%` : "…"}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <p>
+              Não há faixas de música disponíveis neste tom
+              {soundingKey ? (
+                <>
+                  {" "}
+                  (<span className="text-green-300">{soundingKey}</span>)
+                </>
+              ) : null}
+              .
+            </p>
+            {stemsManifest?.error ? (
+              <p className="text-xs text-red-300">{stemsManifest.error}</p>
+            ) : null}
             <button
               type="button"
-              onClick={() => setFooterMinimized(false)}
-              className={`${btnGhost} shrink-0 px-3 py-1.5 text-xs`}
-              aria-label="Expandir painel de áudio"
+              className={`${btnPrimary} px-3 py-1.5 text-xs`}
+              disabled={generateKeyMutation.isPending}
+              onClick={() => generateKeyMutation.mutate()}
             >
-              Expandir
+              {generateKeyMutation.isPending ? "Iniciando…" : "Gerar neste tom"}
             </button>
           </div>
-        </div>
+        )}
       </div>
-    );
-  }
+    ) : null;
 
-  const panelBody = (
+  const useOriginalCheckbox = playbackKey ? (
+    <label
+      htmlFor="use-original-audio"
+      className="flex cursor-pointer items-start gap-2 text-sm text-slate-300"
+    >
+      <input
+        id="use-original-audio"
+        name="use-original-audio"
+        type="checkbox"
+        checked={useOriginalAudio}
+        onChange={(event) => playbackKey.setUseOriginalAudio(event.target.checked)}
+        className="accent-brand mt-0.5 rounded border-white/20 bg-black/30"
+      />
+      <span>
+        Usar original importada
+        <span className="mt-0.5 block text-xs text-slate-500">
+          Mantém o áudio no tom original mesmo se a cifra estiver transposta.
+        </span>
+      </span>
+    </label>
+  ) : null;
+
+  // Áudio sempre no mesmo lugar do DOM — minimizar/expandir não pode remountar <audio>,
+  // senão a reprodução para.
+  const persistentAudio = (
+    <>
+      {originalAudio}
+      {hiddenStemAudios}
+    </>
+  );
+
+  const expandedBody = (
     <>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="space-y-2">
           <h2 className="font-medium text-slate-100">Áudio</h2>
-          {modeToggle}
+          {sourceControls}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-500">Áudio protegido</span>
@@ -738,8 +1001,16 @@ export function SongAudioPlayer({
         </div>
       </div>
 
-      {originalAudio}
-      {hiddenStemAudios}
+      {useOriginalCheckbox ? <div className="mt-2">{useOriginalCheckbox}</div> : null}
+      {keyVariantBanner ? <div className="mt-2">{keyVariantBanner}</div> : null}
+      {showKeyDropdown && manualAudioKey ? (
+        <p className="mt-2 text-xs text-slate-500">
+          Tocando no tom <span className="text-green-300">{manualAudioKey}</span>
+          {apiSourceKey ? (
+            <span className="text-slate-500"> (original {apiSourceKey})</span>
+          ) : null}
+        </p>
+      ) : null}
 
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start">
         {scrollControl}
@@ -758,10 +1029,70 @@ export function SongAudioPlayer({
       <div
         className={`fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.08] bg-[#020806]/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl ${className ?? ""}`}
       >
-        <div className="mx-auto max-w-6xl space-y-3 px-4 py-4">{panelBody}</div>
+        {persistentAudio}
+        {minimized ? (
+          <div className="mx-auto max-w-6xl px-4 py-2.5">
+            <div className="flex items-center gap-3">
+              {scrollControl}
+              <div className="min-w-0 flex-1">{transport}</div>
+              <button
+                type="button"
+                onClick={() => setFooterMinimized(false)}
+                className={`${btnGhost} shrink-0 px-3 py-1.5 text-xs`}
+                aria-label="Expandir painel de áudio"
+              >
+                Expandir
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto max-w-6xl space-y-3 px-4 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="space-y-2">
+                <h2 className="font-medium text-slate-100">Áudio</h2>
+                {sourceControls}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-500">Áudio protegido</span>
+                <button
+                  type="button"
+                  onClick={() => setFooterMinimized(true)}
+                  className={`${btnGhost} px-2.5 py-1 text-xs`}
+                  aria-label="Minimizar painel de áudio"
+                >
+                  Minimizar
+                </button>
+              </div>
+            </div>
+            {useOriginalCheckbox ? <div className="mt-2">{useOriginalCheckbox}</div> : null}
+            {keyVariantBanner ? <div className="mt-2">{keyVariantBanner}</div> : null}
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-start">
+              {scrollControl}
+              <div className="min-w-0 flex-1 space-y-3">
+                {transport}
+                {stemsPicker}
+              </div>
+            </div>
+            {volumeControl}
+          </div>
+        )}
+        {/* Metrônomo sempre montado: só a UI some ao minimizar. */}
+        {hasMetronome ? (
+          <div
+            className={minimized ? "hidden" : "mx-auto max-w-6xl px-4 pb-4"}
+            aria-hidden={minimized || undefined}
+          >
+            {metronomeExtras}
+          </div>
+        ) : null}
       </div>
     );
   }
 
-  return <article className={`${panelClass} ${className ?? ""}`}>{panelBody}</article>;
+  return (
+    <article className={`${panelClass} ${className ?? ""}`}>
+      {persistentAudio}
+      {expandedBody}
+    </article>
+  );
 }

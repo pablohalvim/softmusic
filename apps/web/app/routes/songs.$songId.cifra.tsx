@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 
 import { CifraViewer } from "../components/cifra/CifraViewer";
+import { CifraPlaybackKeyProvider } from "../components/cifra/cifra-playback-key-context";
 import { CifraScrollProvider } from "../components/cifra/cifra-scroll-context";
 import { SongAudioPlayer } from "../components/audio/SongAudioPlayer";
 import { authFetch, fetchSong } from "../lib/api";
@@ -106,29 +107,35 @@ export default function SongCifraPage() {
   }
 
   return (
-    <CifraScrollProvider bpm={chordsQuery.data.tempo_bpm} songId={songId!}>
-      <section
-        className={`min-w-0 max-w-full space-y-4 transition-[padding] duration-200 ${
-          audioFooterMinimized ? "pb-28" : hasMetronomePadding(chordsQuery.data.tempo_bpm) ? "pb-[26rem]" : "pb-64"
-        }`}
-      >
-        <CifraViewer
+    <CifraPlaybackKeyProvider>
+      <CifraScrollProvider bpm={chordsQuery.data.tempo_bpm} songId={songId!}>
+        <section
+          className={`min-w-0 max-w-full space-y-4 transition-[padding] duration-200 ${
+            audioFooterMinimized
+              ? "pb-28"
+              : hasMetronomePadding(chordsQuery.data.tempo_bpm)
+                ? "pb-[26rem]"
+                : "pb-64"
+          }`}
+        >
+          <CifraViewer
+            songId={songId!}
+            songTitle={songQuery.data.title ?? chordsQuery.data.title ?? "Música sem título"}
+            artist={songQuery.data.artist ?? chordsQuery.data.artist}
+            chordData={chordsQuery.data}
+            initialVariationId={initialVariationId}
+          />
+        </section>
+        <SongAudioPlayer
           songId={songId!}
-          songTitle={songQuery.data.title ?? chordsQuery.data.title ?? "Música sem título"}
-          artist={songQuery.data.artist ?? chordsQuery.data.artist}
-          chordData={chordsQuery.data}
-          initialVariationId={initialVariationId}
+          title={songQuery.data.title ?? chordsQuery.data.title}
+          bpm={chordsQuery.data.tempo_bpm}
+          layout="fixed-footer"
+          showCifraScrollControl
+          onMinimizedChange={setAudioFooterMinimized}
         />
-      </section>
-      <SongAudioPlayer
-        songId={songId!}
-        title={songQuery.data.title ?? chordsQuery.data.title}
-        bpm={chordsQuery.data.tempo_bpm}
-        layout="fixed-footer"
-        showCifraScrollControl
-        onMinimizedChange={setAudioFooterMinimized}
-      />
-    </CifraScrollProvider>
+      </CifraScrollProvider>
+    </CifraPlaybackKeyProvider>
   );
 }
 

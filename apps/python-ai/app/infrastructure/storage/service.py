@@ -179,6 +179,89 @@ class StorageService:
             return False
         return await asyncio.to_thread(self._remote.exists, f"{song_id}/stems/{stem_file}")
 
+    # -- key variants (pitch-shift) --------------------------------------------
+
+    def key_variant_paths(self, song_id: str, storage_prefix: str) -> dict[str, Path]:
+        """Local paths under ``{song_id}/{storage_prefix}/`` (e.g. keys/Em)."""
+        root = self.song_dir(song_id) / storage_prefix
+        return {
+            "root": root,
+            "playback": root / "playback.wav",
+            "stems": root / "stems",
+            "manifest": root / "stems" / "manifest.json",
+        }
+
+    async def persist_key_variant(self, song_id: str, storage_prefix: str) -> None:
+        """Upload only the key-variant tree to R2 (and optionally offload local)."""
+        if self._remote is None:
+            return
+        paths = self.key_variant_paths(song_id, storage_prefix)
+        root = paths["root"]
+        if not root.exists():
+            return
+        count = 0
+        for file_path in root.rglob("*"):
+            if not file_path.is_file():
+                continue
+            rel = file_path.relative_to(self.song_dir(song_id)).as_posix()
+            content_type, _ = mimetypes.guess_type(str(file_path))
+            await asyncio.to_thread(
+                self._remote.upload_file, file_path, f"{song_id}/{rel}", content_type
+            )
+            count += 1
+        logger.info(
+            "storage_key_variant_uploaded",
+            song_id=song_id,
+            storage_prefix=storage_prefix,
+            files=count,
+        )
+        if self._delete_local_after_upload:
+            shutil.rmtree(root, ignore_errors=True)
+
+    async def get_key_playback_target(
+        self, song_id: str, storage_prefix: str
+    ) -> PlaybackTarget | None:
+        rel = f"{storage_prefix}/playback.wav"
+        if self._remote is not None and await asyncio.to_thread(
+            self._remote.exists, f"{song_id}/{rel}"
+        ):
+            url = self._remote.presigned_get(
+                f"{song_id}/{rel}", self._presign_expires, filename="playback.wav"
+            )
+            return PlaybackTarget(kind="remote", url=url)
+        local = self.song_dir(song_id) / rel
+        if local.exists() and local.is_file():
+            return PlaybackTarget(kind="local", path=local)
+        return None
+
+    async def get_key_stem_target(
+        self, song_id: str, storage_prefix: str, stem_file: str
+    ) -> PlaybackTarget | None:
+        rel = f"{storage_prefix}/stems/{stem_file}"
+        if self._remote is not None and await asyncio.to_thread(
+            self._remote.exists, f"{song_id}/{rel}"
+        ):
+            url = self._remote.presigned_get(
+                f"{song_id}/{rel}", self._presign_expires, filename=stem_file
+            )
+            return PlaybackTarget(kind="remote", url=url)
+        local = self.song_dir(song_id) / rel
+        if local.exists() and local.is_file():
+            return PlaybackTarget(kind="local", path=local)
+        return None
+
+    async def key_stem_available(
+        self, song_id: str, storage_prefix: str, stem_file: str
+    ) -> bool:
+        local = self.song_dir(song_id) / storage_prefix / "stems" / stem_file
+        if local.exists():
+            return True
+        if self._remote is None:
+            return False
+        return await asyncio.to_thread(
+            self._remote.exists, f"{song_id}/{storage_prefix}/stems/{stem_file}"
+        )
+
     # -- exclusão --------------------------------------------------------------
 
     async def delete_song(self, song_id: str) -> None:
