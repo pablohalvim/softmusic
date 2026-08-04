@@ -8,7 +8,7 @@ import {
   isJobFinished,
   requestSongKeyVariant,
 } from "../../lib/api";
-import { labelJobStage } from "../../lib/status-labels";
+import { labelJobStage, labelQueuePosition } from "../../lib/status-labels";
 import { useToast } from "../../lib/toast";
 import { btnGhost, btnPrimary, cifraSelectClass, modalPanelClass } from "../../lib/ui-classes";
 
@@ -211,7 +211,11 @@ export function ConvertKeyModal({ open, songId, songTitle, onClose }: ConvertKey
               <p>
                 Convertendo para <span className="text-green-300">{displayKey}</span>
                 {" · "}
-                {labelJobStage(job.stage)} · {job.progress}%
+                {job.status === "queued"
+                  ? (labelQueuePosition(job.queue_position, job.queue_total) ?? "Na fila")
+                  : labelJobStage(job.stage)}
+                {" · "}
+                {job.progress}%
               </p>
               {job.error ? <p className="mt-1 text-red-300">{job.error}</p> : null}
             </div>

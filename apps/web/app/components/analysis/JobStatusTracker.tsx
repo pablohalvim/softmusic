@@ -80,6 +80,8 @@ export function JobStatusTracker({
           stage={job.stage}
           progress={job.progress}
           error={job.error}
+          queuePosition={job.queue_position}
+          queueTotal={job.queue_total}
         />
       </div>
 

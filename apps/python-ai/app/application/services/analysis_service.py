@@ -549,6 +549,32 @@ class AnalysisService:
         )
         return result.scalar_one_or_none()
 
+    async def get_queue_position(self, job: AnalysisJob) -> dict[str, int] | None:
+        """Posição 1-based na fila global de análise (jobs ``queued`` por created_at)."""
+        if job.status != JobStatus.QUEUED.value:
+            return None
+
+        total_result = await self.session.execute(
+            select(func.count())
+            .select_from(AnalysisJob)
+            .where(AnalysisJob.status == JobStatus.QUEUED.value)
+        )
+        total = int(total_result.scalar_one())
+
+        ahead_result = await self.session.execute(
+            select(func.count())
+            .select_from(AnalysisJob)
+            .where(
+                AnalysisJob.status == JobStatus.QUEUED.value,
+                or_(
+                    AnalysisJob.created_at < job.created_at,
+                    (AnalysisJob.created_at == job.created_at) & (AnalysisJob.id < job.id),
+                ),
+            )
+        )
+        ahead = int(ahead_result.scalar_one())
+        return {"position": ahead + 1, "total": max(total, ahead + 1)}
+
     async def list_songs(self, limit: int = 50, offset: int = 0) -> tuple[list[Song], int]:
         safe_limit = max(1, min(limit, 100))
         safe_offset = max(0, offset)

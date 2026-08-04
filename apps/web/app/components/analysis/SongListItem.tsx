@@ -25,7 +25,7 @@ import { useBand } from "../../lib/band-context";
 import { useConfirm } from "../../lib/confirm";
 import { labelSongStatus } from "../../lib/status-labels";
 import { useToast } from "../../lib/toast";
-import { btnGhost, panelClass } from "../../lib/ui-classes";
+import { btnGhost, btnPrimary, panelClass } from "../../lib/ui-classes";
 import { JobProgressDetails, ProgressBar, StatusBadge } from "./StatusBadge";
 
 export function SongListItem({ song }: { song: SongSummary }) {
@@ -233,17 +233,6 @@ export function SongListItem({ song }: { song: SongSummary }) {
       });
     }
     if (song.status === "completed") {
-      menuItems.push({
-        kind: "link",
-        label: "Cifra",
-        to: `/songs/${song.id}/cifra`,
-        tone: "primary",
-      });
-      menuItems.push({
-        kind: "link",
-        label: "Detalhes",
-        to: `/songs/${song.id}`,
-      });
       if (canManageShare) {
         menuItems.push({
           kind: "button",
@@ -390,7 +379,23 @@ export function SongListItem({ song }: { song: SongSummary }) {
         </div>
 
         {!blocked ? (
-          <div className="relative">
+          <div className="relative flex flex-wrap items-center justify-end gap-2">
+            {song.status === "completed" ? (
+              <>
+                <Link
+                  to={`/songs/${song.id}/cifra`}
+                  className={`${btnPrimary} px-3 py-1.5 text-sm`}
+                >
+                  Cifra
+                </Link>
+                <Link
+                  to={`/songs/${song.id}`}
+                  className="inline-flex items-center justify-center rounded-xl border border-blue-500/40 bg-blue-600/20 px-3 py-1.5 text-sm font-medium text-blue-100 transition hover:border-blue-400/50 hover:bg-blue-500/30"
+                >
+                  Análise
+                </Link>
+              </>
+            ) : null}
             <button
               ref={menuButtonRef}
               type="button"
@@ -429,6 +434,8 @@ export function SongListItem({ song }: { song: SongSummary }) {
             stage={job.stage}
             progress={job.progress}
             error={job.error}
+            queuePosition={job.queue_position}
+            queueTotal={job.queue_total}
           />
         </div>
       ) : job?.error && displayStatus === "failed" ? (
@@ -462,6 +469,8 @@ export function SongListItem({ song }: { song: SongSummary }) {
             stage={keyJob.stage}
             progress={keyJob.progress}
             error={keyJob.error}
+            queuePosition={keyJob.queue_position}
+            queueTotal={keyJob.queue_total}
           />
         </div>
       ) : activeKeyVariant && !keyJob ? (

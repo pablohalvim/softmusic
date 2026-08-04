@@ -178,6 +178,8 @@ export default function SongDetail() {
               stage={job.stage}
               progress={job.progress}
               error={job.error}
+              queuePosition={job.queue_position}
+              queueTotal={job.queue_total}
             />
           </div>
           <p className="mt-4 text-xs text-slate-500">Atualizando automaticamente...</p>

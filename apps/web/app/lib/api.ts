@@ -295,6 +295,10 @@ export interface Job {
   stage: string | null;
   progress: number;
   error: string | null;
+  /** Posição 1-based na fila global (só quando status === "queued"). */
+  queue_position?: number | null;
+  /** Total de jobs aguardando na fila. */
+  queue_total?: number | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;

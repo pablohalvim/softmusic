@@ -29,6 +29,8 @@ export const JobSchema = z.object({
   stage: JobStageSchema.nullable(),
   progress: z.number().min(0).max(100),
   error: z.string().nullable(),
+  queue_position: z.number().int().positive().nullable().optional(),
+  queue_total: z.number().int().nonnegative().nullable().optional(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
   completed_at: z.string().datetime().nullable(),

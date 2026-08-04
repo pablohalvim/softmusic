@@ -371,7 +371,12 @@ async def analyze_audio_upload_for_song(
     return {"job_id": job.id, "song_id": song_id}
 
 
-def _serialize_job(job: Any) -> dict[str, Any]:
+def _serialize_job(
+    job: Any,
+    *,
+    queue_position: int | None = None,
+    queue_total: int | None = None,
+) -> dict[str, Any]:
     return {
         "id": job.id,
         "song_id": job.song_id,
@@ -379,10 +384,21 @@ def _serialize_job(job: Any) -> dict[str, Any]:
         "stage": job.stage,
         "progress": job.progress,
         "error": job.error,
+        "queue_position": queue_position,
+        "queue_total": queue_total,
         "created_at": job.created_at.isoformat(),
         "updated_at": job.updated_at.isoformat(),
         "completed_at": job.completed_at.isoformat() if job.completed_at else None,
     }
+
+
+async def _serialize_job_with_queue(session: AsyncSession, job: Any) -> dict[str, Any]:
+    queue = await AnalysisService(session).get_queue_position(job)
+    return _serialize_job(
+        job,
+        queue_position=queue["position"] if queue else None,
+        queue_total=queue["total"] if queue else None,
+    )
 
 
 def _serialize_song(song: Any, *, link_source: str | None = None) -> dict[str, Any]:
@@ -611,7 +627,7 @@ async def get_job(
     band_id: str | None = Depends(get_band_id),
 ) -> dict[str, Any]:
     job = await _ensure_job_access(session, band_id, user.id, job_id)
-    return _serialize_job(job)
+    return await _serialize_job_with_queue(session, job)
 
 
 @router.get("/songs/{song_id}/job")
@@ -626,7 +642,7 @@ async def get_song_job(
     job = await service.get_latest_job_for_song(song_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _serialize_job(job)
+    return await _serialize_job_with_queue(session, job)
 
 
 @router.get("/songs/{song_id}")

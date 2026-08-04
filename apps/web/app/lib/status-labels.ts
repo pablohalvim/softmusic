@@ -47,6 +47,19 @@ export function labelJobStage(stage: string | null): string {
   return stageLabels[stage] ?? stage;
 }
 
+/** Ex.: "2º na fila · 2 de 5 aguardando" */
+export function labelQueuePosition(
+  position: number | null | undefined,
+  total: number | null | undefined,
+): string | null {
+  if (position == null || position < 1) return null;
+  const ordinal = `${position}º na fila`;
+  if (total != null && total >= position) {
+    return `${ordinal} · ${position} de ${total} aguardando`;
+  }
+  return ordinal;
+}
+
 export function statusTone(
   status: Job["status"] | SongSummary["status"],
 ): "neutral" | "active" | "success" | "error" {

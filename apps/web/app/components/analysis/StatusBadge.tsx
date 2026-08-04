@@ -1,4 +1,4 @@
-import { labelJobStatus, labelJobStage, statusTone } from "../../lib/status-labels";
+import { labelJobStatus, labelJobStage, labelQueuePosition, statusTone } from "../../lib/status-labels";
 
 const toneClasses = {
   neutral: "border-slate-700 bg-slate-800/60 text-slate-300",
@@ -52,20 +52,38 @@ export function JobProgressDetails({
   stage,
   progress,
   error,
+  queuePosition,
+  queueTotal,
 }: {
   status: string;
   stage: string | null;
   progress: number;
   error: string | null;
+  queuePosition?: number | null;
+  queueTotal?: number | null;
 }) {
+  const queueLabel =
+    status === "queued" ? labelQueuePosition(queuePosition, queueTotal) : null;
+  const stageLabel =
+    status === "queued" && queueLabel
+      ? queueLabel
+      : labelJobStage(stage);
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <StatusBadge status={status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={status} />
+          {queueLabel ? (
+            <span className="inline-flex rounded-full border border-amber-700/50 bg-amber-950/30 px-2.5 py-0.5 text-xs font-medium text-amber-200">
+              {queuePosition}º na fila
+            </span>
+          ) : null}
+        </div>
         <span className="text-slate-400">{progress}%</span>
       </div>
       <ProgressBar value={progress} />
-      <p className="text-sm text-slate-300">{labelJobStage(stage)}</p>
+      <p className="text-sm text-slate-300">{stageLabel}</p>
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
     </div>
   );
