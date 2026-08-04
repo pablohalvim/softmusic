@@ -27,13 +27,22 @@ def test_parse_cifra_pre_content() -> None:
     assert len(sections) >= 2
     assert sections[0]["label"] == "Intro"
     intro_line = sections[0]["lines"][0]
-    assert intro_line["placements"][0]["chord"] == "C7M"
+    assert intro_line["lyrics"] == ""
+    assert [p["chord"] for p in intro_line["placements"]] == ["C7M", "G/B", "Am7"]
+    # Gaps entre acordes da Intro não podem colapsar (empilhar).
+    intro_offsets = [p["offset"] for p in intro_line["placements"]]
+    assert intro_offsets == sorted(set(intro_offsets))
+    assert intro_offsets[0] == 0
+    assert intro_offsets[1] > intro_offsets[0]
+    assert intro_offsets[2] > intro_offsets[1]
     verse = next(section for section in sections if section["label"] == "Primeira Parte")
     assert verse["lines"][0]["placements"][0]["chord"] == "G"
+    assert verse["lines"][0]["placements"][0]["offset"] == 2  # dois espaços à esquerda
     assert "Quem foi muito perdoado" in verse["lines"][0]["lyrics"]
     assert verse["lines"][1]["placements"][0]["chord"] == "G9"
     assert verse["lines"][1]["placements"][1]["chord"] == "Em7"
     assert "Deveria saber" in verse["lines"][1]["lyrics"]
+    assert verse["lines"][1]["placements"][0]["offset"] == 1
     assert verse["lines"][1]["placements"][1]["offset"] > verse["lines"][1]["placements"][0]["offset"]
 
 
@@ -72,14 +81,43 @@ def test_parse_cifra_pre_content_new_markup() -> None:
     sections = parse_cifra_pre_content(SAMPLE_PRE_NEW_MARKUP)
     assert len(sections) >= 2
     assert sections[0]["label"] == "Intro"
-    assert [p["chord"] for p in sections[0]["lines"][0]["placements"]] == ["D", "Bm", "A", "G"]
+    intro = sections[0]["lines"][0]
+    assert intro["lyrics"] == ""
+    assert [p["chord"] for p in intro["placements"]] == ["D", "Bm", "A", "G"]
+    intro_offsets = [p["offset"] for p in intro["placements"]]
+    assert intro_offsets == [0, 3, 7, 10]
     verse = next(section for section in sections if section["label"] == "Primeira Parte")
     first = verse["lines"][0]
     assert first["lyrics"].startswith("Quem é como Tu")
     assert [p["chord"] for p in first["placements"]] == ["D", "Bm", "A"]
-    assert first["placements"][1]["offset"] > first["placements"][0]["offset"]
+    # Como no <pre>: "  D          Bm    A" → D@2, Bm@13, A@19
+    assert [p["offset"] for p in first["placements"]] == [2, 13, 19]
+    second = verse["lines"][1]
+    assert [p["offset"] for p in second["placements"]] == [5, 24]
     # Acordes NÃO devem aparecer como linha de letra.
     assert not any(line["lyrics"].strip().startswith("D") and "Quem" not in line["lyrics"] for line in verse["lines"] if line["placements"])
+
+
+def test_instrumental_solo_chords_keep_spacing() -> None:
+    pre = """[Solo] <b>G</b>  <b>A</b>  <b>D/F#</b>  <b>Bm</b>  <b>A</b>
+       <b>G</b>  <b>A</b>  <b>D/F#</b>  <b>Bm</b>  <b>A</b>
+
+[Tab - Solo]
+Parte 1
+"""
+    sections = parse_cifra_pre_content(pre)
+    solo = next(section for section in sections if section["label"] == "Solo")
+    assert len(solo["lines"]) == 2
+    first_offsets = [p["offset"] for p in solo["lines"][0]["placements"]]
+    second_offsets = [p["offset"] for p in solo["lines"][1]["placements"]]
+    assert first_offsets == sorted(set(first_offsets))
+    assert second_offsets == sorted(set(second_offsets))
+    assert first_offsets[0] == 0
+    assert second_offsets[0] == 7  # sete espaços à esquerda
+    assert [p["chord"] for p in solo["lines"][0]["placements"]] == ["G", "A", "D/F#", "Bm", "A"]
+    # 2ª linha do Solo não pode “vazar” para a seção seguinte.
+    tab = next(section for section in sections if section["label"] == "Tab - Solo")
+    assert all(not line["placements"] for line in tab["lines"])
 
 
 def test_extract_key_ignores_css_tom_calc() -> None:

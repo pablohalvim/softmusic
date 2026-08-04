@@ -67,10 +67,16 @@ def _extract_chords(raw_line: str) -> list[str]:
     return [chord for chord in chords if chord]
 
 
-def _strip_html(raw_line: str) -> str:
+def _visual_text(raw_line: str, *, trim: bool = False) -> str:
+    """Texto visível monoespaçado; por padrão preserva espaços (alinhamento da cifra)."""
     without_tabs = TAB_BLOCK_PATTERN.sub("", raw_line)
     without_tags = HTML_TAG_PATTERN.sub("", without_tabs)
-    return unescape(without_tags).replace("\xa0", " ").strip()
+    text = unescape(without_tags).replace("\xa0", " ")
+    return text.strip() if trim else text
+
+
+def _strip_html(raw_line: str) -> str:
+    return _visual_text(raw_line, trim=True)
 
 
 def _is_chord_only_line(raw_line: str) -> bool:
@@ -82,22 +88,37 @@ def _is_chord_only_line(raw_line: str) -> bool:
     return not remainder.strip()
 
 
-def _chord_line_to_placements(chord_raw: str, lyrics: str) -> list[dict[str, Any]]:
+def _chord_line_to_placements(chord_raw: str, lyrics: str = "") -> list[dict[str, Any]]:
+    """Converte linha de acordes em placements com ``offset`` = coluna monoespaçada.
+
+    No ``<pre>`` do Cifra Club o texto do acorde é visível e ocupa colunas; o gap
+    entre ``</b>`` e o próximo ``<b>`` é só o espaço *entre* nomes. Por isso o
+    cursor avança com ``len(chord)`` + gaps — igual ao que o browser mostra.
+
+    Não limita o offset ao tamanho da letra (Intro/Solo e acordes além do fim).
+    """
+    del lyrics  # API mantida; alinhamento vem só da linha de acordes.
     placements: list[dict[str, Any]] = []
+    used_ids: set[str] = set()
+    cursor = 0
+    last_index = 0
     for match in CHORD_TAG_PATTERN.finditer(chord_raw):
+        cursor += len(_visual_text(chord_raw[last_index : match.start()]))
         chord = unescape(match.group(1)).strip()
-        if not chord:
-            continue
-        prefix = chord_raw[: match.start()]
-        prefix_visual = unescape(HTML_TAG_PATTERN.sub("", prefix))
-        offset = min(len(prefix_visual), max(0, len(lyrics)))
-        placements.append(
-            {
-                "id": f"p-{offset}-{chord}",
-                "chord": chord,
-                "offset": offset,
-            }
-        )
+        if chord:
+            placement_id = f"p-{cursor}-{chord}"
+            if placement_id in used_ids:
+                placement_id = f"p-{cursor}-{chord}-{len(used_ids)}"
+            used_ids.add(placement_id)
+            placements.append(
+                {
+                    "id": placement_id,
+                    "chord": chord,
+                    "offset": cursor,
+                }
+            )
+            cursor += len(chord)
+        last_index = match.end()
     return placements
 
 
@@ -108,7 +129,8 @@ def _inline_line_to_placements(raw_line: str) -> tuple[str, list[dict[str, Any]]
     last_index = 0
 
     for match in CHORD_TAG_PATTERN.finditer(raw_line):
-        before = _strip_html(raw_line[last_index : match.start()])
+        # Preserva espaços entre acordes/sílabas — sem .strip() no meio.
+        before = _visual_text(raw_line[last_index : match.start()])
         lyrics_parts.append(before)
         cursor += len(before)
         chord = unescape(match.group(1)).strip()
@@ -122,9 +144,21 @@ def _inline_line_to_placements(raw_line: str) -> tuple[str, list[dict[str, Any]]
             )
         last_index = match.end()
 
-    lyrics_parts.append(_strip_html(raw_line[last_index:]))
+    lyrics_parts.append(_visual_text(raw_line[last_index:]))
     lyrics = "".join(lyrics_parts)
     return lyrics, placements
+
+
+def _section_trailing_chord_placements(raw_line: str) -> list[dict[str, Any]]:
+    """Acordes na mesma linha do cabeçalho ``[Intro] D Bm …`` — só a região após ``]``."""
+    bracket = raw_line.find("]")
+    if bracket < 0:
+        return []
+    region = raw_line[bracket + 1 :]
+    if not _extract_chords(region):
+        return []
+    # Remove só o espaço logo após ``]``; mantém gaps entre acordes.
+    return _chord_line_to_placements(region.lstrip(" \t"))
 
 
 def parse_cifra_pre_content(pre_html: str) -> list[dict[str, Any]]:
@@ -170,8 +204,9 @@ def parse_cifra_pre_content(pre_html: str) -> list[dict[str, Any]]:
         pending_chord_line = None
 
     for raw_line in pre_html.splitlines():
-        stripped = raw_line.strip()
-        if not stripped:
+        # rstrip: NÃO remover espaços à esquerda — eles definem a coluna do acorde.
+        stripped = raw_line.rstrip("\r\n")
+        if not stripped.strip():
             continue
         if "tablatura" in stripped.lower():
             continue
@@ -179,17 +214,15 @@ def parse_cifra_pre_content(pre_html: str) -> list[dict[str, Any]]:
         plain = _strip_html(stripped)
         section_match = SECTION_PATTERN.match(plain)
         if section_match:
+            # Flush acordes instrumentais pendentes antes de trocar de seção
+            # (ex.: 2ª linha do Solo antes de ``[Tab - Solo]``).
+            if pending_chord_line and current_section:
+                append_line("", _chord_line_to_placements(pending_chord_line))
             label = section_match.group(1).strip()
-            trailing = section_match.group(2).strip()
             ensure_section(label)
-            if trailing:
-                inline_lyrics, inline_placements = _inline_line_to_placements(stripped)
-                if inline_placements:
-                    append_line(inline_lyrics, inline_placements)
-                else:
-                    chords = _extract_chords(stripped)
-                    if chords:
-                        append_line("", _chord_line_to_placements(stripped, ""), chords)
+            trailing_placements = _section_trailing_chord_placements(stripped)
+            if trailing_placements:
+                append_line("", trailing_placements)
             continue
 
         if _is_chord_only_line(stripped):
